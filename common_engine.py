@@ -122,8 +122,10 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
             z=pivot.values, x=pivot.columns, y=pivot.index,
             colorscale="RdYlGn", zmid=0, colorbar=dict(title="Sharpe"),
         ))
-        fig_hm.update_layout(**CHART_LAYOUT, height=420,
+        fig_hm.update_layout(**CHART_LAYOUT, height=380, autosize=True,
                               xaxis_title="Slow MA", yaxis_title="Fast MA")
+        fig_hm.update_xaxes(constrain="domain")
+        fig_hm.update_yaxes(constrain="domain")
         st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_mom_hm")
         best = hm_df.loc[hm_df["sharpe"].idxmax()]
         st.caption(f"Best in range {hm_yr[0]}-{hm_yr[1]}: MA({int(best['fast'])},{int(best['slow'])}) "

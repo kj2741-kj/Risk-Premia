@@ -39,10 +39,11 @@ inject_css()
 # Fill in as each one is deployed as its own Streamlit Cloud app.
 # ═══════════════════════════════════════════════
 DASHBOARD_LINKS = {
-    "Metals":         {"url": "https://metals-risk-premia-kj.streamlit.app/", "ready": True,
-                        "desc": "LME Copper & Aluminium. Momentum, Carry, Value, Portfolio (10 tabs) — complete, Stage 1."},
-    "Energy":         {"url": None, "ready": False,
-                        "desc": "WTI, Brent, RBOB, Heating Oil, Nat Gas, Gasoil + 4 extended products. Stage 2, in progress."},
+    "Metals":         {"url": "https://risk-premia-metals.streamlit.app/", "ready": True,
+                        "desc": "LME Copper & Aluminium. Momentum, Carry, Value — Stage 2 rebuild. "
+                                "(Original 10-tab Stage 1 dashboard: metals-risk-premia-kj.streamlit.app)"},
+    "Energy":         {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
+                        "desc": "WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil. Momentum, Carry, Value."},
     "Precious Metals": {"url": None, "ready": False,
                         "desc": "Gold, Silver, Platinum, Palladium, Copper-CME. Stage 2, in progress."},
     "NGL / Refined":  {"url": None, "ready": False,

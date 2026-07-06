@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from plotly.subplots import make_subplots
 
 from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic, section_header, tc_label_map
 
@@ -122,10 +123,9 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
             z=pivot.values, x=pivot.columns, y=pivot.index,
             colorscale="RdYlGn", zmid=0, colorbar=dict(title="Sharpe"),
         ))
-        fig_hm.update_layout(**CHART_LAYOUT, height=380, autosize=True,
+        fig_hm.update_layout(**CHART_LAYOUT, height=400,
+                              title=dict(text=f"{product} — Sharpe by MA Crossover", font=dict(size=13)),
                               xaxis_title="Slow MA", yaxis_title="Fast MA")
-        fig_hm.update_xaxes(constrain="domain")
-        fig_hm.update_yaxes(constrain="domain")
         st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_mom_hm")
         best = hm_df.loc[hm_df["sharpe"].idxmax()]
         st.caption(f"Best in range {hm_yr[0]}-{hm_yr[1]}: MA({int(best['fast'])},{int(best['slow'])}) "
@@ -292,17 +292,6 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     positions = {label: _build_position(label) for label in chosen}
     positions = {k: v for k, v in positions.items() if not v.empty}
 
-    # ── Signal + position chart for the first active variant ───────────────
-    focus_label = chosen[0]
-    focus_pos = positions.get(focus_label)
-    if focus_pos is not None and not focus_pos.empty:
-        st.markdown(f"**Signal & Position — {focus_label}**")
-        fig_sig = go.Figure()
-        fig_sig.add_trace(go.Scatter(x=focus_pos.index, y=focus_pos.values, mode="lines",
-                                      name="Position", line=dict(color=COLORS["primary"], width=1)))
-        fig_sig.update_layout(**CHART_LAYOUT, height=260, yaxis_title="Position (-1 to +1)")
-        st.plotly_chart(fig_sig, use_container_width=True, key=f"{key_prefix}_car_sigchart")
-
     _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car")
 
 
@@ -437,3 +426,46 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
         }),
         use_container_width=True,
     )
+
+    # Signal & Position history for the first active strategy, matching the
+    # Stage 1 Metals dashboard's two-panel price + long/short bar chart style.
+    focus_label = next(iter(positions))
+    render_signal_position_chart(positions[focus_label], f1r, focus_label, key_prefix)
+
+
+def render_signal_position_chart(pos: pd.Series, f1r: pd.Series, label: str, key_prefix: str):
+    """Two-panel chart: F1_raw price (top) + Long/Short position bars (bottom).
+    Matches the Stage 1 Metals dashboard's 'Signal & Position' chart exactly."""
+    st.divider()
+    section_header(f"SIGNAL & POSITION HISTORY — {label}")
+    st.caption("Top: F1_raw price. Bottom: the position this strategy actually holds each day "
+               "(+1 long, −1 short, 0 flat).")
+
+    pos_w = pos.reindex(f1r.index).fillna(0)
+    pos_long = pos_w.where(pos_w > 0, 0.0)
+    pos_short = pos_w.where(pos_w < 0, 0.0)
+
+    fig_sig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.65, 0.35], vertical_spacing=0.04)
+    fig_sig.add_trace(go.Scatter(
+        x=f1r.index, y=f1r.values, name="F1 Price",
+        line=dict(color=COLORS["primary"], width=1.5),
+        hovertemplate="%{x|%b %d, %Y}<br>F1: %{y:,.2f}<extra></extra>",
+    ), row=1, col=1)
+    fig_sig.add_trace(go.Bar(
+        x=pos_w.index, y=pos_long.values, name="Long (+1)", marker_color="#00E676", opacity=1.0,
+        hovertemplate="%{x|%b %d, %Y}<br>Long<extra></extra>",
+    ), row=2, col=1)
+    fig_sig.add_trace(go.Bar(
+        x=pos_w.index, y=pos_short.values, name="Short (-1)", marker_color="#FF1744", opacity=1.0,
+        hovertemplate="%{x|%b %d, %Y}<br>Short<extra></extra>",
+    ), row=2, col=1)
+    fig_sig.update_layout(
+        **CHART_LAYOUT, height=500, barmode="overlay",
+        title=dict(text=f"{label} — Price & Position", font=dict(size=13)),
+        hovermode="x unified", showlegend=True,
+    )
+    fig_sig.update_yaxes(title_text="F1 Price", row=1, col=1)
+    fig_sig.update_yaxes(title_text="Position", tickvals=[-1, 0, 1],
+                          ticktext=["Short", "Flat", "Long"], row=2, col=1)
+    fig_sig.update_xaxes(showspikes=True, spikecolor="#475569", spikethickness=1, spikemode="across")
+    st.plotly_chart(fig_sig, use_container_width=True, key=f"{key_prefix}_sigpos")

@@ -1,0 +1,88 @@
+"""
+Energy Dashboard - Stage 2
+============================
+Standalone Streamlit app, its own separate deployment. WTI Crude, Brent
+Crude, RBOB Gasoline, Heating Oil ULSD, Nat Gas Henry Hub, Singapore
+Gasoil, Fuel Oil 3.5% Barges. Momentum / Carry / Value only, same
+format as the Metals Stage 2 rebuild -- reuses the identical shared
+engine (common_engine.py) so both dashboards behave identically.
+
+NOTE: ICE Gasoil London (GO), Singapore Jet Kerosene (SJ), and Naphtha
+(NFY) are in the source price data but excluded here -- no usable
+expiry-calendar coverage in data/06-30/expiry_calendars_20260701.xlsx
+to build F1_continuous for them (GO/NFY: zero contracts with expiry
+dates; SJ: too sparse, fails to build). See scripts/rolling_continuous.py
+ENERGY_CONFIG for details.
+"""
+
+import os
+import sys
+
+import streamlit as st
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_ROOT)
+sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
+
+from common_shared import inject_css, section_header
+from common_curve_loader import load_curve_simple
+from common_engine import render_momentum_tab, render_carry_tab, render_value_tab
+from rolling_continuous import get_metal_rolling_f1, ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE
+
+st.set_page_config(
+    page_title="Energy Risk Premia - Stage 2",
+    page_icon="🛢️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+inject_css()
+
+# unit_label: the product's natural pricing unit, used only for the
+# TC-per-flip $ display in the sidebar -- has no effect on the Sharpe/PnL math.
+PRODUCT_UNITS = {
+    "CL": "/bbl", "CO": "/bbl", "XB": "/gal", "HO": "/gal",
+    "NG": "/MMBtu", "QS": "/mt", "FO": "/mt",
+}
+PRODUCT_ORDER = ["CL", "CO", "XB", "HO", "NG", "QS", "FO"]
+
+with st.sidebar:
+    st.markdown('<p class="main-title">🛢️ Energy Dashboard</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
+    st.divider()
+    product_code = st.radio(
+        "Product", PRODUCT_ORDER, key="energy_product_choice",
+        format_func=lambda c: ENERGY_CONFIG[c]["name"],
+    )
+    st.caption("GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) are excluded — no usable "
+               "expiry-calendar coverage to build a continuous series. Same Momentum/Carry/Value format "
+               "as the Metals and Precious Metals dashboards.")
+
+cfg = ENERGY_CONFIG[product_code]
+unit = PRODUCT_UNITS[product_code]
+
+f1_df = get_metal_rolling_f1(product_code, futures_file=ENERGY_FUTURES_FILE,
+                              calendar_file=ENERGY_CALENDAR_FILE, verbose=False, config=ENERGY_CONFIG)
+if f1_df.empty:
+    st.error(f"Could not build F1_continuous for {cfg['name']}.")
+    st.stop()
+f1_df = f1_df[f1_df.index.year >= 2006]
+f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
+
+curve = load_curve_simple(ENERGY_FUTURES_FILE, cfg["price_sheet"])
+curve = curve[curve.index.year >= 2006]
+
+st.markdown(f'<p class="main-title">🛢️ Energy Risk Premia — {cfg["name"]}</p>', unsafe_allow_html=True)
+st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
+           "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
+
+tab_mom, tab_carry, tab_val = st.tabs(["⚡ Momentum", "📐 Carry", "📏 Value"])
+
+with tab_mom:
+    render_momentum_tab(f1r, f1c, cfg["name"], unit, key_prefix=f"energy_{product_code}")
+
+with tab_carry:
+    render_carry_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=f"energy_{product_code}")
+
+with tab_val:
+    contracts = [c for c in curve.columns if c.startswith("F") and c[1:].isdigit() and int(c[1:]) <= 15]
+    render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=f"energy_{product_code}", contracts=contracts)

@@ -136,6 +136,102 @@ METAL_CONFIG: dict[str, dict] = {
     },
 }
 
+# ── Stage 2 configs (data/06-30/*.xlsx -- simple single-header-row format:
+#    title row, then 'Date','F1','F2',... header row, data from row 2) ────────
+# f1_col=1/f2_col=2/data_start_row=2 throughout since there's no Volume/OI
+# interleaving in this newer format, unlike METAL_CONFIG's legacy layout above.
+#
+# IMPORTANT: use these WITH the matching futures_file/calendar_file overrides,
+# e.g. get_metal_rolling_f1("CL", futures_file=ENERGY_FUTURES_FILE,
+#                           calendar_file=ENERGY_CALENDAR_FILE)
+# -- the DEFAULT_FUTURES_FILE/DEFAULT_CALENDAR_FILE module constants above are
+# for METAL_CONFIG (Metals Futures Curve.csv) only.
+
+ENERGY_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Energy_Futures_Updated.xlsx")
+ENERGY_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
+
+ENERGY_CONFIG: dict[str, dict] = {
+    "CL": {
+        "name": "WTI Crude (NYMEX)", "price_sheet": "WTI Crude (NYMEX)",
+        "calendar_sheet": "CL - WTI Crude Oil (NYMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "CO": {
+        "name": "Brent Crude (ICE)", "price_sheet": "Brent Crude (ICE)",
+        "calendar_sheet": "CO - Brent Crude Oil (ICE)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "XB": {
+        "name": "RBOB Gasoline (NYMEX)", "price_sheet": "RBOB Gasoline (NYMEX)",
+        "calendar_sheet": "XB - RBOB Gasoline (NYMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "HO": {
+        "name": "Heating Oil ULSD (NYMEX)", "price_sheet": "Heating Oil ULSD (NYMEX)",
+        "calendar_sheet": "HO - ULSD - Heating Oil (NYMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "NG": {
+        "name": "Nat Gas Henry Hub (NYMEX)", "price_sheet": "Nat Gas Henry Hub (NYMEX)",
+        "calendar_sheet": "NG - Natural Gas Henry Hub (NYM",  # sheet name genuinely truncated at 31 chars
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "QS": {
+        "name": "Singapore Gasoil (ICE)", "price_sheet": "Singapore Gasoil (ICE)",
+        "calendar_sheet": "QS - Gasoil (ICE)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "FO": {
+        "name": "Fuel Oil 3.5pct Barges (ICE)", "price_sheet": "Fuel Oil 3.5pct Barges (ICE)",
+        "calendar_sheet": "FO - Fuel Oil 3.5% Barges FOB R",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "SJ": {
+        "name": "Singapore Jet Kerosene (ICE)", "price_sheet": "Singapore Jet Kerosene (ICE)",
+        "calendar_sheet": "SJ - Jet-Kerosene Cargoes CIF N",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "NFY": {
+        "name": "Naphtha CIF NWE Platts (ICE)", "price_sheet": "Naphtha CIF NWE Platts (ICE)",
+        "calendar_sheet": "NFY - Naphtha cif NWE Cargoes (",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    # NOTE: "GO" (ICE Gasoil London) is in the price file but has NO matching
+    # sheet in expiry_calendars_20260701.xlsx -- cannot build F1_continuous for
+    # it without a roll calendar. Excluded until a calendar is available.
+}
+
+PRECIOUS_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Precious_Metals_Futures_Updated.xlsx")
+PRECIOUS_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
+
+PRECIOUS_CONFIG: dict[str, dict] = {
+    "GC": {
+        "name": "Gold COMEX", "price_sheet": "Gold COMEX",
+        "calendar_sheet": "GC - Gold (COMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "SI": {
+        "name": "Silver COMEX", "price_sheet": "Silver COMEX",
+        "calendar_sheet": "SI - Silver (COMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "HG": {
+        "name": "Copper CME (HG)", "price_sheet": "Copper CME (HG)",
+        "calendar_sheet": "HG - Copper (COMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "PL": {
+        "name": "Platinum NYMEX", "price_sheet": "Platinum NYMEX",
+        "calendar_sheet": "PL - Platinum (NYMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "PA": {
+        "name": "Palladium NYMEX", "price_sheet": "Palladium NYMEX",
+        "calendar_sheet": "PA - Palladium (NYMEX)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Data loaders
@@ -328,29 +424,41 @@ def get_metal_rolling_f1(
     futures_file: str  = DEFAULT_FUTURES_FILE,
     calendar_file: str = DEFAULT_CALENDAR_FILE,
     verbose: bool      = True,
+    config: dict | None = None,
 ) -> pd.DataFrame:
     """
-    End-to-end loader + builder for any configured metal.
+    End-to-end loader + builder for any configured product.
 
     Parameters
     ----------
-    metal_code    : Key from METAL_CONFIG, e.g. "LP" for LME Copper.
+    metal_code    : Key from `config` (defaults to METAL_CONFIG), e.g. "LP" for
+                    LME Copper, or "CL" with config=ENERGY_CONFIG for WTI.
     futures_file  : Path to the futures curve workbook.
     calendar_file : Path to the expiry calendars workbook.
     verbose       : Print progress messages if True.
+    config        : Which config registry to look `metal_code` up in. Defaults
+                    to METAL_CONFIG. MUST be passed explicitly for Energy/
+                    Precious Stage-2 codes -- several codes (GC, SI, PL, PA)
+                    exist in BOTH METAL_CONFIG (legacy Metals Futures Curve.csv,
+                    f1_col/f2_col=1/4) and PRECIOUS_CONFIG (data/06-30 simple
+                    format, f1_col/f2_col=1/2) with different column layouts,
+                    so relying on a default here would silently read the wrong
+                    columns for one of the two callers.
 
     Returns
     -------
     DataFrame with columns: F1_raw, F2_raw, F1_continuous, Phase,
                             is_roll_date, is_bridge_date, active_contract.
     """
-    if metal_code not in METAL_CONFIG:
+    if config is None:
+        config = METAL_CONFIG
+    if metal_code not in config:
         raise ValueError(
-            f"Unknown metal code '{metal_code}'. "
-            f"Available: {list(METAL_CONFIG.keys())}"
+            f"Unknown code '{metal_code}' for this config. "
+            f"Available: {list(config.keys())}"
         )
 
-    cfg = METAL_CONFIG[metal_code]
+    cfg = config[metal_code]
     if verbose:
         print(f"[{metal_code}] Loading prices from sheet '{cfg['price_sheet']}' ...")
 

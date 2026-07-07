@@ -102,13 +102,17 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
 
     section_header(f"MOMENTUM — {product}")
     st.caption("MA crossover: signal(t) = sign[ MA(F1_raw, fast) − MA(F1_raw, slow) ]. "
-               "Same-Day execution (shift-1). No CTA/Baz-Granger, no Anchors — Stage 2 scope.")
+               "No CTA/Baz-Granger, no Anchors — Stage 2 scope.")
 
-    tc_col, _ = st.columns([1, 3])
+    tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
         tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
         tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_mom_tc")
         tc_bps = tc_map[tc_label]
+    with timing_col:
+        timing = st.selectbox("Execution Timing", ["Same-Day (shift-1)", "Lag-1 (shift-2)"],
+                               key=f"{key_prefix}_mom_timing")
+        same_day = timing.startswith("Same-Day")
 
     # ── Heatmap with year-range toggle ──────────────────────────────────────
     st.markdown("**Sharpe Heatmap — Fast × Slow MA Crossover**")
@@ -116,7 +120,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     fast_vals = tuple(range(2, default_fast_max + 1, 4))
     slow_vals = tuple(range(10, default_slow_max + 1, 12))
     hm_df = momentum_heatmap(f1r, f1c, fast_vals, slow_vals,
-                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", True, tc_bps)
+                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", same_day, tc_bps)
     if not hm_df.empty:
         pivot = hm_df.pivot(index="fast", columns="slow", values="sharpe")
         fig_hm = go.Figure(data=go.Heatmap(
@@ -172,7 +176,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         return
 
     _render_multi_strategy_block(
-        {f"MA({f},{s})": ma_crossover_position(f1r, f, s, same_day=True) for f, s in chosen},
+        {f"MA({f},{s})": ma_crossover_position(f1r, f, s, same_day=same_day) for f, s in chosen},
         f1r, f1c, tc_bps, key_prefix + "_mom",
     )
 
@@ -222,11 +226,15 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     st.caption("Term structure carry: long in backwardation, short in contango. "
                "V1 Roll Yield, V2 Long Slope, V3 Z-score, V4 Carry-Momentum. Stage 2 scope.")
 
-    tc_col, _ = st.columns([1, 3])
+    tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
         tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
         tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_car_tc")
         tc_bps = tc_map[tc_label]
+    with timing_col:
+        timing = st.selectbox("Execution Timing", ["Same-Day (shift-1)", "Lag-1 (shift-2)"],
+                               key=f"{key_prefix}_car_timing")
+        same_day = timing.startswith("Same-Day")
 
     if tenor_pairs is None:
         tenor_pairs = [("F3", "F15"), ("F6", "F18"), ("F9", "F21"), ("F12", "F24")]
@@ -268,17 +276,17 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         if label.startswith("V1"):
             pair = label[label.index("(") + 1: label.index(")")]
             a, b = pair.split("-")
-            return carry_v1_position(curve, a, b)
+            return carry_v1_position(curve, a, b, same_day=same_day)
         if label.startswith("V2"):
             pair = label[label.index("(") + 1: label.index(")")]
             a, b = pair.split("-")
-            return carry_v2_position(curve, a, b)
+            return carry_v2_position(curve, a, b, same_day=same_day)
         if label.startswith("V3"):
             win = int(label.split("=")[1].rstrip(")"))
-            return carry_v3_position(curve, win)
+            return carry_v3_position(curve, win, same_day=same_day)
         if label.startswith("V4"):
             n = int(label.split("=")[1].rstrip(")"))
-            return carry_v4_position(curve, n)
+            return carry_v4_position(curve, n, same_day=same_day)
         return pd.Series(dtype=float)
 
     chosen = st.multiselect(
@@ -319,14 +327,17 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     performance metrics, TC filter."""
     section_header(f"VALUE — {product}")
     st.caption("MA-reversion: deviation = (Fk − MA_N)/MA_N. +1 if cheap (< −T), −1 if expensive (> +T), "
-               "0 otherwise. Lag-1 execution (shift-2) — mean-reversion evolves slowly. Stage 2 scope: "
-               "V1 MA-reversion only, no Baz-Granger reversal.")
+               "0 otherwise. Stage 2 scope: V1 MA-reversion only, no Baz-Granger reversal.")
 
-    tc_col, _ = st.columns([1, 3])
+    tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
         tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
         tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_val_tc")
         tc_bps = tc_map[tc_label]
+    with timing_col:
+        timing = st.selectbox("Execution Timing", ["Lag-1 (shift-2)", "Same-Day (shift-1)"],
+                               key=f"{key_prefix}_val_timing")
+        same_day = timing.startswith("Same-Day")
 
     if contracts is None:
         contracts = [c for c in curve.columns if c.startswith("F")]
@@ -368,7 +379,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         return
 
     positions = {
-        f"{c} {lb} ±{thr*100:.0f}%": value_v1_position(curve, c, lookback_map[lb], thr, same_day=False)
+        f"{c} {lb} ±{thr*100:.0f}%": value_v1_position(curve, c, lookback_map[lb], thr, same_day=same_day)
         for c, lb, thr in chosen
     }
     positions = {k: v for k, v in positions.items() if not v.empty}

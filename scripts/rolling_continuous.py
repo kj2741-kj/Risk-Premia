@@ -64,7 +64,7 @@ METAL_CONFIG: dict[str, dict] = {
     },
     "LA": {
         "name"          : "LME Aluminium",
-        "price_sheet"   : "Aluminium LME",
+        "price_sheet"   : "ALuminium LME",
         "calendar_sheet": "LA - LME Aluminium",
         "f1_col"        : 1,
         "f2_col"        : 4,
@@ -319,6 +319,9 @@ def build_rolling_f1(
     """
     roll_set    = set(calendar["roll_date"].dt.normalize())
     roll_to_row = {r["roll_date"].normalize(): r for _, r in calendar.iterrows()}
+    roll_dates_sorted = sorted(roll_set)
+    next_roll_after = {d: (roll_dates_sorted[i + 1] if i + 1 < len(roll_dates_sorted) else None)
+                        for i, d in enumerate(roll_dates_sorted)}
 
     trading_dates = prices.index.normalize()
     f1_arr = prices["F1_raw"].values
@@ -346,23 +349,51 @@ def build_rolling_f1(
         # ── Roll day ──────────────────────────────────────────────────────
         if d in roll_set:
             row = roll_to_row[d]
+            current_expiry = row["expiry_date"].normalize()
+            next_roll = next_roll_after.get(d)
 
-            # F1-delta tracking at roll day (no reset to raw price)
-            if i == 0 or np.isnan(f1_cont[i - 1]):
-                f1_cont[i] = f1v
-            elif not np.isnan(f1v) and not np.isnan(prev_f1):
-                f1_cont[i] = f1_cont[i - 1] + (f1v - prev_f1)
+            # Nominal delivery window (expiry_date + 1 BDay) overruns the next
+            # contract's roll date -- happens for NYMEX-style physically-delivered
+            # products where FUT_DLV_DT_LAST is the delivery-MONTH-END, ~1 month
+            # after last-trade (e.g. WTI, Heating Oil, Nat Gas, RBOB), unlike
+            # LME/COMEX/ICE-Brent where roll and expiry sit days apart. In that
+            # case there is no real multi-week holdover to model: bridge directly
+            # on the roll day itself (skip Phase 2), otherwise Phase 2 would
+            # swallow almost the entire next cycle and F1_continuous ends up
+            # tracking F2 (the deferred contract) almost permanently.
+            nominal_phase2_end = (current_expiry + pd.offsets.BDay(1)).normalize()
+            overruns_next_roll = next_roll is not None and nominal_phase2_end >= next_roll
+
+            if overruns_next_roll:
+                f1_prev = f1_cont[i - 1] if i > 0 else np.nan
+                if i == 0 or np.isnan(f1_prev):
+                    f1_cont[i] = f1v
+                elif not np.isnan(f1v) and not np.isnan(prev_f2):
+                    f1_cont[i] = f1_prev + (f1v - prev_f2)
+                else:
+                    f1_cont[i] = f1_prev
+                phase_labels[i] = "F1_Direct_RollDay_Bridge"
+                is_roll[i]      = True
+                is_bridge[i]    = True
+                active_cont[i]  = row["Contract"]
+                in_f2_phase     = False
+                phase2_end      = None
             else:
-                f1_cont[i] = f1_cont[i - 1]
+                # F1-delta tracking at roll day (no reset to raw price)
+                if i == 0 or np.isnan(f1_cont[i - 1]):
+                    f1_cont[i] = f1v
+                elif not np.isnan(f1v) and not np.isnan(prev_f1):
+                    f1_cont[i] = f1_cont[i - 1] + (f1v - prev_f1)
+                else:
+                    f1_cont[i] = f1_cont[i - 1]
 
-            phase_labels[i] = "F1_Direct_RollDay"
-            is_roll[i]      = True
-            active_cont[i]  = row["Contract"]
+                phase_labels[i] = "F1_Direct_RollDay"
+                is_roll[i]      = True
+                active_cont[i]  = row["Contract"]
+                phase2_end      = nominal_phase2_end
+                in_f2_phase     = True
 
-            current_expiry   = row["expiry_date"].normalize()
-            phase2_end       = (current_expiry + pd.offsets.BDay(1)).normalize()
             current_contract = row["Contract"]
-            in_f2_phase      = True
             prev_f2          = f2v
             prev_f1          = f1v
             continue

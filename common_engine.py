@@ -39,26 +39,28 @@ _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
 # ═══════════════════════════════════════════════════════════════
 
 def daily_returns(pos: pd.Series, f1r: pd.Series, f1c: pd.Series, tc_bps: int) -> tuple[pd.Series, pd.Series]:
-    """Gross and net daily return series (fraction of notional) for a position series."""
+    """Gross and net daily $PnL (native unit, e.g. USD/MT) for a position series.
+    Dollar terms, not %-of-notional -- %-of-notional requires dividing by
+    F1_continuous[t-1], which can be zero/negative (confirmed for Aluminium, WTI,
+    Nat Gas, Fuel Oil), silently flipping return signs or inflating magnitudes."""
     pos = pos.reindex(f1c.index).fillna(0.0)
     gp = pos * f1c.diff()
     chg = pos.diff().abs()
     if len(chg):
         chg.iloc[0] = abs(pos.iloc[0])
     tc = chg * (tc_bps / 10000.0 / 2.0) * f1r.reindex(f1c.index)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        gross = (gp / f1c.shift(1)).replace([np.inf, -np.inf], np.nan)
-        net = ((gp - tc) / f1c.shift(1)).replace([np.inf, -np.inf], np.nan)
-    return gross, net
+    net = gp - tc
+    return gp, net
 
 
-def equity_curve(ret: pd.Series) -> pd.Series:
-    """Cumulative return path in % (matches Stage 1 convention)."""
-    return ret.fillna(0).cumsum() * 100
+def equity_curve(pnl: pd.Series) -> pd.Series:
+    """Cumulative $PnL path (native unit, e.g. USD/MT)."""
+    return pnl.fillna(0).cumsum()
 
 
-def rolling_sharpe(ret: pd.Series, window: int = 252) -> pd.Series:
-    r = ret.fillna(0)
+def rolling_sharpe(pnl: pd.Series, window: int = 252) -> pd.Series:
+    """Rolling Sharpe from a $PnL series (dimensionless -- $ cancels in the ratio)."""
+    r = pnl.fillna(0)
     return r.rolling(window).mean() / r.rolling(window).std() * np.sqrt(252)
 
 
@@ -177,7 +179,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
 
     _render_multi_strategy_block(
         {f"MA({f},{s})": ma_crossover_position(f1r, f, s, same_day=same_day) for f, s in chosen},
-        f1r, f1c, tc_bps, key_prefix + "_mom",
+        f1r, f1c, tc_bps, key_prefix + "_mom", unit_label,
     )
 
 
@@ -300,7 +302,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     positions = {label: _build_position(label) for label in chosen}
     positions = {k: v for k, v in positions.items() if not v.empty}
 
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car")
+    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car", unit_label)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -384,7 +386,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     }
     positions = {k: v for k, v in positions.items() if not v.empty}
 
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_val")
+    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_val", unit_label)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -392,36 +394,36 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 # ═══════════════════════════════════════════════════════════════
 
 def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
-                                  tc_bps: int, key_prefix: str):
+                                  tc_bps: int, key_prefix: str, unit_label: str = "/unit"):
     if not positions:
         st.info("No valid strategies to display.")
         return
 
     st.divider()
-    st.markdown("**Cumulative PnL (Equity Curve) — Net of TC**")
+    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
     fig_eq = go.Figure()
     metrics_rows = []
-    ret_cache = {}
+    pnl_cache = {}
     for i, (label, pos) in enumerate(positions.items()):
-        gross_ret, net_ret = daily_returns(pos, f1r, f1c, tc_bps)
-        ret_cache[label] = (gross_ret, net_ret)
-        eq = equity_curve(net_ret)
+        gross_pnl, net_pnl = daily_returns(pos, f1r, f1c, tc_bps)
+        pnl_cache[label] = (gross_pnl, net_pnl)
+        eq = equity_curve(net_pnl)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
         m = pos_metrics_generic(pos, f1r, f1c, tc_bps)
         metrics_rows.append({
             "Strategy": label, "Gross Sharpe": m["gross"], "Net Sharpe": m["net"],
-            "Ann Ret (Gross) %": m["ann"], "Max DD %": m["mdd"], "% Flat": m["flat_pct"],
+            f"Ann PnL ({unit_label})": m["ann"], f"Max DD ({unit_label})": m["mdd"], "% Flat": m["flat_pct"],
         })
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
     st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity")
 
     st.markdown("**Rolling Sharpe (252-Day)**")
     basis = st.radio("Basis", ["Gross", "Net of TC"], index=1, horizontal=True, key=f"{key_prefix}_rs_basis")
     fig_rs = go.Figure()
-    for i, (label, (gross_ret, net_ret)) in enumerate(ret_cache.items()):
-        ret = net_ret if basis.startswith("Net") else gross_ret
-        rs = rolling_sharpe(ret, 252)
+    for i, (label, (gross_pnl, net_pnl)) in enumerate(pnl_cache.items()):
+        pnl = net_pnl if basis.startswith("Net") else gross_pnl
+        rs = rolling_sharpe(pnl, 252)
         fig_rs.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.3)))
     fig_rs.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
@@ -433,7 +435,7 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     st.dataframe(
         mdf.style.format({
             "Gross Sharpe": "{:+.2f}", "Net Sharpe": "{:+.2f}",
-            "Ann Ret (Gross) %": "{:+.1f}", "Max DD %": "{:.0f}", "% Flat": "{:.0f}",
+            f"Ann PnL ({unit_label})": "{:+,.2f}", f"Max DD ({unit_label})": "{:+,.2f}", "% Flat": "{:.0f}",
         }),
         use_container_width=True,
     )

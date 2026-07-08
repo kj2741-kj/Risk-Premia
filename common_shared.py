@@ -285,8 +285,14 @@ def exec_shift(sigbin, same_day):
 
 
 def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5) -> dict:
-    """Active-day gross/net Sharpe, ann return %, max-DD % for a position series.
-    PnL on F1_continuous; TC on F1_raw. Identical convention to the Metals tabs."""
+    """Active-day gross/net Sharpe, annualized $PnL, max-DD ($) for a position series.
+    PnL on F1_continuous; TC on F1_raw. All metrics in native dollar/unit terms (e.g.
+    USD/MT, USD/bbl) -- NOT %-of-notional. %-of-notional was dropped because it requires
+    dividing by F1_continuous[t-1], which is an additively back-adjusted level with no
+    floor at zero: confirmed to go negative for a majority of history on several products
+    (Aluminium 75% of days, Nat Gas 88%, Fuel Oil 65%, WTI 42%), which can silently flip
+    the sign of a return or blow up its magnitude by 2-3 orders of magnitude. Dollar PnL
+    has no such division and is immune to this."""
     pos = pos.reindex(f1c.index).fillna(0.0)
     gp = pos * f1c.diff()
     chg = pos.diff().abs()
@@ -296,16 +302,13 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5) -> dict:
     net = gp - tc
 
     def _s(pnl):
-        with np.errstate(invalid="ignore", divide="ignore"):
-            r = (pnl / f1c.shift(1)).replace([np.inf, -np.inf], np.nan)
-        a = r[pos != 0].dropna()
+        a = pnl[pos != 0].dropna()
         return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
 
-    with np.errstate(invalid="ignore", divide="ignore"):
-        gr = (gp / f1c.shift(1)).replace([np.inf, -np.inf], np.nan)
-    cum = gr.fillna(0).cumsum() * 100
+    cum = gp.fillna(0).cumsum()
+    ann_pnl = gp.dropna().mean() * 252 if gp.notna().any() else np.nan
     return dict(gross=_s(gp), net=_s(net),
-                ann=float(gr.dropna().mean() * 252 * 100) if gr.notna().any() else np.nan,
+                ann=float(ann_pnl) if pd.notna(ann_pnl) else np.nan,
                 mdd=float((cum - cum.cummax()).min()), nact=int((pos != 0).sum()),
                 flat_pct=float(100 * (pos == 0).sum() / len(pos)) if len(pos) else np.nan)
 

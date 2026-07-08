@@ -113,32 +113,29 @@ def _consecutive(arr: np.ndarray, val: int) -> int:
 
 def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.Series,
                          same_day: bool, unit_label: str) -> dict:
-    f1_prev = f1_cont.shift(1)
-    # F1_continuous (additive back-adjustment) can cross exactly zero for some
-    # products (confirmed for both WTI Crude and LME Aluminium) -- dividing by
-    # that turns one day's return into +-inf, which poisons mean/std for the
-    # whole series. common_engine.py's own daily_returns()/pos_metrics_generic()
-    # already guard against this; mirror that here.
-    with np.errstate(invalid="ignore", divide="ignore"):
-        daily_ret = (daily_pnl / f1_prev).replace([np.inf, -np.inf], np.nan)
-
-    active_ret = daily_ret[position != 0].dropna()
+    """All return/risk metrics in native dollar/unit terms (e.g. USD/MT, USD/bbl),
+    not %-of-notional. %-of-notional requires dividing by F1_continuous[t-1], an
+    additively back-adjusted level with no floor at zero -- confirmed to go
+    negative for a majority of history on several products (Aluminium 75% of
+    days, Nat Gas 88%, Fuel Oil 65%, WTI 42%), which can silently flip the sign
+    of a return or inflate its magnitude by 2-3 orders of magnitude. Dollar PnL
+    has no such division and is immune to this."""
     active_pnl = daily_pnl[position != 0].dropna()
-    n = len(active_ret)
+    n = len(active_pnl)
 
-    ann_ret_pct = float(active_ret.mean() * 252 * 100) if n > 1 else np.nan
-    ann_std_pct = float(active_ret.std() * np.sqrt(252) * 100) if n > 1 else np.nan
-    sharpe = ann_ret_pct / ann_std_pct if (ann_std_pct and ann_std_pct > 0) else np.nan
+    ann_pnl = float(active_pnl.mean() * 252) if n > 1 else np.nan
+    ann_std = float(active_pnl.std() * np.sqrt(252)) if n > 1 else np.nan
+    sharpe = ann_pnl / ann_std if (ann_std and ann_std > 0) else np.nan
 
-    down_ret = active_ret[active_ret < 0]
-    sortino_denom = float(down_ret.std() * np.sqrt(252) * 100) if len(down_ret) > 1 else np.nan
-    sortino = ann_ret_pct / sortino_denom if (sortino_denom and sortino_denom > 0) else np.nan
+    down_pnl = active_pnl[active_pnl < 0]
+    sortino_denom = float(down_pnl.std() * np.sqrt(252)) if len(down_pnl) > 1 else np.nan
+    sortino = ann_pnl / sortino_denom if (sortino_denom and sortino_denom > 0) else np.nan
 
-    full_ret = daily_ret.fillna(0)
-    cum_ret_pct = full_ret.cumsum() * 100
-    running_max = cum_ret_pct.cummax()
-    max_dd_pct = float((cum_ret_pct - running_max).min())
-    calmar = ann_ret_pct / abs(max_dd_pct) if max_dd_pct != 0 else np.nan
+    full_pnl = daily_pnl.fillna(0)
+    cum_pnl = full_pnl.cumsum()
+    running_max = cum_pnl.cummax()
+    max_dd = float((cum_pnl - running_max).min())
+    calmar = ann_pnl / abs(max_dd) if max_dd != 0 else np.nan
 
     wins = active_pnl[active_pnl > 0]
     losses = active_pnl[active_pnl < 0]
@@ -148,7 +145,7 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
     pf_num = float(wins.sum())
     pf_den = float(abs(losses.sum()))
     profit_factor = pf_num / pf_den if pf_den > 0 else np.nan
-    hit_rate = float((active_ret > 0).mean()) if n > 0 else np.nan
+    hit_rate = float((active_pnl > 0).mean()) if n > 0 else np.nan
 
     sign_arr = np.where(active_pnl > 0, 1, -1)
     max_con_w = _consecutive(sign_arr, 1)
@@ -156,20 +153,6 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
 
     pos_note = ("Position[t] = Signal[t-1]  (Same-Day entry, shift-1)" if same_day else
                 "Position[t] = Signal[t-2]  (Lag-1 entry, shift-2)")
-
-    # %-of-notional metrics (Ann Return/Std/Max DD) divide by F1_continuous[t-1].
-    # For products whose additive back-adjusted F1_continuous crosses through
-    # zero (WTI Crude in particular, both from the 2020-04-20 negative-price
-    # print and from decades of compounded roll yield), that division blows up
-    # on the near-zero days and distorts these three metrics. Sharpe/Sortino/
-    # Calmar are ratios of the same distorted series so are far less affected,
-    # but flag it rather than silently shipping a nonsensical "883% ann return".
-    near_zero_days = int((f1_prev.abs() < f1_prev.abs().median() * 0.05).sum())
-    pct_metrics_caveat = ("CAUTION: F1_continuous is near/below zero on "
-                          f"{near_zero_days} days in this series -- Ann Return/Std Dev/Max Drawdown "
-                          "(%) below can be wildly distorted on those days. Sharpe/Sortino/Calmar are "
-                          "far more robust; Total PnL / Avg Win / Avg Loss ($) are unaffected."
-                          if near_zero_days > 20 else "n/a -- F1_continuous stays well away from zero.")
 
     return {
         "Entry Convention": "Same-Day" if same_day else "Lag-1",
@@ -179,22 +162,21 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
         "Active Trading Days": n,
         "Warmup/Flat Days": len(daily_pnl) - n,
         f"Total PnL ({unit_label})": round(total_pnl, 2),
-        "Annualized Return (%)": round(ann_ret_pct, 4),
-        "Annualized Std Dev (%)": round(ann_std_pct, 4),
-        "Sharpe Ratio": round(sharpe, 4),
-        "Sortino Ratio": round(sortino, 4),
-        "Max Drawdown (%)": round(max_dd_pct, 4),
-        "Calmar Ratio": round(calmar, 4),
+        f"Annualized PnL ({unit_label})": round(ann_pnl, 4) if pd.notna(ann_pnl) else np.nan,
+        f"Annualized Std Dev ({unit_label})": round(ann_std, 4) if pd.notna(ann_std) else np.nan,
+        "Sharpe Ratio": round(sharpe, 4) if pd.notna(sharpe) else np.nan,
+        "Sortino Ratio": round(sortino, 4) if pd.notna(sortino) else np.nan,
+        f"Max Drawdown ({unit_label})": round(max_dd, 4),
+        "Calmar Ratio": round(calmar, 4) if pd.notna(calmar) else np.nan,
         "Hit Rate": f"{hit_rate*100:.2f}%",
-        f"Avg Win ({unit_label})": round(avg_win, 2),
-        f"Avg Loss ({unit_label})": round(avg_loss, 2),
-        "Profit Factor": round(profit_factor, 4),
+        f"Avg Win ({unit_label})": round(avg_win, 2) if pd.notna(avg_win) else np.nan,
+        f"Avg Loss ({unit_label})": round(avg_loss, 2) if pd.notna(avg_loss) else np.nan,
+        "Profit Factor": round(profit_factor, 4) if pd.notna(profit_factor) else np.nan,
         "Max Consecutive Wins": max_con_w,
         "Max Consecutive Losses": max_con_l,
         "POSITION NOTE": pos_note,
         "PnL NOTE": "Daily_PnL = Position x delta_F1_continuous (roll cost in F1_cont)",
         "TC NOTE": "Not charged in this tradebook -- see dashboard TC filter for net-of-cost figures",
-        "PCT_METRICS_CAVEAT": pct_metrics_caveat,
     }
 
 

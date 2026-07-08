@@ -40,7 +40,8 @@ sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, _SCRIPT_DIR)
 
 from rolling_continuous import (
-    get_metal_rolling_f1, METAL_CONFIG, DEFAULT_FUTURES_FILE, DEFAULT_CALENDAR_FILE,
+    get_metal_rolling_f1,
+    METALS_CONFIG, METALS_FUTURES_FILE, METALS_CALENDAR_FILE,
     ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE,
     PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE,
 )
@@ -68,11 +69,11 @@ PRODUCTS = [
          config=ENERGY_CONFIG, futures_file=ENERGY_FUTURES_FILE, calendar_file=ENERGY_CALENDAR_FILE, loader="simple"),
     dict(asset_class="Energy", code="FO", name="Fuel Oil 3.5pct Barges (ICE)", unit="/mt",
          config=ENERGY_CONFIG, futures_file=ENERGY_FUTURES_FILE, calendar_file=ENERGY_CALENDAR_FILE, loader="simple"),
-    # Metals (LME)
+    # Metals (LME) -- data/06-30/Metals_Futures_Curve_Updated.xlsx, through 2026-06-30
     dict(asset_class="Metals", code="LP", name="LME Copper", unit="/MT",
-         config=METAL_CONFIG, futures_file=DEFAULT_FUTURES_FILE, calendar_file=DEFAULT_CALENDAR_FILE, loader="legacy"),
+         config=METALS_CONFIG, futures_file=METALS_FUTURES_FILE, calendar_file=METALS_CALENDAR_FILE, loader="simple"),
     dict(asset_class="Metals", code="LA", name="LME Aluminium", unit="/MT",
-         config=METAL_CONFIG, futures_file=DEFAULT_FUTURES_FILE, calendar_file=DEFAULT_CALENDAR_FILE, loader="legacy"),
+         config=METALS_CONFIG, futures_file=METALS_FUTURES_FILE, calendar_file=METALS_CALENDAR_FILE, loader="simple"),
     # Precious Metals
     dict(asset_class="Precious", code="GC", name="Gold COMEX", unit="/oz",
          config=PRECIOUS_CONFIG, futures_file=PRECIOUS_FUTURES_FILE, calendar_file=PRECIOUS_CALENDAR_FILE, loader="simple"),
@@ -113,7 +114,13 @@ def _consecutive(arr: np.ndarray, val: int) -> int:
 def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.Series,
                          same_day: bool, unit_label: str) -> dict:
     f1_prev = f1_cont.shift(1)
-    daily_ret = daily_pnl / f1_prev
+    # F1_continuous (additive back-adjustment) can cross exactly zero for some
+    # products (confirmed for both WTI Crude and LME Aluminium) -- dividing by
+    # that turns one day's return into +-inf, which poisons mean/std for the
+    # whole series. common_engine.py's own daily_returns()/pos_metrics_generic()
+    # already guard against this; mirror that here.
+    with np.errstate(invalid="ignore", divide="ignore"):
+        daily_ret = (daily_pnl / f1_prev).replace([np.inf, -np.inf], np.nan)
 
     active_ret = daily_ret[position != 0].dropna()
     active_pnl = daily_pnl[position != 0].dropna()

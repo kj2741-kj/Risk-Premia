@@ -150,6 +150,49 @@ METAL_CONFIG: dict[str, dict] = {
 ENERGY_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Energy_Futures_Updated.xlsx")
 ENERGY_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
 
+# LME base metals, refreshed through 2026-06-30 (README sheet inside the
+# workbook confirms "End Date 20260630"). Supersedes METAL_CONFIG's LP/LA/LX/
+# LN/LL/LT entries above, which point at the stale "Metals Futures Curve.csv"
+# (Copper LME sheet there stops 2025-12-31; the rest stop ~2026-05-19/20).
+# Paired with the matching 2026-07-01-vintage calendar (same file Energy uses)
+# rather than the older expiry_calendars_20260526.xlsx, whose LME sheet names
+# ("LP - LME Copper") don't match this calendar's naming ("LP - Copper (LME)").
+METALS_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Metals_Futures_Curve_Updated.xlsx")
+METALS_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
+
+METALS_CONFIG: dict[str, dict] = {
+    "LP": {
+        "name": "LME Copper", "price_sheet": "Copper LME",
+        "calendar_sheet": "LP - Copper (LME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "LA": {
+        "name": "LME Aluminium", "price_sheet": "Aluminium LME",
+        "calendar_sheet": "LA - Aluminium (LME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "LX": {
+        "name": "LME Zinc", "price_sheet": "Zinc LME",
+        "calendar_sheet": "LX - Zinc (LME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "LN": {
+        "name": "LME Nickel", "price_sheet": "Nickel LME",
+        "calendar_sheet": "LN - Nickel (LME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "LL": {
+        "name": "LME Lead", "price_sheet": "Lead LME",
+        "calendar_sheet": "LL - Lead (LME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "LT": {
+        "name": "LME Tin", "price_sheet": "Tin LME",
+        "calendar_sheet": "LT - Tin (LME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+}
+
 ENERGY_CONFIG: dict[str, dict] = {
     "CL": {
         "name": "WTI Crude (NYMEX)", "price_sheet": "WTI Crude (NYMEX)",

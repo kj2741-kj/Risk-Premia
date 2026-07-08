@@ -19,9 +19,9 @@ sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 
 from common_shared import inject_css, section_header
-from common_curve_loader import load_curve_legacy_multiheader
+from common_curve_loader import load_curve_simple
 from common_engine import render_momentum_tab, render_carry_tab, render_value_tab
-from rolling_continuous import get_metal_rolling_f1
+from rolling_continuous import get_metal_rolling_f1, METALS_CONFIG, METALS_FUTURES_FILE, METALS_CALENDAR_FILE
 
 st.set_page_config(
     page_title="Metals Risk Premia - Stage 2",
@@ -31,16 +31,15 @@ st.set_page_config(
 )
 inject_css()
 
-DATA_DIR = os.path.join(_REPO_ROOT, "data")
-CURVE_FILE = os.path.join(DATA_DIR, "Metals Futures Curve.csv")
-CALENDAR_FILE = os.path.join(DATA_DIR, "expiry_calendars_20260526.xlsx")
-# NOTE: intentionally the OLD calendar file, not data/06-30/expiry_calendars_20260701.xlsx --
-# that newer file's LME sheet names ("LP - Copper (LME)") don't match METAL_CONFIG's
-# calendar_sheet entries ("LP - LME Copper"). The newer calendar is for Energy/Precious/NGL.
+# Data refreshed through 2026-06-30 (data/06-30/Metals_Futures_Curve_Updated.xlsx,
+# same "simple" single-header-row format as Energy/Precious). Replaces the older
+# "Metals Futures Curve.csv" (Copper LME sheet there stopped 2025-12-31).
+CURVE_FILE = METALS_FUTURES_FILE
+CALENDAR_FILE = METALS_CALENDAR_FILE
 
 METAL_OPTIONS = {
-    "Copper": {"code": "LP", "curve_sheet": "Copper LME", "unit": "/MT"},
-    "Aluminium": {"code": "LA", "curve_sheet": "ALuminium LME", "unit": "/MT"},
+    "Copper": {"code": "LP", "curve_sheet": METALS_CONFIG["LP"]["price_sheet"], "unit": "/MT"},
+    "Aluminium": {"code": "LA", "curve_sheet": METALS_CONFIG["LA"]["price_sheet"], "unit": "/MT"},
 }
 
 with st.sidebar:
@@ -54,20 +53,16 @@ with st.sidebar:
 
 cfg = METAL_OPTIONS[metal]
 
-f1_df = get_metal_rolling_f1(cfg["code"], futures_file=CURVE_FILE, calendar_file=CALENDAR_FILE, verbose=False)
+f1_df = get_metal_rolling_f1(cfg["code"], futures_file=CURVE_FILE, calendar_file=CALENDAR_FILE,
+                              verbose=False, config=METALS_CONFIG)
 if f1_df.empty:
-    st.error(f"Could not build F1_continuous for {metal}. Check data/Metals Futures Curve.csv and the "
-             "expiry calendar file paths.")
+    st.error(f"Could not build F1_continuous for {metal}. Check data/06-30/Metals_Futures_Curve_Updated.xlsx "
+             "and the expiry calendar file paths.")
     st.stop()
 f1_df = f1_df[f1_df.index.year >= 2006]
 f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
 
-curve_data = load_curve_legacy_multiheader(CURVE_FILE)
-sheet = cfg["curve_sheet"]
-if sheet not in curve_data:
-    st.error(f"Sheet '{sheet}' not found in Metals Futures Curve.csv.")
-    st.stop()
-curve = curve_data[sheet]["prices"]
+curve = load_curve_simple(CURVE_FILE, cfg["curve_sheet"])
 curve = curve[curve.index.year >= 2006]
 
 st.markdown(f'<p class="main-title">⚙️ Metals Risk Premia — {metal}</p>', unsafe_allow_html=True)

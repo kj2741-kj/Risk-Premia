@@ -40,7 +40,7 @@ CALENDAR_FILE = os.path.join(DATA_DIR, "expiry_calendars_20260526.xlsx")
 
 METAL_OPTIONS = {
     "Copper": {"code": "LP", "curve_sheet": "Copper LME", "unit": "/MT"},
-    "Aluminium": {"code": "LA", "curve_sheet": "Aluminium LME", "unit": "/MT"},
+    "Aluminium": {"code": "LA", "curve_sheet": "ALuminium LME", "unit": "/MT"},
 }
 
 with st.sidebar:

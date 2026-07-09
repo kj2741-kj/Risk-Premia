@@ -77,27 +77,69 @@ def ma_crossover_position(f1r: pd.Series, fast: int, slow: int, same_day: bool =
     return exec_shift(sig, same_day).fillna(0)
 
 
-@st.cache_data(show_spinner="Computing momentum heatmap...")
-def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, fast_vals: tuple, slow_vals: tuple,
+@st.cache_data(show_spinner="Computing 250x250 momentum heatmap...")
+def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
                       start: str, end: str, same_day: bool, tc_bps: int) -> pd.DataFrame:
-    """Grid of gross Sharpe for every valid (fast, slow) pair over [start, end]."""
+    """Full-resolution grid of gross Sharpe for every valid (fast, slow) pair,
+    fast/slow in [1, max_window], slow > fast, over [start, end].
+
+    Vectorized: every rolling-mean window (1..max_window) is precomputed once
+    into a 2D array, then each (fast, slow) pair's Sharpe is derived from two
+    columns of that array with plain numpy ops -- no per-pair pandas rolling
+    calls, no TC/net computation (not needed for the heatmap). A naive
+    pandas-rolling-per-pair loop is what the previous coarse-grid version did;
+    it does not scale to a 250x250 (~31k valid pairs) grid.
+    """
     mask = (f1r.index >= pd.Timestamp(start)) & (f1r.index <= pd.Timestamp(end))
-    f1r_w, f1c_w = f1r[mask], f1c[mask]
-    rows = []
-    for fast in fast_vals:
-        fast_ma = f1r_w.rolling(fast).mean()
-        for slow in slow_vals:
-            if slow <= fast:
-                continue
-            sig = np.sign(fast_ma - f1r_w.rolling(slow).mean())
-            pos = exec_shift(sig, same_day).fillna(0)
-            m = pos_metrics_generic(pos, f1r_w, f1c_w, tc_bps)
-            rows.append({"fast": fast, "slow": slow, "sharpe": m["gross"]})
-    return pd.DataFrame(rows)
+    f1r_w = f1r[mask].astype(float)
+    f1c_w = f1c[mask].astype(float)
+    n = len(f1r_w)
+    shift_n = 1 if same_day else 2
+    if n < shift_n + 20:
+        return pd.DataFrame(columns=["fast", "slow", "sharpe"])
+
+    delta = f1c_w.diff().values
+
+    sma = np.full((n, max_window), np.nan)
+    for k in range(max_window):
+        sma[:, k] = f1r_w.rolling(k + 1).mean().values
+
+    # Batch the inner (slow) loop into one 2D numpy op per fast value instead
+    # of looping pair-by-pair (250 outer iterations instead of ~31k total).
+    # Sharpe computed via masked sum/count instead of nanmean/nanstd (which
+    # carry extra overhead) -- roughly 2x faster on top of the batching.
+    delta_shifted = delta[shift_n:]
+    fast_out, slow_out, sharpe_out = [], [], []
+    for fi in range(max_window - 1):
+        fast_col = sma[:, fi]
+        slow_cols = sma[:, fi + 1:max_window]                       # (n, n_slow)
+        sig = np.sign(fast_col[:, None] - slow_cols)[:-shift_n, :]  # aligned to delta_shifted
+        pos = np.where(np.isfinite(sig), sig, 0.0)
+        pnl = pos * delta_shifted[:, None]
+        active_mask = (pos != 0) & np.isfinite(pnl)
+        pnl_masked = np.where(active_mask, pnl, 0.0)
+        counts = active_mask.sum(axis=0)
+        sum_pnl = pnl_masked.sum(axis=0)
+        sum_sq = (pnl_masked ** 2).sum(axis=0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            means = sum_pnl / counts
+            stds = np.sqrt(np.maximum(sum_sq / counts - means ** 2, 0.0))  # ddof=0, matches active.std()
+            sharpe_row = np.where((counts > 20) & (stds > 0), means / stds * np.sqrt(252), np.nan)
+
+        n_slow = max_window - (fi + 1)
+        fast_out.append(np.full(n_slow, fi + 1))
+        slow_out.append(np.arange(fi + 2, max_window + 1))
+        sharpe_out.append(sharpe_row)
+
+    return pd.DataFrame({
+        "fast": np.concatenate(fast_out),
+        "slow": np.concatenate(slow_out),
+        "sharpe": np.concatenate(sharpe_out),
+    })
 
 
 def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label: str,
-                         key_prefix: str, default_fast_max: int = 60, default_slow_max: int = 260):
+                         key_prefix: str, heatmap_max_window: int = 250):
     """Momentum tab: heatmap w/ year-range toggle, 3 default benchmark MAs + custom MA,
     multi-strategy equity curve, rolling Sharpe, performance metrics, TC filter."""
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
@@ -117,22 +159,25 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         same_day = timing.startswith("Same-Day")
 
     # ── Heatmap with year-range toggle ──────────────────────────────────────
-    st.markdown("**Sharpe Heatmap — Fast × Slow MA Crossover**")
+    st.markdown(f"**Sharpe Heatmap — Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
+    st.caption("Scroll/drag to zoom into any region, double-click to reset. Every integer "
+               f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
     hm_yr = st.slider("Year range for heatmap", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_mom_hm_yr")
-    fast_vals = tuple(range(2, default_fast_max + 1, 4))
-    slow_vals = tuple(range(10, default_slow_max + 1, 12))
-    hm_df = momentum_heatmap(f1r, f1c, fast_vals, slow_vals,
+    hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
                               f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", same_day, tc_bps)
-    if not hm_df.empty:
+    if not hm_df.empty and hm_df["sharpe"].notna().any():
         pivot = hm_df.pivot(index="fast", columns="slow", values="sharpe")
         fig_hm = go.Figure(data=go.Heatmap(
             z=pivot.values, x=pivot.columns, y=pivot.index,
             colorscale="RdYlGn", zmid=0, colorbar=dict(title="Sharpe"),
+            hovertemplate="Fast MA: %{y}<br>Slow MA: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
         ))
-        fig_hm.update_layout(**CHART_LAYOUT, height=400,
+        fig_hm.update_layout(**CHART_LAYOUT, height=560, dragmode="zoom",
                               title=dict(text=f"{product} — Sharpe by MA Crossover", font=dict(size=13)),
                               xaxis_title="Slow MA", yaxis_title="Fast MA")
-        st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_mom_hm")
+        fig_hm.update_xaxes(rangeslider=dict(visible=False))
+        st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_mom_hm",
+                         config={"scrollZoom": True})
         best = hm_df.loc[hm_df["sharpe"].idxmax()]
         st.caption(f"Best in range {hm_yr[0]}-{hm_yr[1]}: MA({int(best['fast'])},{int(best['slow'])}) "
                    f"gross Sharpe {best['sharpe']:+.2f}.")

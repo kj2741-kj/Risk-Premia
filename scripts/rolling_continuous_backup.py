@@ -1,40 +1,37 @@
 """
 rolling_continuous.py
 =====================
-Generic continuous rolling F1 price-series builder for commodity futures.
+Generic continuous rolling F1 price-series builder for metals futures.
 
-Rolls N trading days before LAST_TRADEABLE_DT (configurable 1–10, default 5).
+Rolling logic (return-based stitching, verified against LME Copper data):
+--------------------------------------------------------------------------
+  Phase 1  — before & ON roll_date:
+              F1_cont[t] = F1_cont[t-1] + ΔF1[t]   (F1-delta tracking; no hard reset)
+  Phase 2  — day after roll_date through FUT_DLV_DT_LAST + 1 BDay (inclusive):
+              F1_cont[t] = F1_cont[t-1] + ΔF2[t]   (track held F2 position)
+  Phase 3  — first day > (FUT_DLV_DT_LAST + 1 BDay)  — "bridge":
+              F1_cont[t] = F1_cont[t-1] + F1[t] − F2[t-1]
+  Phase 4  — after bridge until next roll:
+              F1_cont[t] = F1_cont[t-1] + ΔF1[t]
 
-Rolling logic (return-based / additive stitching):
----------------------------------------------------
-  F1_Tracking (normal days, holding front-month F1):
-      F1_cont[t] = F1_cont[t-1] + (F1_raw[t] - F1_raw[t-1])
-
-  Roll day (N trading days before LAST_TRADEABLE_DT):
-      Switch from F1 to F2. Track F2 delta on roll day.
-      F1_cont[t] = F1_cont[t-1] + (F2[t] - F2[t-1])
-
-  F2_Tracking (between roll day and data-file contract switch):
-      F1_cont[t] = F1_cont[t-1] + (F2[t] - F2[t-1])
-
-  Bridge (day after LAST_TRADEABLE_DT, when the data file switches F1
-  to the new contract):
-      F1_cont[t] = F1_cont[t-1] + (F1[t] - F2[t-1])
-      Then resume normal F1 tracking.
-
-Calendar dates are snapped to the nearest prior trading day when they
-don't appear in the price data (holiday mismatches, data gaps).
+Calendar dates (from expiry_calendars_20260526.xlsx):
+  roll_date   = LAST_TRADEABLE_DT   (accounts for Easter / LME holiday adjustments)
+  expiry_date = FUT_DLV_DT_LAST
+  phase2_end  = FUT_DLV_DT_LAST + 1 BDay
+  bridge_day  = FUT_DLV_DT_LAST + 2 BDay
 
 Usage:
 ------
     from rolling_continuous import get_metal_rolling_f1
 
-    df = get_metal_rolling_f1("LP")                   # LME Copper, default 5 days before expiry
-    df = get_metal_rolling_f1("LP", roll_day=3)       # roll 3 trading days before expiry
-    df = get_metal_rolling_f1("CL", roll_day=7,       # WTI, 7 days before expiry
-             config=ENERGY_CONFIG,
-             futures_file=ENERGY_FUTURES_FILE,
-             calendar_file=ENERGY_CALENDAR_FILE)
+    df = get_metal_rolling_f1("LP")   # LME Copper
+    df = get_metal_rolling_f1("LA")   # LME Aluminium
+    # etc.
+
+    # Or step-by-step:
+    prices  = load_metal_prices(FUTURES_FILE, sheet_name="Copper LME", f1_col=1, f2_col=4)
+    cal     = load_metal_calendar(CALENDAR_FILE, sheet_name="LP - LME Copper")
+    result  = build_rolling_f1(prices, cal)
 """
 
 from __future__ import annotations
@@ -47,8 +44,6 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 DATA_DIR = os.path.join(_REPO_ROOT, "data")
 OUTPUTS_DIR = os.path.join(_REPO_ROOT, "outputs")
-
-DEFAULT_ROLL_DAY = 5
 
 # ── Default file paths (can be overridden at call time) ───────────────────────
 DEFAULT_FUTURES_FILE  = os.path.join(DATA_DIR, "Metals Futures Curve.csv")
@@ -154,49 +149,6 @@ METAL_CONFIG: dict[str, dict] = {
 
 ENERGY_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Energy_Futures_Updated.xlsx")
 ENERGY_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
-
-# LME base metals, refreshed through 2026-06-30 (README sheet inside the
-# workbook confirms "End Date 20260630"). Supersedes METAL_CONFIG's LP/LA/LX/
-# LN/LL/LT entries above, which point at the stale "Metals Futures Curve.csv"
-# (Copper LME sheet there stops 2025-12-31; the rest stop ~2026-05-19/20).
-# Paired with the matching 2026-07-01-vintage calendar (same file Energy uses)
-# rather than the older expiry_calendars_20260526.xlsx, whose LME sheet names
-# ("LP - LME Copper") don't match this calendar's naming ("LP - Copper (LME)").
-METALS_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Metals_Futures_Curve_Updated.xlsx")
-METALS_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
-
-METALS_CONFIG: dict[str, dict] = {
-    "LP": {
-        "name": "LME Copper", "price_sheet": "Copper LME",
-        "calendar_sheet": "LP - Copper (LME)",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
-    },
-    "LA": {
-        "name": "LME Aluminium", "price_sheet": "Aluminium LME",
-        "calendar_sheet": "LA - Aluminium (LME)",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
-    },
-    "LX": {
-        "name": "LME Zinc", "price_sheet": "Zinc LME",
-        "calendar_sheet": "LX - Zinc (LME)",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
-    },
-    "LN": {
-        "name": "LME Nickel", "price_sheet": "Nickel LME",
-        "calendar_sheet": "LN - Nickel (LME)",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
-    },
-    "LL": {
-        "name": "LME Lead", "price_sheet": "Lead LME",
-        "calendar_sheet": "LL - Lead (LME)",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
-    },
-    "LT": {
-        "name": "LME Tin", "price_sheet": "Tin LME",
-        "calendar_sheet": "LT - Tin (LME)",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
-    },
-}
 
 ENERGY_CONFIG: dict[str, dict] = {
     "CL": {
@@ -344,86 +296,20 @@ def load_metal_calendar(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. Helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _snap_to_trading_day(dt: pd.Timestamp, sorted_trading: list[pd.Timestamp]) -> pd.Timestamp | None:
-    """Return dt if it's a trading day, else the nearest prior trading day."""
-    dt = dt.normalize()
-    for t in reversed(sorted_trading):
-        if t <= dt:
-            return t
-    return None
-
-
-def _compute_roll_dates(
-    calendar: pd.DataFrame,
-    sorted_trading: list[pd.Timestamp],
-    price_date_set: set[pd.Timestamp],
-    n_days_before: int,
-) -> tuple[dict[pd.Timestamp, str], set[pd.Timestamp], dict[pd.Timestamp, str]]:
-    """
-    For each contract, compute the roll date = N trading days before
-    (snapped) LAST_TRADEABLE_DT.
-
-    Returns
-    -------
-    roll_map       : {roll_date: contract_name}
-    ltd_set        : set of snapped LTD dates (for bridge detection)
-    ltd_to_contract: {snapped_ltd: contract_name}
-    """
-    roll_map = {}
-    ltd_set = set()
-    ltd_to_contract = {}
-
-    for _, r in calendar.iterrows():
-        ltd_raw = r["roll_date"].normalize()
-
-        # Snap LTD to nearest prior trading day if not in price data
-        snapped_ltd = _snap_to_trading_day(ltd_raw, sorted_trading)
-        if snapped_ltd is None:
-            continue
-
-        ltd_set.add(snapped_ltd)
-        ltd_to_contract[snapped_ltd] = r["Contract"]
-
-        # Walk back N trading days from the snapped LTD
-        ltd_idx = None
-        for j, t in enumerate(sorted_trading):
-            if t == snapped_ltd:
-                ltd_idx = j
-                break
-        if ltd_idx is None:
-            continue
-
-        roll_idx = ltd_idx - n_days_before
-        if roll_idx < 0:
-            continue
-
-        roll_date = sorted_trading[roll_idx]
-        roll_map[roll_date] = r["Contract"]
-
-    return roll_map, ltd_set, ltd_to_contract
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. Core rolling algorithm
+# 2. Core rolling algorithm
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_rolling_f1(
     prices: pd.DataFrame,
     calendar: pd.DataFrame,
-    roll_day: int = DEFAULT_ROLL_DAY,
 ) -> pd.DataFrame:
     """
     Build a continuous rolling F1 price series using return-based stitching.
-    Rolls N trading days before each LAST_TRADEABLE_DT.
 
     Parameters
     ----------
     prices   : DataFrame indexed by Date with columns F1_raw, F2_raw.
     calendar : DataFrame with columns Contract, roll_date, expiry_date.
-    roll_day : How many trading days before LAST_TRADEABLE_DT to roll (1–10, default 5).
 
     Returns
     -------
@@ -431,101 +317,114 @@ def build_rolling_f1(
         F1_raw, F2_raw, F1_continuous,
         Phase, is_roll_date, is_bridge_date, active_contract
     """
-    if not 1 <= roll_day <= 10:
-        raise ValueError(f"roll_day must be 1–10, got {roll_day}")
+    roll_set    = set(calendar["roll_date"].dt.normalize())
+    roll_to_row = {r["roll_date"].normalize(): r for _, r in calendar.iterrows()}
+    roll_dates_sorted = sorted(roll_set)
+    next_roll_after = {d: (roll_dates_sorted[i + 1] if i + 1 < len(roll_dates_sorted) else None)
+                        for i, d in enumerate(roll_dates_sorted)}
 
     trading_dates = prices.index.normalize()
-    price_date_set = set(trading_dates)
-    sorted_trading = sorted(price_date_set)
-
-    roll_map, ltd_set, ltd_to_contract = _compute_roll_dates(
-        calendar, sorted_trading, price_date_set, n_days_before=roll_day,
-    )
-    roll_set = set(roll_map.keys())
-
     f1_arr = prices["F1_raw"].values
     f2_arr = prices["F2_raw"].values
-    n = len(trading_dates)
+    n      = len(trading_dates)
 
-    f1_cont = np.full(n, np.nan)
+    f1_cont      = np.full(n, np.nan)
     phase_labels = np.full(n, "", dtype=object)
-    is_roll = np.zeros(n, dtype=bool)
-    is_bridge = np.zeros(n, dtype=bool)
-    active_cont = np.full(n, "", dtype=object)
+    is_roll      = np.zeros(n, dtype=bool)
+    is_bridge    = np.zeros(n, dtype=bool)
+    active_cont  = np.full(n, "", dtype=object)
 
-    in_f2_phase = False
-    prev_f1 = np.nan
-    prev_f2 = np.nan
+    # ── State variables ────────────────────────────────────────────────────
+    in_f2_phase      = False
+    current_expiry   = None    # FUT_DLV_DT_LAST (normalized)
+    phase2_end       = None    # current_expiry + 1 BDay
     current_contract = "—"
+    prev_f2          = np.nan
+    prev_f1          = np.nan
 
     for i, d in enumerate(trading_dates):
         f1v = f1_arr[i]
         f2v = f2_arr[i]
 
-        # ── Bridge detection: day after LAST_TRADEABLE_DT ───────────────
-        # Fires when the calendar says the contract has rolled, regardless
-        # of NaN state — must end F2 phase every month.
-        if in_f2_phase:
-            yesterday = trading_dates[i - 1] if i > 0 else None
-            if yesterday is not None and yesterday in ltd_set:
-                f1_prev = f1_cont[i - 1] if i > 0 else np.nan
-                if not np.isnan(f1v) and not np.isnan(prev_f2) and not np.isnan(f1_prev):
-                    f1_cont[i] = f1_prev + (f1v - prev_f2)
-                elif not np.isnan(f1v) and not np.isnan(prev_f1) and not np.isnan(f1_prev):
-                    f1_cont[i] = f1_prev + (f1v - prev_f1)
-                elif not np.isnan(f1_prev):
-                    f1_cont[i] = f1_prev
-                else:
-                    f1_cont[i] = f1v if not np.isnan(f1v) else 0.0
-
-                phase_labels[i] = "Bridge"
-                is_bridge[i] = True
-                if yesterday in ltd_to_contract:
-                    current_contract = ltd_to_contract[yesterday]
-                active_cont[i] = current_contract
-                prev_f1 = f1v
-                prev_f2 = f2v
-                in_f2_phase = False
-                continue
-
-        # ── Roll day (N trading days before LTD) ───────────────────────
+        # ── Roll day ──────────────────────────────────────────────────────
         if d in roll_set:
-            f1_prev = f1_cont[i - 1] if i > 0 else np.nan
-            if i == 0 or np.isnan(f1_prev):
-                f1_cont[i] = f1v
-            elif not np.isnan(f2v) and not np.isnan(prev_f2):
-                f1_cont[i] = f1_prev + (f2v - prev_f2)
-            elif not np.isnan(f1v) and not np.isnan(prev_f1):
-                f1_cont[i] = f1_prev + (f1v - prev_f1)
-            else:
-                f1_cont[i] = f1_prev
+            row = roll_to_row[d]
+            current_expiry = row["expiry_date"].normalize()
+            next_roll = next_roll_after.get(d)
 
-            phase_labels[i] = f"Roll_LTD-{roll_day}"
-            is_roll[i] = True
-            active_cont[i] = roll_map[d]
-            current_contract = roll_map[d]
-            prev_f1 = f1v
-            prev_f2 = f2v
-            in_f2_phase = True
+            # Nominal delivery window (expiry_date + 1 BDay) overruns the next
+            # contract's roll date -- happens for NYMEX-style physically-delivered
+            # products where FUT_DLV_DT_LAST is the delivery-MONTH-END, ~1 month
+            # after last-trade (e.g. WTI, Heating Oil, Nat Gas, RBOB), unlike
+            # LME/COMEX/ICE-Brent where roll and expiry sit days apart. In that
+            # case there is no real multi-week holdover to model: bridge directly
+            # on the roll day itself (skip Phase 2), otherwise Phase 2 would
+            # swallow almost the entire next cycle and F1_continuous ends up
+            # tracking F2 (the deferred contract) almost permanently.
+            nominal_phase2_end = (current_expiry + pd.offsets.BDay(1)).normalize()
+            overruns_next_roll = next_roll is not None and nominal_phase2_end >= next_roll
+
+            if overruns_next_roll:
+                f1_prev = f1_cont[i - 1] if i > 0 else np.nan
+                if i == 0 or np.isnan(f1_prev):
+                    f1_cont[i] = f1v
+                elif not np.isnan(f1v) and not np.isnan(prev_f2):
+                    f1_cont[i] = f1_prev + (f1v - prev_f2)
+                else:
+                    f1_cont[i] = f1_prev
+                phase_labels[i] = "F1_Direct_RollDay_Bridge"
+                is_roll[i]      = True
+                is_bridge[i]    = True
+                active_cont[i]  = row["Contract"]
+                in_f2_phase     = False
+                phase2_end      = None
+            else:
+                # F1-delta tracking at roll day (no reset to raw price)
+                if i == 0 or np.isnan(f1_cont[i - 1]):
+                    f1_cont[i] = f1v
+                elif not np.isnan(f1v) and not np.isnan(prev_f1):
+                    f1_cont[i] = f1_cont[i - 1] + (f1v - prev_f1)
+                else:
+                    f1_cont[i] = f1_cont[i - 1]
+
+                phase_labels[i] = "F1_Direct_RollDay"
+                is_roll[i]      = True
+                active_cont[i]  = row["Contract"]
+                phase2_end      = nominal_phase2_end
+                in_f2_phase     = True
+
+            current_contract = row["Contract"]
+            prev_f2          = f2v
+            prev_f1          = f1v
             continue
 
-        # ── F2 tracking ─────────────────────────────────────────────────
-        if in_f2_phase:
+        # ── Phase 2: F2 tracking (through FUT_DLV_DT_LAST + 1 BDay) ──────
+        if in_f2_phase and d <= phase2_end:
             f1_prev = f1_cont[i - 1] if i > 0 else np.nan
             if not np.isnan(f2v) and not np.isnan(prev_f2) and not np.isnan(f1_prev):
                 f1_cont[i] = f1_prev + (f2v - prev_f2)
-            elif not np.isnan(f1_prev):
-                f1_cont[i] = f1_prev
             else:
-                f1_cont[i] = f1v
-
+                f1_cont[i] = f1_prev
             phase_labels[i] = "F2_Tracking"
-            active_cont[i] = current_contract
-            prev_f1 = f1v
-            prev_f2 = f2v
+            active_cont[i]  = current_contract
+            prev_f2         = f2v
             continue
 
-        # ── Normal F1 tracking ──────────────────────────────────────────
+        # ── Phase 3: Bridge ───────────────────────────────────────────────
+        if in_f2_phase and d > phase2_end:
+            f1_prev = f1_cont[i - 1] if i > 0 else np.nan
+            if not np.isnan(f1v) and not np.isnan(prev_f2) and not np.isnan(f1_prev):
+                f1_cont[i] = f1_prev + (f1v - prev_f2)
+            else:
+                f1_cont[i] = f1_prev
+            phase_labels[i] = "Bridge"
+            is_bridge[i]    = True
+            active_cont[i]  = current_contract
+            prev_f1         = f1v
+            in_f2_phase     = False
+            continue
+
+        # ── Phase 1 / 4: F1 tracking ─────────────────────────────────────
         if i == 0 or np.isnan(f1_cont[i - 1]):
             f1_cont[i] = f1v
         elif not np.isnan(f1v) and not np.isnan(prev_f1):
@@ -534,21 +433,21 @@ def build_rolling_f1(
             f1_cont[i] = f1_cont[i - 1]
 
         phase_labels[i] = "F1_Tracking"
-        active_cont[i] = current_contract
-        prev_f1 = f1v
-        prev_f2 = f2v
+        active_cont[i]  = current_contract or "—"
+        prev_f1         = f1v
 
+    # ── Assemble result ────────────────────────────────────────────────────
     out = prices[["F1_raw", "F2_raw"]].copy()
-    out["F1_continuous"] = f1_cont
-    out["Phase"] = phase_labels
-    out["is_roll_date"] = is_roll
-    out["is_bridge_date"] = is_bridge
+    out["F1_continuous"]   = f1_cont
+    out["Phase"]           = phase_labels
+    out["is_roll_date"]    = is_roll
+    out["is_bridge_date"]  = is_bridge
     out["active_contract"] = active_cont
     return out
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. High-level wrapper
+# 3. High-level wrapper
 # ─────────────────────────────────────────────────────────────────────────────
 
 def get_metal_rolling_f1(
@@ -557,7 +456,6 @@ def get_metal_rolling_f1(
     calendar_file: str = DEFAULT_CALENDAR_FILE,
     verbose: bool      = True,
     config: dict | None = None,
-    roll_day: int = DEFAULT_ROLL_DAY,
 ) -> pd.DataFrame:
     """
     End-to-end loader + builder for any configured product.
@@ -577,8 +475,6 @@ def get_metal_rolling_f1(
                     format, f1_col/f2_col=1/2) with different column layouts,
                     so relying on a default here would silently read the wrong
                     columns for one of the two callers.
-    roll_day      : How many trading days before LAST_TRADEABLE_DT to roll
-                    (1–10, default 5).
 
     Returns
     -------
@@ -617,9 +513,9 @@ def get_metal_rolling_f1(
 
     if verbose:
         print(f"[{metal_code}] {len(cal)} contracts in calendar")
-        print(f"[{metal_code}] Building rolling F1 (LTD-{roll_day}) ...")
+        print(f"[{metal_code}] Building continuous rolling F1 ...")
 
-    result = build_rolling_f1(prices, cal, roll_day=roll_day)
+    result = build_rolling_f1(prices, cal)
 
     if verbose:
         rolls   = result["is_roll_date"].sum()
@@ -630,116 +526,15 @@ def get_metal_rolling_f1(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. Generate verification Excel files when run directly
+# 4. Quick self-test when run directly
 # ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import argparse
-    from pathlib import Path
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
-    from openpyxl.utils import get_column_letter
+    result = get_metal_rolling_f1("LP", verbose=True)
+    print("\nF1_continuous summary:")
+    print(result["F1_continuous"].describe().to_string())
 
-    parser = argparse.ArgumentParser(description="Generate verification Excel files for rolling continuous series.")
-    parser.add_argument("--roll-day", type=int, default=DEFAULT_ROLL_DAY,
-                        choices=range(1, 11), metavar="N",
-                        help="Roll N trading days before LAST_TRADEABLE_DT (1–10, default 5)")
-    args = parser.parse_args()
-    rd = args.roll_day
-
-    OUTPUT_DIR = Path(_REPO_ROOT) / f"verification_ltd{rd}"
-    OUTPUT_DIR.mkdir(exist_ok=True)
-
-    ALL_PRODUCTS = [
-        ("LP", "LME_Copper",         METAL_CONFIG,    DEFAULT_FUTURES_FILE,  DEFAULT_CALENDAR_FILE),
-        ("LA", "LME_Aluminium",      METAL_CONFIG,    DEFAULT_FUTURES_FILE,  DEFAULT_CALENDAR_FILE),
-        ("CL", "WTI_Crude",          ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("CO", "Brent_Crude",        ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("XB", "RBOB_Gasoline",      ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("HO", "Heating_Oil",        ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("NG", "Nat_Gas",            ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("QS", "Singapore_Gasoil",   ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("FO", "Fuel_Oil",           ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("GC", "Gold_COMEX",         PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
-        ("SI", "Silver_COMEX",       PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
-        ("HG", "Copper_CME",         PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
-        ("PL", "Platinum_NYMEX",     PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
-        ("PA", "Palladium_NYMEX",    PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
-    ]
-
-    HEADER_FILL  = PatternFill("solid", fgColor="2B3A47")
-    HEADER_FONT  = Font(bold=True, color="FFFFFF", size=10)
-    ROLL_FILL    = PatternFill("solid", fgColor="FFF3CD")   # yellow
-    BRIDGE_FILL  = PatternFill("solid", fgColor="D4EDDA")   # green
-    F2_FILL      = PatternFill("solid", fgColor="E8EAF6")   # blue
-
-    for code, label, config, futures_file, calendar_file in ALL_PRODUCTS:
-        name = config[code]["name"]
-        print(f"\n{'='*70}")
-        print(f"{name} ({code}) — roll LTD-{rd}")
-        print(f"{'='*70}")
-
-        df = get_metal_rolling_f1(code, config=config, futures_file=futures_file,
-                                  calendar_file=calendar_file, verbose=True, roll_day=rd)
-
-        rolls   = df["is_roll_date"].sum()
-        bridges = df["is_bridge_date"].sum()
-        print(f"\n  F1_raw     : {df['F1_raw'].iloc[0]:.2f} -> {df['F1_raw'].iloc[-1]:.2f}")
-        print(f"  F1_cont    : {df['F1_continuous'].iloc[0]:.2f} -> {df['F1_continuous'].iloc[-1]:.2f}")
-        print(f"  Diff (end) : {df['F1_continuous'].iloc[-1] - df['F1_raw'].iloc[-1]:.2f}")
-        print(f"  Days <= 0  : {(df['F1_continuous'] <= 0).sum()}")
-        print(f"  Rolls={rolls}, Bridges={bridges}")
-
-        out_path = OUTPUT_DIR / f"{code}_{label}_LTD-{rd}_rolling.xlsx"
-        wb = Workbook()
-        ws = wb.active
-        ws.title = f"{code} Continuous"
-
-        cols = ["Date", "F1_raw", "F2_raw", "F1_continuous", "Phase",
-                "is_roll_date", "is_bridge_date", "active_contract",
-                "dF1", "dF2", "dF1_cont"]
-        ws.append(cols)
-        for c in range(1, len(cols) + 1):
-            cell = ws.cell(1, c)
-            cell.fill = HEADER_FILL
-            cell.font = HEADER_FONT
-            cell.alignment = Alignment(horizontal="center")
-
-        df_out = df.reset_index()
-        df_out["dF1"]      = df_out["F1_raw"].diff()
-        df_out["dF2"]      = df_out["F2_raw"].diff()
-        df_out["dF1_cont"] = df_out["F1_continuous"].diff()
-
-        for _, row in df_out.iterrows():
-            vals = [
-                row["Date"].strftime("%Y-%m-%d") if hasattr(row["Date"], "strftime") else str(row["Date"]),
-                round(row["F1_raw"], 4) if pd.notna(row["F1_raw"]) else None,
-                round(row["F2_raw"], 4) if pd.notna(row["F2_raw"]) else None,
-                round(row["F1_continuous"], 4) if pd.notna(row["F1_continuous"]) else None,
-                row["Phase"],
-                row["is_roll_date"],
-                row["is_bridge_date"],
-                row["active_contract"],
-                round(row["dF1"], 4) if pd.notna(row["dF1"]) else None,
-                round(row["dF2"], 4) if pd.notna(row["dF2"]) else None,
-                round(row["dF1_cont"], 4) if pd.notna(row["dF1_cont"]) else None,
-            ]
-            ws.append(vals)
-            r = ws.max_row
-            if row["is_roll_date"]:
-                for c in range(1, len(cols) + 1):
-                    ws.cell(r, c).fill = ROLL_FILL
-            elif row["is_bridge_date"]:
-                for c in range(1, len(cols) + 1):
-                    ws.cell(r, c).fill = BRIDGE_FILL
-            elif row["Phase"] == "F2_Tracking":
-                for c in range(1, len(cols) + 1):
-                    ws.cell(r, c).fill = F2_FILL
-
-        for c in range(1, len(cols) + 1):
-            ws.column_dimensions[get_column_letter(c)].width = 16
-        ws.freeze_panes = "A2"
-
-        wb.save(out_path)
-        print(f"  Saved -> {out_path}")
-
-    print(f"\nDone. All {len(ALL_PRODUCTS)} files in {OUTPUT_DIR.resolve()}")
+    out_path = os.path.join(DATA_DIR, "LME_Copper_Rolling_F1.csv")
+    out      = result.reset_index()
+    out["Date"] = out["Date"].dt.strftime("%Y-%m-%d")
+    out.to_csv(out_path, index=False, float_format="%.4f")
+    print(f"\nSaved -> {out_path}  ({len(out)} rows)")

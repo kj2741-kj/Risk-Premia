@@ -11,8 +11,11 @@ Two interchangeable basis definitions (--basis-source / basis_source=):
 
   "f1f2" (default) -- Eq. 15 of the paper, using actual contract day-counts:
     basis_t = (F1_t / F2_t - 1) * 365 / (D2_t - D1_t)
-    F1/F2   : nearest / next-nearest LME copper contract close
-              (data/LME_Copper_Rolling_F1_v2.csv, F1_raw/F2_raw)
+    F1/F2   : nearest / next-nearest LME copper contract close, built via
+              rolling_continuous.get_metal_rolling_f1("LP", config=METALS_CONFIG)
+              from data/06-30/Metals_Futures_Curve_Updated.xlsx (through
+              2026-06-30) -- NOT data/LME_Copper_Rolling_F1_v2.csv, a stale
+              precomputed export that stops at 2025-12-31.
     D1/D2   : days from t to the last-tradeable-date of the F1/F2 contract
               (data/06-30/expiry_calendars_20260701.xlsx, "LP - Copper (LME)")
 
@@ -44,21 +47,23 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 
 import pandas as pd
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
+sys.path.insert(0, _SCRIPT_DIR)
 
 from ghr_spline_core import (
     TRAILING_WEEKS, NW_BANDWIDTH, DEFAULT_X_RANGE, DEFAULT_Y_RANGE,
     f1f2_basis_from_curve, run_spline_analysis,
 )
+from rolling_continuous import get_metal_rolling_f1, METALS_CONFIG, METALS_FUTURES_FILE, METALS_CALENDAR_FILE
 
-_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-_REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 DATA_DIR = os.path.join(_REPO_ROOT, "data")
 OUTPUTS_DIR = os.path.join(_REPO_ROOT, "outputs", "ghr_copper")
 
-FUTURES_CSV = os.path.join(DATA_DIR, "LME_Copper_Rolling_F1_v2.csv")
-CALENDAR_XLSX = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
 CALENDAR_SHEET = "LP - Copper (LME)"
 INVENTORY_CSV = os.path.join(DATA_DIR, "copper_lme_stock_westmetall.csv")
 
@@ -68,9 +73,13 @@ INVENTORY_CSV = os.path.join(DATA_DIR, "copper_lme_stock_westmetall.csv")
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_daily_basis_f1f2() -> pd.Series:
-    """Eq. 15 basis from nearest/next-nearest LME copper contract closes."""
-    px = pd.read_csv(FUTURES_CSV, parse_dates=["Date"]).set_index("Date").sort_index()
-    return f1f2_basis_from_curve(px["F1_raw"], px["F2_raw"], CALENDAR_XLSX, CALENDAR_SHEET)
+    """Eq. 15 basis from nearest/next-nearest LME copper contract closes
+    (data/06-30/Metals_Futures_Curve_Updated.xlsx, through 2026-06-30)."""
+    px = get_metal_rolling_f1(
+        "LP", config=METALS_CONFIG, futures_file=METALS_FUTURES_FILE,
+        calendar_file=METALS_CALENDAR_FILE, verbose=False,
+    )
+    return f1f2_basis_from_curve(px["F1_raw"], px["F2_raw"], METALS_CALENDAR_FILE, CALENDAR_SHEET)
 
 
 def load_daily_basis_cash3m() -> pd.Series:

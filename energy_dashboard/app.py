@@ -28,6 +28,7 @@ from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
 from common_engine import render_momentum_tab, render_carry_tab, render_value_tab
 from rolling_continuous import get_metal_rolling_f1, ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE
+from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 
 st.set_page_config(
     page_title="Energy Risk Premia - Stage 2",
@@ -53,6 +54,14 @@ with st.sidebar:
         "Product", PRODUCT_ORDER, key="energy_product_choice",
         format_func=lambda c: ENERGY_CONFIG[c]["name"],
     )
+    st.divider()
+    st.markdown("**Rolling Configuration**")
+    roll_method = st.selectbox(
+        "Rolling Logic",
+        ["N days before last trading day", "Nth trading day of the month"],
+        index=0, key="energy_roll_method",
+    )
+    roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="energy_roll_n")
     st.caption("GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) are excluded — no usable "
                "expiry-calendar coverage to build a continuous series. Same Momentum/Carry/Value format "
                "as the Metals and Precious Metals dashboards.")
@@ -60,8 +69,14 @@ with st.sidebar:
 cfg = ENERGY_CONFIG[product_code]
 unit = PRODUCT_UNITS[product_code]
 
-f1_df = get_metal_rolling_f1(product_code, futures_file=ENERGY_FUTURES_FILE,
-                              calendar_file=ENERGY_CALENDAR_FILE, verbose=False, config=ENERGY_CONFIG)
+if roll_method == "N days before last trading day":
+    f1_df = get_metal_rolling_f1(product_code, futures_file=ENERGY_FUTURES_FILE,
+                                  calendar_file=ENERGY_CALENDAR_FILE, verbose=False,
+                                  config=ENERGY_CONFIG, roll_day=roll_n)
+else:
+    f1_df = get_rolling_f1_5td(product_code, futures_file=ENERGY_FUTURES_FILE,
+                                calendar_file=ENERGY_CALENDAR_FILE, verbose=False,
+                                config=ENERGY_CONFIG, roll_day=roll_n)
 if f1_df.empty:
     st.error(f"Could not build F1_continuous for {cfg['name']}.")
     st.stop()

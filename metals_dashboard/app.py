@@ -22,6 +22,7 @@ from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
 from common_engine import render_momentum_tab, render_carry_tab, render_value_tab
 from rolling_continuous import get_metal_rolling_f1, METALS_CONFIG, METALS_FUTURES_FILE, METALS_CALENDAR_FILE
+from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 
 st.set_page_config(
     page_title="Metals Risk Premia - Stage 2",
@@ -47,14 +48,26 @@ with st.sidebar:
     st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
     st.divider()
     metal = st.radio("Metal", list(METAL_OPTIONS.keys()), key="metal_choice")
+    st.divider()
+    st.markdown("**Rolling Configuration**")
+    roll_method = st.selectbox(
+        "Rolling Logic",
+        ["N days before last trading day", "Nth trading day of the month"],
+        index=0, key="metals_roll_method",
+    )
+    roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="metals_roll_n")
     st.caption("Full 10-tab Stage 1 dashboard (Market Overview, Portfolio, etc.) lives at the original "
                "Metals-Risk-Premia deployment — this is the simplified Stage 2 rebuild, matching the "
                "format used for Energy / Precious Metals / NGL.")
 
 cfg = METAL_OPTIONS[metal]
 
-f1_df = get_metal_rolling_f1(cfg["code"], futures_file=CURVE_FILE, calendar_file=CALENDAR_FILE,
-                              verbose=False, config=METALS_CONFIG)
+if roll_method == "N days before last trading day":
+    f1_df = get_metal_rolling_f1(cfg["code"], futures_file=CURVE_FILE, calendar_file=CALENDAR_FILE,
+                                  verbose=False, config=METALS_CONFIG, roll_day=roll_n)
+else:
+    f1_df = get_rolling_f1_5td(cfg["code"], futures_file=CURVE_FILE, calendar_file=CALENDAR_FILE,
+                                verbose=False, config=METALS_CONFIG, roll_day=roll_n)
 if f1_df.empty:
     st.error(f"Could not build F1_continuous for {metal}. Check data/06-30/Metals_Futures_Curve_Updated.xlsx "
              "and the expiry calendar file paths.")

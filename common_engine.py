@@ -16,8 +16,23 @@ Conventions (identical to Stage 1 / Metals dashboard):
   - PnL = position x delta(F1_continuous), ratio back-adjusted.
   - Transaction costs charged on F1_raw at each position change.
   - Sharpe = annualised, active-day convention.
-  - Same-Day execution = shift-1 (position[t] = signal[t-1]).
-    Lag-1 execution   = shift-2 (position[t] = signal[t-2]).
+  - Execution timing = shift_n applied to the signal series, via
+    exec_shift(sig, shift_n) = sig.shift(shift_n + 1): a position decided
+    from signal[t] needs F1_raw[t] as an input, so it can't exist until
+    AFTER the t-1->t return already happened -- pairing signal[t] with that
+    same return (a raw shift(0)) uses day t's close twice and is a same-bar
+    look-ahead leak, not a valid "faster" execution. shift(1) is therefore
+    the fastest any position can legitimately go live; shift_n counts EXTRA
+    days of delay on top of that 1-day floor, not the raw shift itself. So:
+      Same Day (Shift-0): position[t] = signal[t-1]  -- the fastest
+        legitimate entry (the 1-day floor, no extra delay).
+      Lag-1 (Shift-1):    position[t] = signal[t-2]  -- one extra day of
+        delay on top of the floor.
+      Lag-2 (Shift-2):    position[t] = signal[t-3]  -- two extra days of
+        delay on top of the floor.
+    All three are distinct, realistically-tradeable series -- none of them
+    can ever pair a signal with the same-bar return that produced it. See
+    exec_shift()'s docstring for the full worked mechanics.
 """
 
 from __future__ import annotations
@@ -64,22 +79,42 @@ def rolling_sharpe(pnl: pd.Series, window: int = 252) -> pd.Series:
     return r.rolling(window).mean() / r.rolling(window).std() * np.sqrt(252)
 
 
-def exec_shift(sigbin: pd.Series, same_day: bool) -> pd.Series:
-    return sigbin.shift(1) if same_day else sigbin.shift(2)
+TIMING_OPTIONS = ["Same Day (Shift-0)", "Lag-1 (Shift-1)", "Lag-2 (Shift-2)"]
+TIMING_SHIFT = {"Same Day (Shift-0)": 0, "Lag-1 (Shift-1)": 1, "Lag-2 (Shift-2)": 2}
+
+
+def exec_shift(sigbin: pd.Series, shift_n: int) -> pd.Series:
+    """Returns the position that actually earns PnL: Position[t] = Signal[t-(shift_n+1)].
+
+    signal[t] needs F1_raw[t] as an input, so it isn't known until AFTER the
+    t-1->t return has already happened -- pairing signal[t] with that same
+    return (a raw shift(0)) uses day t's close twice (once to compute the
+    signal, once as the return's endpoint), a same-bar look-ahead leak. The
+    fastest a position can legitimately be live is the day immediately
+    following the signal that decided it, i.e. shift(1) at minimum.
+
+    shift_n is therefore "extra days of delay ON TOP OF that 1-day floor",
+    not the raw shift itself: shift_n=0 ("Same Day") = shift(1), the fastest
+    legitimate entry; shift_n=1 ("Lag-1") = shift(2), one more day of delay;
+    shift_n=2 ("Lag-2") = shift(3), two more days of delay. This keeps all
+    three dropdown options distinct and none of them can ever leak, unlike a
+    naive shift(shift_n) where shift_n=0 would leak and shift_n=1 would be
+    the true fastest-legitimate case (making "Same Day" a misnomer)."""
+    return sigbin.shift(shift_n + 1)
 
 
 # ═══════════════════════════════════════════════════════════════
 # MOMENTUM: MA CROSSOVER
 # ═══════════════════════════════════════════════════════════════
 
-def ma_crossover_position(f1r: pd.Series, fast: int, slow: int, same_day: bool = True) -> pd.Series:
+def ma_crossover_position(f1r: pd.Series, fast: int, slow: int, shift_n: int = 1) -> pd.Series:
     sig = np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
-    return exec_shift(sig, same_day).fillna(0)
+    return exec_shift(sig, shift_n).fillna(0)
 
 
 @st.cache_data(show_spinner="Computing 250x250 momentum heatmap...")
 def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
-                      start: str, end: str, same_day: bool, tc_bps: int) -> pd.DataFrame:
+                      start: str, end: str, shift_n: int, tc_bps: int) -> pd.DataFrame:
     """Full-resolution grid of gross Sharpe for every valid (fast, slow) pair,
     fast/slow in [1, max_window], slow > fast, over [start, end].
 
@@ -90,12 +125,17 @@ def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
     pandas-rolling-per-pair loop is what the previous coarse-grid version did;
     it does not scale to a 250x250 (~31k valid pairs) grid.
     """
+    # eff_shift = shift_n + 1 -- see exec_shift()'s docstring: a position
+    # decided using day t's own signal cannot legitimately capture day t's
+    # own return, so the floor is shift(1); shift_n counts EXTRA days of
+    # delay on top of that floor, keeping Same Day/Lag-1/Lag-2 distinct.
+    eff_shift = shift_n + 1
+
     mask = (f1r.index >= pd.Timestamp(start)) & (f1r.index <= pd.Timestamp(end))
     f1r_w = f1r[mask].astype(float)
     f1c_w = f1c[mask].astype(float)
     n = len(f1r_w)
-    shift_n = 1 if same_day else 2
-    if n < shift_n + 20:
+    if n < eff_shift + 20:
         return pd.DataFrame(columns=["fast", "slow", "sharpe"])
 
     delta = f1c_w.diff().values
@@ -108,12 +148,13 @@ def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
     # of looping pair-by-pair (250 outer iterations instead of ~31k total).
     # Sharpe computed via masked sum/count instead of nanmean/nanstd (which
     # carry extra overhead) -- roughly 2x faster on top of the batching.
-    delta_shifted = delta[shift_n:]
+    delta_shifted = delta[eff_shift:]
     fast_out, slow_out, sharpe_out = [], [], []
     for fi in range(max_window - 1):
         fast_col = sma[:, fi]
         slow_cols = sma[:, fi + 1:max_window]                       # (n, n_slow)
-        sig = np.sign(fast_col[:, None] - slow_cols)[:-shift_n, :]  # aligned to delta_shifted
+        raw_sig = np.sign(fast_col[:, None] - slow_cols)
+        sig = raw_sig[:-eff_shift, :]                               # aligned to delta_shifted
         pos = np.where(np.isfinite(sig), sig, 0.0)
         pnl = pos * delta_shifted[:, None]
         active_mask = (pos != 0) & np.isfinite(pnl)
@@ -154,9 +195,12 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_mom_tc")
         tc_bps = tc_map[tc_label]
     with timing_col:
-        timing = st.selectbox("Execution Timing", ["Same-Day (shift-1)", "Lag-1 (shift-2)"],
-                               key=f"{key_prefix}_mom_timing")
-        same_day = timing.startswith("Same-Day")
+        timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_mom_timing")
+        shift_n = TIMING_SHIFT[timing]
+        if shift_n == 0:
+            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t-1] -- the fastest a position "
+                       "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
+                       "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
 
     # ── Heatmap with year-range toggle ──────────────────────────────────────
     st.markdown(f"**Sharpe Heatmap — Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
@@ -164,7 +208,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
                f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
     hm_yr = st.slider("Year range for heatmap", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_mom_hm_yr")
     hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
-                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", same_day, tc_bps)
+                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n, tc_bps)
     if not hm_df.empty and hm_df["sharpe"].notna().any():
         pivot = hm_df.pivot(index="fast", columns="slow", values="sharpe")
         fig_hm = go.Figure(data=go.Heatmap(
@@ -223,7 +267,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         return
 
     _render_multi_strategy_block(
-        {f"MA({f},{s})": ma_crossover_position(f1r, f, s, same_day=same_day) for f, s in chosen},
+        {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen},
         f1r, f1c, tc_bps, key_prefix + "_mom", unit_label,
     )
 
@@ -240,29 +284,29 @@ def _carry_base(curve: pd.DataFrame, a: str, b: str) -> pd.Series:
     return ((fa.reindex(idx) - fb.reindex(idx)) / fa.reindex(idx)).replace([np.inf, -np.inf], np.nan).dropna()
 
 
-def carry_v1_position(curve: pd.DataFrame, near: str = "F1", far: str = "F2", same_day: bool = True) -> pd.Series:
+def carry_v1_position(curve: pd.DataFrame, near: str = "F1", far: str = "F2", shift_n: int = 1) -> pd.Series:
     raw = _carry_base(curve, near, far)
-    return exec_shift(np.sign(raw), same_day).fillna(0)
+    return exec_shift(np.sign(raw), shift_n).fillna(0)
 
 
-def carry_v2_position(curve: pd.DataFrame, j: str, k: str, same_day: bool = True) -> pd.Series:
-    return carry_v1_position(curve, j, k, same_day)
+def carry_v2_position(curve: pd.DataFrame, j: str, k: str, shift_n: int = 1) -> pd.Series:
+    return carry_v1_position(curve, j, k, shift_n)
 
 
-def carry_v3_position(curve: pd.DataFrame, window: int = 252, same_day: bool = True) -> pd.Series:
+def carry_v3_position(curve: pd.DataFrame, window: int = 252, shift_n: int = 1) -> pd.Series:
     base = _carry_base(curve, "F1", "F2")
     if base.empty:
         return pd.Series(dtype=float)
     z = (base - base.rolling(window).mean()) / base.rolling(window).std()
-    return exec_shift(np.sign(z.replace([np.inf, -np.inf], np.nan)), same_day).fillna(0)
+    return exec_shift(np.sign(z.replace([np.inf, -np.inf], np.nan)), shift_n).fillna(0)
 
 
-def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, same_day: bool = True) -> pd.Series:
+def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1) -> pd.Series:
     base = _carry_base(curve, "F1", "F2")
     if base.empty:
         return pd.Series(dtype=float)
     raw = base - base.shift(horizon)
-    return exec_shift(np.sign(raw), same_day).fillna(0)
+    return exec_shift(np.sign(raw), shift_n).fillna(0)
 
 
 def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
@@ -279,9 +323,12 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_car_tc")
         tc_bps = tc_map[tc_label]
     with timing_col:
-        timing = st.selectbox("Execution Timing", ["Same-Day (shift-1)", "Lag-1 (shift-2)"],
-                               key=f"{key_prefix}_car_timing")
-        same_day = timing.startswith("Same-Day")
+        timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_car_timing")
+        shift_n = TIMING_SHIFT[timing]
+        if shift_n == 0:
+            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t-1] -- the fastest a position "
+                       "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
+                       "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
 
     if tenor_pairs is None:
         tenor_pairs = [("F3", "F15"), ("F6", "F18"), ("F9", "F21"), ("F12", "F24")]
@@ -323,17 +370,17 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         if label.startswith("V1"):
             pair = label[label.index("(") + 1: label.index(")")]
             a, b = pair.split("-")
-            return carry_v1_position(curve, a, b, same_day=same_day)
+            return carry_v1_position(curve, a, b, shift_n=shift_n)
         if label.startswith("V2"):
             pair = label[label.index("(") + 1: label.index(")")]
             a, b = pair.split("-")
-            return carry_v2_position(curve, a, b, same_day=same_day)
+            return carry_v2_position(curve, a, b, shift_n=shift_n)
         if label.startswith("V3"):
             win = int(label.split("=")[1].rstrip(")"))
-            return carry_v3_position(curve, win, same_day=same_day)
+            return carry_v3_position(curve, win, shift_n=shift_n)
         if label.startswith("V4"):
             n = int(label.split("=")[1].rstrip(")"))
-            return carry_v4_position(curve, n, same_day=same_day)
+            return carry_v4_position(curve, n, shift_n=shift_n)
         return pd.Series(dtype=float)
 
     chosen = st.multiselect(
@@ -355,7 +402,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 # ═══════════════════════════════════════════════════════════════
 
 def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, threshold: float,
-                       same_day: bool = False) -> pd.Series:
+                       shift_n: int = 2) -> pd.Series:
     if contract not in curve.columns:
         return pd.Series(dtype=float)
     fk = curve[contract].dropna()
@@ -365,7 +412,7 @@ def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, thresho
     dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan).dropna()
     sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                      index=dev.index)
-    return exec_shift(sig, same_day).fillna(0)
+    return exec_shift(sig, shift_n).fillna(0)
 
 
 def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
@@ -382,9 +429,12 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_val_tc")
         tc_bps = tc_map[tc_label]
     with timing_col:
-        timing = st.selectbox("Execution Timing", ["Lag-1 (shift-2)", "Same-Day (shift-1)"],
-                               key=f"{key_prefix}_val_timing")
-        same_day = timing.startswith("Same-Day")
+        timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=2, key=f"{key_prefix}_val_timing")
+        shift_n = TIMING_SHIFT[timing]
+        if shift_n == 0:
+            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t-1] -- the fastest a position "
+                       "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
+                       "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
 
     if contracts is None:
         contracts = [c for c in curve.columns if c.startswith("F")]
@@ -426,7 +476,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         return
 
     positions = {
-        f"{c} {lb} ±{thr*100:.0f}%": value_v1_position(curve, c, lookback_map[lb], thr, same_day=same_day)
+        f"{c} {lb} ±{thr*100:.0f}%": value_v1_position(curve, c, lookback_map[lb], thr, shift_n=shift_n)
         for c, lb, thr in chosen
     }
     positions = {k: v for k, v in positions.items() if not v.empty}

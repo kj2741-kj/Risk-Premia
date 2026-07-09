@@ -10,8 +10,12 @@ Conventions replicated project-wide (see CLAUDE.md / dashboard_metals.py):
   - PnL = position x delta(F1_continuous), ratio back-adjusted.
   - Transaction costs charged on F1_raw (the actual traded price), not F1_continuous.
   - Sharpe = annualised, active-day convention (days with a non-zero position only).
-  - Same-Day execution = shift-1 (position[t] = signal[t-1]).
-    Lag-1 execution   = shift-2 (position[t] = signal[t-2]).
+  - Execution timing = shift_n applied to the signal via shift(shift_n + 1):
+    a raw shift(0) would be a same-bar look-ahead leak, so shift(1) is the
+    floor and shift_n counts EXTRA days of delay on top of it -- Same Day
+    (Shift-0)=shift(1), Lag-1 (Shift-1)=shift(2), Lag-2 (Shift-2)=shift(3),
+    all distinct (see common_engine.py's module docstring for the full
+    rationale).
 """
 
 import numpy as np
@@ -279,9 +283,15 @@ def find_curve_sheet(product_name, curve_data):
 #  TC on F1_raw, active-day Sharpe, no look-ahead)
 # ═══════════════════════════════════════════════
 
-def exec_shift(sigbin, same_day):
-    """Same-Day = shift 1, Lag-1 = shift 2 (no look-ahead)."""
-    return sigbin.shift(1) if same_day else sigbin.shift(2)
+def exec_shift(sigbin, shift_n):
+    """Returns shift(shift_n + 1) -- a position decided from signal[t] needs
+    F1_raw[t] as an input, so it can't exist until AFTER the t-1->t return
+    already happened; shift(1) is the fastest any position can legitimately
+    go live, so shift_n counts EXTRA days of delay on top of that 1-day
+    floor (see common_engine.py exec_shift() for the full explanation).
+    Same Day (shift_n=0) = shift(1), Lag-1 (shift_n=1) = shift(2), Lag-2
+    (shift_n=2) = shift(3) -- all three distinct, none can leak."""
+    return sigbin.shift(shift_n + 1)
 
 
 def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5) -> dict:

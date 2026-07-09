@@ -6,7 +6,8 @@ every Stage 2 product x strategy, in the same visual/structural format as the
 original Metals-Risk-Premia repo's scripts/momentum_signals.py,
 carry_signals.py, value_signals.py: a dark-header "PERFORMANCE SUMMARY" block
 followed by a copper-header "TRADEBOOK" block, one workbook per strategy
-config, two sheets per workbook (Lag-1 + Same-Day).
+config, one sheet per execution-timing variant (Same Day Shift-0, Lag-1
+Shift-1, Lag-2 Shift-2).
 
 Uses the SAME signal math as common_engine.py (the live Stage 2 dashboards),
 so these tradebooks reconcile exactly with what Momentum/Carry/Value show
@@ -91,9 +92,31 @@ PRODUCTS = [
 # ══════════════════════════════════════════════════════════════════
 # EXECUTION TIMING (identical to common_engine.exec_shift)
 # ══════════════════════════════════════════════════════════════════
+#
+# A position decided from signal[t] needs F1_raw[t] as an input, so it isn't
+# known until AFTER the t-1->t return has already happened. Pairing signal[t]
+# with that same return (a raw shift(0)) uses day t's close twice -- once to
+# compute the signal, once as the return's endpoint -- a same-bar look-ahead
+# leak, not a valid "faster" execution. shift(1) is therefore the fastest any
+# position can legitimately go live, so shift_n counts EXTRA days of delay ON
+# TOP of that 1-day floor, not the raw shift itself:
+# shift_n=0 (Same Day): position[t] = signal[t-1] -- the fastest legitimate
+#   entry (the 1-day floor, no extra delay).
+# shift_n=1 (Lag-1):    position[t] = signal[t-2] -- one extra day of delay
+#   on top of the floor.
+# shift_n=2 (Lag-2):    position[t] = signal[t-3] -- two extra days of delay
+#   on top of the floor.
+# All three are distinct, realistically-tradeable series -- none of them can
+# ever pair a signal with the same-bar return that produced it. Single
+# "Position" column throughout (no raw/effective split needed): what's shown
+# is exactly what drives Daily_PnL/MTM/Cum_PnL.
 
-def exec_shift(sigbin: pd.Series, same_day: bool) -> pd.Series:
-    return sigbin.shift(1) if same_day else sigbin.shift(2)
+TIMING_VARIANTS = [(0, "Same Day (Shift-0)"), (1, "Lag-1 (Shift-1)"), (2, "Lag-2 (Shift-2)")]
+
+
+def exec_shift(sigbin: pd.Series, shift_n: int) -> pd.Series:
+    """PnL-driving shift = shift_n + 1 (see comment block above)."""
+    return sigbin.shift(shift_n + 1)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -112,7 +135,7 @@ def _consecutive(arr: np.ndarray, val: int) -> int:
 
 
 def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.Series,
-                         same_day: bool, unit_label: str) -> dict:
+                         shift_n: int, unit_label: str) -> dict:
     """All return/risk metrics in native dollar/unit terms (e.g. USD/MT, USD/bbl),
     not %-of-notional. %-of-notional requires dividing by F1_continuous[t-1], an
     additively back-adjusted level with no floor at zero -- confirmed to go
@@ -151,11 +174,16 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
     max_con_w = _consecutive(sign_arr, 1)
     max_con_l = _consecutive(sign_arr, -1)
 
-    pos_note = ("Position[t] = Signal[t-1]  (Same-Day entry, shift-1)" if same_day else
-                "Position[t] = Signal[t-2]  (Lag-1 entry, shift-2)")
+    timing_label = {0: "Same Day (Shift-0)", 1: "Lag-1 (Shift-1)", 2: "Lag-2 (Shift-2)"}[shift_n]
+    eff_shift = shift_n + 1
+    pos_note = (f"Position[t] = Signal[t-{eff_shift}]  ({timing_label})"
+                + ("  -- the fastest a position can legitimately go live: a signal built "
+                   "from today's close can't be paired with today's own return without a "
+                   "look-ahead leak, so shift(1) is the floor and this is it." if shift_n == 0
+                   else f"  -- {eff_shift - 1} extra day(s) of delay on top of that 1-day floor."))
 
     return {
-        "Entry Convention": "Same-Day" if same_day else "Lag-1",
+        "Entry Convention": timing_label,
         "Start Date": str(daily_pnl.index[0].date()),
         "End Date": str(daily_pnl.index[-1].date()),
         "Total Calendar Days": len(daily_pnl),
@@ -184,25 +212,37 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
 # TRADEBOOK BUILDERS (same formulas as common_engine.py)
 # ══════════════════════════════════════════════════════════════════
 
-def build_ma_tradebook(f1r: pd.Series, f1c: pd.Series, m: int, n: int, same_day: bool) -> pd.DataFrame:
+def build_ma_tradebook(f1r: pd.Series, f1c: pd.Series, m: int, n: int, shift_n: int,
+                        f2r: pd.Series | None = None, phase: pd.Series | None = None) -> pd.DataFrame:
     ma_m = f1r.rolling(m).mean()
     ma_n = f1r.rolling(n).mean()
     crossover = ma_m - ma_n
     signal = np.sign(crossover)
-    position = exec_shift(signal, same_day).fillna(0)
+    # Position[t] = Signal[t-(shift_n+1)] -- shift(1) is the floor (fastest a
+    # position can legitimately go live), shift_n counts EXTRA delay on top
+    # of it. See exec_shift() -- single column, what's shown is what pays.
+    position = exec_shift(signal, shift_n).fillna(0)
 
     delta = f1c.diff()
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
 
-    return pd.DataFrame({
-        "Date": f1r.index, "F1_raw": f1r.round(4).values, "F1_continuous": f1c.round(4).values,
+    cols = {
+        "Date": f1r.index, "F1_raw": f1r.round(4).values,
+    }
+    if f2r is not None:
+        cols["F2_raw"] = f2r.reindex(f1r.index).round(4).values
+    cols["F1_continuous"] = f1c.round(4).values
+    if phase is not None:
+        cols["Phase"] = phase.reindex(f1r.index).values
+    cols.update({
         f"MA_{m}": ma_m.round(4).values, f"MA_{n}": ma_n.round(4).values,
         "Crossover": crossover.round(4).values, "Signal": signal.values, "Position": position.values,
         "F1_cont_daily_change": delta.round(4).values, "Daily_PnL": daily_pnl.round(4).values,
         "MTM": mtm.round(4).values, "Cum_PnL": cum_pnl.round(4).values,
     })
+    return pd.DataFrame(cols)
 
 
 def _carry_v1_raw(curve: pd.DataFrame, a: str = "F1", b: str = "F2") -> pd.Series:
@@ -210,68 +250,89 @@ def _carry_v1_raw(curve: pd.DataFrame, a: str = "F1", b: str = "F2") -> pd.Serie
     return ((fa - fb) / fa).replace([np.inf, -np.inf], np.nan)
 
 
-def build_carry_v1_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, same_day: bool) -> pd.DataFrame:
+def build_carry_v1_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, shift_n: int,
+                              f2r: pd.Series | None = None, phase: pd.Series | None = None) -> pd.DataFrame:
     raw = _carry_v1_raw(curve, "F1", "F2").reindex(f1c.index)
     signal = np.sign(raw)
-    position = exec_shift(signal, same_day).fillna(0)
+    position = exec_shift(signal, shift_n).fillna(0)
 
     delta = f1c.diff()
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
 
-    return pd.DataFrame({
-        "Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values,
-        "F1_continuous": f1c.round(4).values, "Carry_Raw_(F1-F2)/F1": raw.round(6).values,
+    cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
+    if f2r is not None:
+        cols["F2_raw"] = f2r.reindex(f1c.index).round(4).values
+    cols["F1_continuous"] = f1c.round(4).values
+    if phase is not None:
+        cols["Phase"] = phase.reindex(f1c.index).values
+    cols.update({
+        "Carry_Raw_(F1-F2)/F1": raw.round(6).values,
         "Signal": signal.values, "Position": position.values,
         "F1_cont_daily_change": delta.round(4).values, "Daily_PnL": daily_pnl.round(4).values,
         "MTM": mtm.round(4).values, "Cum_PnL": cum_pnl.round(4).values,
     })
+    return pd.DataFrame(cols)
 
 
-def build_carry_v3_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, same_day: bool,
-                              window: int = 252) -> pd.DataFrame:
+def build_carry_v3_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, shift_n: int,
+                              window: int = 252, f2r: pd.Series | None = None,
+                              phase: pd.Series | None = None) -> pd.DataFrame:
     base = _carry_v1_raw(curve, "F1", "F2").reindex(f1c.index)
     z = (base - base.rolling(window).mean()) / base.rolling(window).std()
     signal = np.sign(z.replace([np.inf, -np.inf], np.nan))
-    position = exec_shift(signal, same_day).fillna(0)
+    position = exec_shift(signal, shift_n).fillna(0)
 
     delta = f1c.diff()
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
 
-    return pd.DataFrame({
-        "Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values,
-        "F1_continuous": f1c.round(4).values, "Carry_Raw_(F1-F2)/F1": base.round(6).values,
+    cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
+    if f2r is not None:
+        cols["F2_raw"] = f2r.reindex(f1c.index).round(4).values
+    cols["F1_continuous"] = f1c.round(4).values
+    if phase is not None:
+        cols["Phase"] = phase.reindex(f1c.index).values
+    cols.update({
+        "Carry_Raw_(F1-F2)/F1": base.round(6).values,
         f"Zscore_{window}d": z.round(4).values, "Signal": signal.values, "Position": position.values,
         "F1_cont_daily_change": delta.round(4).values, "Daily_PnL": daily_pnl.round(4).values,
         "MTM": mtm.round(4).values, "Cum_PnL": cum_pnl.round(4).values,
     })
+    return pd.DataFrame(cols)
 
 
 def build_value_v1_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, contract: str,
-                              lookback: int, threshold: float, same_day: bool) -> pd.DataFrame:
+                              lookback: int, threshold: float, shift_n: int,
+                              f2r: pd.Series | None = None, phase: pd.Series | None = None) -> pd.DataFrame:
     fk = curve[contract].reindex(f1c.index)
     ma = fk.rolling(lookback, min_periods=max(lookback // 2, 60)).mean()
     dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
     signal = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                         index=dev.index)
-    position = exec_shift(signal, same_day).fillna(0)
+    position = exec_shift(signal, shift_n).fillna(0)
 
     delta = f1c.diff()
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
 
-    return pd.DataFrame({
-        "Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values,
-        "F1_continuous": f1c.round(4).values, f"{contract}_price": fk.round(4).values,
+    cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
+    if f2r is not None:
+        cols["F2_raw"] = f2r.reindex(f1c.index).round(4).values
+    cols["F1_continuous"] = f1c.round(4).values
+    if phase is not None:
+        cols["Phase"] = phase.reindex(f1c.index).values
+    cols.update({
+        f"{contract}_price": fk.round(4).values,
         f"MA_{lookback}d": ma.round(4).values, "Deviation": dev.round(6).values,
         "Signal": signal.values, "Position": position.values,
         "F1_cont_daily_change": delta.round(4).values, "Daily_PnL": daily_pnl.round(4).values,
         "MTM": mtm.round(4).values, "Cum_PnL": cum_pnl.round(4).values,
     })
+    return pd.DataFrame(cols)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -286,6 +347,17 @@ _METRIC_FILL = PatternFill("solid", fgColor="F2F2F2")
 _METRIC_FONT = Font(size=9)
 _TB_HEADER_FILL = PatternFill("solid", fgColor="B87333")
 _TB_HEADER_FONT = Font(bold=True, color="FFFFFF", size=9)
+
+# Whole-row highlight for the roll->expiry span, per the confirmed phase
+# logic in rolling_continuous.py: the roll day itself (Roll_LTD-N) gets its
+# own distinct color; F2_Tracking (after rolling, before expiry, F2-sourced)
+# gets a second; Bridge (the day after LAST_TRADEABLE_DT, back to F1) gets a
+# third. Ordinary F1_Tracking days are left unhighlighted.
+_ROLL_DAY_FILL = PatternFill("solid", fgColor="FF9F5A")       # deep orange -- roll day itself
+_F2_TRACKING_FILL = PatternFill("solid", fgColor="F5C265")    # amber -- F2 Tracking (F2-sourced)
+_BRIDGE_DAY_FILL = PatternFill("solid", fgColor="8FD3E8")     # light blue -- expiry/bridge day (back to F1)
+_MANUAL_HEADER_FILL = PatternFill("solid", fgColor="5A3D8A")  # purple -- distinguishes the formula sheet header
+_MANUAL_FONT = Font(size=9, color="1B5E20", italic=True)      # green italic -- marks formula-driven cells
 
 
 def _style_cell(cell, fill=None, font=None, align=None):
@@ -313,6 +385,15 @@ def _write_xl_sheet(wb: Workbook, tb: pd.DataFrame, metrics: dict, sheet_name: s
 
     ws.append(["", ""])
 
+    if "Phase" in tb.columns:
+        ws.append(["Roll day (Roll_LTD-N)", ""])
+        _style_cell(ws.cell(ws.max_row, 1), fill=_ROLL_DAY_FILL, font=Font(size=9))
+        ws.append(["F2 Tracking (F1_continuous is F2-sourced)", ""])
+        _style_cell(ws.cell(ws.max_row, 1), fill=_F2_TRACKING_FILL, font=Font(size=9))
+        ws.append(["Expiry/Bridge day (F1_continuous bridges back to F1)", ""])
+        _style_cell(ws.cell(ws.max_row, 1), fill=_BRIDGE_DAY_FILL, font=Font(size=9))
+        ws.append(["", ""])
+
     ws.append(["TRADEBOOK"] + [""] * (len(tb.columns) - 1))
     _style_cell(ws.cell(ws.max_row, 1), fill=_SECTION_FILL, font=_SECTION_FONT)
 
@@ -321,6 +402,10 @@ def _write_xl_sheet(wb: Workbook, tb: pd.DataFrame, metrics: dict, sheet_name: s
     for col_idx in range(1, len(tb.columns) + 1):
         _style_cell(ws.cell(hdr_row, col_idx), fill=_TB_HEADER_FILL, font=_TB_HEADER_FONT,
                     align=Alignment(horizontal="center"))
+
+    cols = list(tb.columns)
+    phase_col_idx = cols.index("Phase") + 1 if "Phase" in cols else None
+    f1c_col_idx = cols.index("F1_continuous") + 1 if "F1_continuous" in cols else None
 
     for _, row in tb.iterrows():
         vals = []
@@ -333,31 +418,470 @@ def _write_xl_sheet(wb: Workbook, tb: pd.DataFrame, metrics: dict, sheet_name: s
                 vals.append(v)
         ws.append(vals)
 
+        # Highlight the WHOLE ROW for the roll->expiry span -- Roll_LTD-N (roll
+        # day itself) in deep orange, F2_Tracking (F2-sourced, "after rolling
+        # before expiry") in amber, Bridge (F1-sourced again, "once expired")
+        # in blue. Ordinary F1_Tracking days are left unhighlighted. See the
+        # module-level comment on _ROLL_DAY_FILL for the phase logic.
+        if phase_col_idx:
+            phase_val = vals[phase_col_idx - 1]
+            row_fill = None
+            if isinstance(phase_val, str) and phase_val.startswith("Roll_LTD"):
+                row_fill = _ROLL_DAY_FILL
+            elif phase_val == "F2_Tracking":
+                row_fill = _F2_TRACKING_FILL
+            elif phase_val == "Bridge":
+                row_fill = _BRIDGE_DAY_FILL
+            if row_fill is not None:
+                for col_idx in range(1, len(tb.columns) + 1):
+                    ws.cell(ws.max_row, col_idx).fill = row_fill
+
     ws.column_dimensions["A"].width = max(20, max((len(str(k)) for k in metrics.keys()), default=20) + 2)
     for i in range(2, len(tb.columns) + 1):
         ws.column_dimensions[get_column_letter(i)].width = 16
     ws.freeze_panes = ws.cell(hdr_row + 1, 1).coordinate
 
 
-def save_tradebook_excel(build_fn, f1r, f1c, unit_label, filepath: Path, **kwargs) -> dict:
-    """Build both timing conventions, save a 2-sheet workbook, return both metric dicts."""
-    tb_same = build_fn(f1r=f1r, f1c=f1c, same_day=True, **kwargs)
-    pos_same = pd.Series(tb_same["Position"].values, index=pd.DatetimeIndex(tb_same["Date"]))
-    pnl_same = pd.Series(tb_same["Daily_PnL"].values, index=pd.DatetimeIndex(tb_same["Date"]))
-    met_same = compute_performance(pnl_same, pos_same, f1c.reindex(pos_same.index), True, unit_label)
+# ══════════════════════════════════════════════════════════════════
+# MANUAL EXCEL-FORMULA RECONSTRUCTION (momentum MA-crossover only, for now)
+# ══════════════════════════════════════════════════════════════════
+#
+# Writes the SAME pipeline as build_ma_tradebook(), but as live Excel
+# formulas instead of Python-computed values -- Date/F1_raw/F2_raw/Phase are
+# passed through as given data (Phase already encodes the roll-calendar
+# lookup done in rolling_continuous.py; re-deriving the calendar itself in
+# formulas was explicitly descoped), and every column from F1_continuous
+# onward is a formula so it can be audited/recalculated independently in
+# Excel. Column layout: A Date, B F1_raw, C F2_raw, D Phase, E F1_continuous,
+# F MA_fast, G MA_slow, H Crossover, I Signal, J Position,
+# K F1_cont_daily_change, L Daily_PnL, M MTM, N Cum_PnL.
+#
+# Position (J) is Signal[t-(shift_n+1)]: shift(1) is the floor (fastest a
+# position can legitimately go live -- a signal built from today's close
+# can't be paired with today's own return without a look-ahead leak), and
+# shift_n counts EXTRA days of delay on top of that floor. Same Day
+# (shift_n=0) references 1 row up, Lag-1 (shift_n=1) references 2 rows up,
+# Lag-2 (shift_n=2) references 3 rows up -- all distinct, single column,
+# what's shown is exactly what Daily_PnL/MTM/Cum_PnL are computed from.
+#
+# Known simplification: Python's rolling builder carries the last good F1/F2
+# value forward across NaN gaps; these formulas assume no gaps (the common
+# case). On a date with a genuine data gap, the two sheets can disagree by a
+# cell -- everywhere else they should match exactly.
 
-    tb_lag = build_fn(f1r=f1r, f1c=f1c, same_day=False, **kwargs)
-    pos_lag = pd.Series(tb_lag["Position"].values, index=pd.DatetimeIndex(tb_lag["Date"]))
-    pnl_lag = pd.Series(tb_lag["Daily_PnL"].values, index=pd.DatetimeIndex(tb_lag["Date"]))
-    met_lag = compute_performance(pnl_lag, pos_lag, f1c.reindex(pos_lag.index), False, unit_label)
+_MANUAL_COLS = ["Date", "F1_raw", "F2_raw", "Phase", "F1_continuous", None, None,
+                "Crossover", "Signal", "Position", "F1_cont_daily_change",
+                "Daily_PnL", "MTM", "Cum_PnL"]
 
-    wb = Workbook()
-    wb.remove(wb.active)
-    _write_xl_sheet(wb, tb_lag, met_lag, "Lag-1 (shift-2)")
-    _write_xl_sheet(wb, tb_same, met_same, "Same-Day (shift-1)")
+
+def write_manual_formula_sheet_ma(wb: Workbook, tb: pd.DataFrame, m: int, n: int,
+                                   shift_n: int, sheet_name: str) -> None:
+    ws = wb.create_sheet(sheet_name)
+
+    headers = list(_MANUAL_COLS)
+    headers[5] = f"MA_{m}"
+    headers[6] = f"MA_{n}"
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        _style_cell(ws.cell(1, col_idx), fill=_MANUAL_HEADER_FILL, font=_TB_HEADER_FONT,
+                    align=Alignment(horizontal="center"))
+
+    n_rows = len(tb)
+    dates = tb["Date"].tolist()
+    f1_vals = tb["F1_raw"].tolist()
+    f2_vals = tb["F2_raw"].tolist() if "F2_raw" in tb.columns else [None] * n_rows
+    phase_vals = tb["Phase"].tolist() if "Phase" in tb.columns else [None] * n_rows
+
+    for i in range(n_rows):
+        r = i + 2  # excel row (1 = header)
+        row_vals = [dates[i], f1_vals[i], f2_vals[i], phase_vals[i]]
+
+        # F1_continuous: anchor on the first row, formula-driven thereafter.
+        if i == 0:
+            row_vals.append(f"=B{r}")
+        else:
+            row_vals.append(
+                f'=IF(D{r}="F1_Tracking",E{r-1}+(B{r}-B{r-1}),'
+                f'IF(D{r}="Bridge",E{r-1}+(B{r}-C{r-1}),'
+                f'E{r-1}+(C{r}-C{r-1})))'
+            )
+
+        # MA_fast / MA_slow: literal ranges (m, n are fixed per sheet).
+        row_vals.append(f"=AVERAGE(B{r-m+1}:B{r})" if i + 1 >= m else "")
+        row_vals.append(f"=AVERAGE(B{r-n+1}:B{r})" if i + 1 >= n else "")
+        # Crossover / Signal
+        row_vals.append(f'=IF(OR(F{r}="",G{r}=""),"",F{r}-G{r})')
+        row_vals.append(f'=IF(H{r}="","",SIGN(H{r}))')
+        # Position: Signal[t-(shift_n+1)] -- shift(1) is the floor, shift_n
+        # counts EXTRA rows of delay on top of it. Same Day (shift_n=0)
+        # references 1 row up (r-1), Lag-1 (shift_n=1) references 2 rows up
+        # (r-2), Lag-2 (shift_n=2) references 3 rows up (r-3) -- never the
+        # same row, so this can never leak. Blank/0 until enough history
+        # exists.
+        eff_shift = shift_n + 1
+        if i + 1 > eff_shift:
+            row_vals.append(f'=IF(I{r-eff_shift}="",0,I{r-eff_shift})')
+        else:
+            row_vals.append(0)
+        # F1_cont_daily_change
+        row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
+        # Daily_PnL
+        row_vals.append(f'=IF(OR(J{r}="",K{r}=""),0,J{r}*K{r})')
+        # MTM
+        row_vals.append(f"=J{r}*E{r}")
+        # Cum_PnL
+        row_vals.append(f"=L{r}" if i == 0 else f"=N{r-1}+L{r}")
+
+        ws.append(row_vals)
+        for col_idx in (5, 11, 12, 13, 14):  # F1_continuous, delta, PnL, MTM, Cum_PnL
+            ws.cell(r, col_idx).font = _MANUAL_FONT
+
+        # Whole-row highlight for the roll->expiry span -- same rule as the
+        # Python sheet (Roll_LTD-N = deep orange, F2_Tracking = amber,
+        # Bridge = blue).
+        phase_val = phase_vals[i]
+        row_fill = None
+        if isinstance(phase_val, str) and phase_val.startswith("Roll_LTD"):
+            row_fill = _ROLL_DAY_FILL
+        elif phase_val == "F2_Tracking":
+            row_fill = _F2_TRACKING_FILL
+        elif phase_val == "Bridge":
+            row_fill = _BRIDGE_DAY_FILL
+        if row_fill is not None:
+            for col_idx in range(1, len(headers) + 1):
+                ws.cell(r, col_idx).fill = row_fill
+
+    ws.column_dimensions["A"].width = 12
+    for i in range(2, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 15
+    ws.freeze_panes = "A2"
+
+
+def _row_phase_fill(phase_val):
+    if isinstance(phase_val, str) and phase_val.startswith("Roll_LTD"):
+        return _ROLL_DAY_FILL
+    if phase_val == "F2_Tracking":
+        return _F2_TRACKING_FILL
+    if phase_val == "Bridge":
+        return _BRIDGE_DAY_FILL
+    return None
+
+
+def _f1_continuous_formula(r: int, i: int) -> str:
+    """Same reconstruction as write_manual_formula_sheet_ma -- Phase (D) drives
+    whether F1_continuous (E) tracks day-over-day F1 (B) or F2 (C) deltas."""
+    if i == 0:
+        return f"=B{r}"
+    return (f'=IF(D{r}="F1_Tracking",E{r-1}+(B{r}-B{r-1}),'
+            f'IF(D{r}="Bridge",E{r-1}+(B{r}-C{r-1}),'
+            f'E{r-1}+(C{r}-C{r-1})))')
+
+
+# ══════════════════════════════════════════════════════════════════
+# MANUAL EXCEL-FORMULA RECONSTRUCTION -- Carry V1 Roll Yield
+# ══════════════════════════════════════════════════════════════════
+# Column layout: A Date, B F1_raw, C F2_raw, D Phase, E F1_continuous,
+# F Carry_Raw (F1-F2)/F1, G Signal, H Position, I F1_cont_daily_change,
+# J Daily_PnL, K MTM, L Cum_PnL. Same Position/PnL timing convention as
+# write_manual_formula_sheet_ma (see its module comment for the full
+# shift_n+1 rationale).
+
+_CARRY_V1_COLS = ["Date", "F1_raw", "F2_raw", "Phase", "F1_continuous",
+                   "Carry_Raw_(F1-F2)/F1", "Signal", "Position",
+                   "F1_cont_daily_change", "Daily_PnL", "MTM", "Cum_PnL"]
+
+
+def write_manual_formula_sheet_carry_v1(wb: Workbook, tb: pd.DataFrame, shift_n: int, sheet_name: str) -> None:
+    ws = wb.create_sheet(sheet_name)
+    ws.append(_CARRY_V1_COLS)
+    for col_idx in range(1, len(_CARRY_V1_COLS) + 1):
+        _style_cell(ws.cell(1, col_idx), fill=_MANUAL_HEADER_FILL, font=_TB_HEADER_FONT,
+                    align=Alignment(horizontal="center"))
+
+    n_rows = len(tb)
+    dates = tb["Date"].tolist()
+    f1_vals = tb["F1_raw"].tolist()
+    f2_vals = tb["F2_raw"].tolist() if "F2_raw" in tb.columns else [None] * n_rows
+    phase_vals = tb["Phase"].tolist() if "Phase" in tb.columns else [None] * n_rows
+    eff_shift = shift_n + 1
+
+    for i in range(n_rows):
+        r = i + 2
+        row_vals = [dates[i], f1_vals[i], f2_vals[i], phase_vals[i]]
+        row_vals.append(_f1_continuous_formula(r, i))
+        # Carry_Raw
+        row_vals.append(f'=IF(B{r}=0,"",(B{r}-C{r})/B{r})')
+        # Signal
+        row_vals.append(f'=IF(F{r}="","",SIGN(F{r}))')
+        # Position -- Signal[t-(shift_n+1)], never same-row (see momentum sheet's rationale)
+        if i + 1 > eff_shift:
+            row_vals.append(f'=IF(G{r-eff_shift}="",0,G{r-eff_shift})')
+        else:
+            row_vals.append(0)
+        # F1_cont_daily_change
+        row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
+        # Daily_PnL
+        row_vals.append(f'=IF(OR(H{r}="",I{r}=""),0,H{r}*I{r})')
+        # MTM
+        row_vals.append(f"=H{r}*E{r}")
+        # Cum_PnL
+        row_vals.append(f"=J{r}" if i == 0 else f"=L{r-1}+J{r}")
+
+        ws.append(row_vals)
+        for col_idx in (5, 9, 10, 11, 12):  # F1_continuous, delta, PnL, MTM, Cum_PnL
+            ws.cell(r, col_idx).font = _MANUAL_FONT
+        row_fill = _row_phase_fill(phase_vals[i])
+        if row_fill is not None:
+            for col_idx in range(1, len(_CARRY_V1_COLS) + 1):
+                ws.cell(r, col_idx).fill = row_fill
+
+    ws.column_dimensions["A"].width = 12
+    for i in range(2, len(_CARRY_V1_COLS) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 16
+    ws.freeze_panes = "A2"
+
+
+# ══════════════════════════════════════════════════════════════════
+# MANUAL EXCEL-FORMULA RECONSTRUCTION -- Carry V3 Z-score
+# ══════════════════════════════════════════════════════════════════
+# Column layout: A Date, B F1_raw, C F2_raw, D Phase, E F1_continuous,
+# F Carry_Raw, G Zscore_{window}d, H Signal, I Position,
+# J F1_cont_daily_change, K Daily_PnL, L MTM, M Cum_PnL.
+# Zscore uses a full (non-partial) rolling window, matching pandas'
+# rolling(window).mean()/.std() default min_periods=window -- blank until
+# `window` rows of Carry_Raw exist, same convention as MA_fast/MA_slow in
+# write_manual_formula_sheet_ma.
+
+def write_manual_formula_sheet_carry_v3(wb: Workbook, tb: pd.DataFrame, shift_n: int,
+                                          window: int, sheet_name: str) -> None:
+    headers = ["Date", "F1_raw", "F2_raw", "Phase", "F1_continuous",
+               "Carry_Raw_(F1-F2)/F1", f"Zscore_{window}d", "Signal", "Position",
+               "F1_cont_daily_change", "Daily_PnL", "MTM", "Cum_PnL"]
+    ws = wb.create_sheet(sheet_name)
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        _style_cell(ws.cell(1, col_idx), fill=_MANUAL_HEADER_FILL, font=_TB_HEADER_FONT,
+                    align=Alignment(horizontal="center"))
+
+    n_rows = len(tb)
+    dates = tb["Date"].tolist()
+    f1_vals = tb["F1_raw"].tolist()
+    f2_vals = tb["F2_raw"].tolist() if "F2_raw" in tb.columns else [None] * n_rows
+    phase_vals = tb["Phase"].tolist() if "Phase" in tb.columns else [None] * n_rows
+    eff_shift = shift_n + 1
+
+    for i in range(n_rows):
+        r = i + 2
+        row_vals = [dates[i], f1_vals[i], f2_vals[i], phase_vals[i]]
+        row_vals.append(_f1_continuous_formula(r, i))
+        # Carry_Raw
+        row_vals.append(f'=IF(B{r}=0,"",(B{r}-C{r})/B{r})')
+        # Zscore: full window only (blank before `window` rows of Carry_Raw exist)
+        if i + 1 >= window:
+            row_vals.append(
+                f'=IF(STDEV(F{r-window+1}:F{r})=0,"",'
+                f'(F{r}-AVERAGE(F{r-window+1}:F{r}))/STDEV(F{r-window+1}:F{r}))'
+            )
+        else:
+            row_vals.append("")
+        # Signal
+        row_vals.append(f'=IF(G{r}="","",SIGN(G{r}))')
+        # Position -- Signal[t-(shift_n+1)]
+        if i + 1 > eff_shift:
+            row_vals.append(f'=IF(H{r-eff_shift}="",0,H{r-eff_shift})')
+        else:
+            row_vals.append(0)
+        # F1_cont_daily_change
+        row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
+        # Daily_PnL
+        row_vals.append(f'=IF(OR(I{r}="",J{r}=""),0,I{r}*J{r})')
+        # MTM
+        row_vals.append(f"=I{r}*E{r}")
+        # Cum_PnL
+        row_vals.append(f"=K{r}" if i == 0 else f"=M{r-1}+K{r}")
+
+        ws.append(row_vals)
+        for col_idx in (5, 10, 11, 12, 13):  # F1_continuous, delta, PnL, MTM, Cum_PnL
+            ws.cell(r, col_idx).font = _MANUAL_FONT
+        row_fill = _row_phase_fill(phase_vals[i])
+        if row_fill is not None:
+            for col_idx in range(1, len(headers) + 1):
+                ws.cell(r, col_idx).fill = row_fill
+
+    ws.column_dimensions["A"].width = 12
+    for i in range(2, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 16
+    ws.freeze_panes = "A2"
+
+
+# ══════════════════════════════════════════════════════════════════
+# MANUAL EXCEL-FORMULA RECONSTRUCTION -- Value V1 MA Reversion
+# ══════════════════════════════════════════════════════════════════
+# Column layout: A Date, B F1_raw, C F2_raw, D Phase, E F1_continuous,
+# F {contract}_price, G MA_{lookback}d, H Deviation, I Signal, J Position,
+# K F1_cont_daily_change, L Daily_PnL, M MTM, N Cum_PnL.
+#
+# MA_{lookback}d uses a fixed, full-size `lookback` window (AVERAGE ignores
+# blank Fk cells, so a contract that doesn't exist yet for part of the
+# window is skipped the same way pandas' NaN-skipping mean() would), blank
+# until `lookback` calendar rows have elapsed -- same convention as
+# MA_fast/MA_slow in write_manual_formula_sheet_ma and Zscore in
+# write_manual_formula_sheet_carry_v3.
+#
+# KNOWN SIMPLIFICATION (larger than elsewhere in this file): Python's
+# rolling(lookback, min_periods=max(lookback//2,60)).mean() is a GROWING
+# window that starts producing values once `min_periods` (not the full
+# `lookback`) non-NaN observations exist -- so for the default 5yr lookback
+# (1260 rows, min_periods=630), the Python sheet's MA/Deviation/Signal can
+# turn on roughly 2.5 years before this formula sheet's does. An
+# INDEX(...)-based dynamic range was tried to replicate the growing window
+# exactly but was NOT evaluated correctly by the `formulas` verification
+# library, so this simpler, verified-correct fixed-window formula is used
+# instead. Once both sheets are past `lookback` rows of history they
+# reconcile exactly (verified via the `formulas` package) -- only the
+# early "ramp-up" span differs.
+
+def write_manual_formula_sheet_value_v1(wb: Workbook, tb: pd.DataFrame, shift_n: int,
+                                          contract: str, lookback: int, threshold: float,
+                                          sheet_name: str) -> None:
+    price_col = f"{contract}_price"
+    headers = ["Date", "F1_raw", "F2_raw", "Phase", "F1_continuous",
+               price_col, f"MA_{lookback}d", "Deviation", "Signal", "Position",
+               "F1_cont_daily_change", "Daily_PnL", "MTM", "Cum_PnL"]
+    ws = wb.create_sheet(sheet_name)
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        _style_cell(ws.cell(1, col_idx), fill=_MANUAL_HEADER_FILL, font=_TB_HEADER_FONT,
+                    align=Alignment(horizontal="center"))
+
+    n_rows = len(tb)
+    dates = tb["Date"].tolist()
+    f1_vals = tb["F1_raw"].tolist()
+    f2_vals = tb["F2_raw"].tolist() if "F2_raw" in tb.columns else [None] * n_rows
+    phase_vals = tb["Phase"].tolist() if "Phase" in tb.columns else [None] * n_rows
+    fk_vals = tb[price_col].tolist()
+    eff_shift = shift_n + 1
+
+    for i in range(n_rows):
+        r = i + 2
+        row_vals = [dates[i], f1_vals[i], f2_vals[i], phase_vals[i]]
+        row_vals.append(_f1_continuous_formula(r, i))
+        # Fk price: literal data (independent curve column, not derived from F1/F2)
+        row_vals.append(fk_vals[i])
+        # MA_{lookback}d: fixed full-size window, blank until `lookback` rows
+        # have elapsed (see KNOWN SIMPLIFICATION above -- Python's actual
+        # min_periods behavior turns on earlier than this formula does).
+        row_vals.append(f"=AVERAGE(F{r-lookback+1}:F{r})" if i + 1 >= lookback else "")
+        # Deviation
+        row_vals.append(f'=IF(OR(F{r}="",G{r}="",G{r}=0),"",(F{r}-G{r})/G{r})')
+        # Signal: always 0/+-1, never blank (Value's classification treats an
+        # undefined Deviation as flat, unlike Momentum/Carry's NaN-propagating SIGN())
+        row_vals.append(f'=IF(H{r}="",0,IF(H{r}<-{threshold},1,IF(H{r}>{threshold},-1,0)))')
+        # Position -- Signal[t-(shift_n+1)]
+        if i + 1 > eff_shift:
+            row_vals.append(f'=IF(I{r-eff_shift}="",0,I{r-eff_shift})')
+        else:
+            row_vals.append(0)
+        # F1_cont_daily_change
+        row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
+        # Daily_PnL
+        row_vals.append(f'=IF(OR(J{r}="",K{r}=""),0,J{r}*K{r})')
+        # MTM
+        row_vals.append(f"=J{r}*E{r}")
+        # Cum_PnL
+        row_vals.append(f"=L{r}" if i == 0 else f"=N{r-1}+L{r}")
+
+        ws.append(row_vals)
+        for col_idx in (5, 11, 12, 13, 14):  # F1_continuous, delta, PnL, MTM, Cum_PnL
+            ws.cell(r, col_idx).font = _MANUAL_FONT
+        row_fill = _row_phase_fill(phase_vals[i])
+        if row_fill is not None:
+            for col_idx in range(1, len(headers) + 1):
+                ws.cell(r, col_idx).fill = row_fill
+
+    ws.column_dimensions["A"].width = 12
+    for i in range(2, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 16
+    ws.freeze_panes = "A2"
+
+
+def _save_strategy_workbook(wb: Workbook, filepath: Path, sharpes: dict) -> dict:
     filepath.parent.mkdir(parents=True, exist_ok=True)
     wb.save(filepath)
-    return {"lag": met_lag["Sharpe Ratio"], "same": met_same["Sharpe Ratio"]}
+    return sharpes
+
+
+def save_momentum_tradebook_excel(f1r: pd.Series, f1c: pd.Series, f2r: pd.Series, phase: pd.Series,
+                                   m: int, n: int, unit_label: str, filepath: Path) -> dict:
+    """Momentum MA-crossover tradebook -- F2_raw + Phase columns, roll/expiry-day
+    highlighting, manual-Excel-formula sheet adjacent to each Python sheet --
+    6 sheets total (3 timing variants x Python+Formulas)."""
+    sharpes = {}
+    wb = Workbook()
+    wb.remove(wb.active)
+    for shift_n, label in TIMING_VARIANTS:
+        tb = build_ma_tradebook(f1r=f1r, f1c=f1c, m=m, n=n, shift_n=shift_n, f2r=f2r, phase=phase)
+        pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
+        pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), shift_n, unit_label)
+        _write_xl_sheet(wb, tb, met, f"{label} Python")
+        write_manual_formula_sheet_ma(wb, tb, m, n, shift_n, f"{label} Formulas")
+        sharpes[f"Shift-{shift_n} Sharpe"] = met["Sharpe Ratio"]
+    return _save_strategy_workbook(wb, filepath, sharpes)
+
+
+def save_carry_v1_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, f2r: pd.Series,
+                                   phase: pd.Series, unit_label: str, filepath: Path) -> dict:
+    """Carry V1 Roll Yield tradebook -- 6 sheets total (3 timing variants x Python+Formulas)."""
+    sharpes = {}
+    wb = Workbook()
+    wb.remove(wb.active)
+    for shift_n, label in TIMING_VARIANTS:
+        tb = build_carry_v1_tradebook(curve=curve, f1r=f1r, f1c=f1c, shift_n=shift_n, f2r=f2r, phase=phase)
+        pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
+        pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), shift_n, unit_label)
+        _write_xl_sheet(wb, tb, met, f"{label} Python")
+        write_manual_formula_sheet_carry_v1(wb, tb, shift_n, f"{label} Formulas")
+        sharpes[f"Shift-{shift_n} Sharpe"] = met["Sharpe Ratio"]
+    return _save_strategy_workbook(wb, filepath, sharpes)
+
+
+def save_carry_v3_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, f2r: pd.Series,
+                                   phase: pd.Series, window: int, unit_label: str, filepath: Path) -> dict:
+    """Carry V3 Z-score tradebook -- 6 sheets total (3 timing variants x Python+Formulas)."""
+    sharpes = {}
+    wb = Workbook()
+    wb.remove(wb.active)
+    for shift_n, label in TIMING_VARIANTS:
+        tb = build_carry_v3_tradebook(curve=curve, f1r=f1r, f1c=f1c, shift_n=shift_n, window=window,
+                                       f2r=f2r, phase=phase)
+        pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
+        pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), shift_n, unit_label)
+        _write_xl_sheet(wb, tb, met, f"{label} Python")
+        write_manual_formula_sheet_carry_v3(wb, tb, shift_n, window, f"{label} Formulas")
+        sharpes[f"Shift-{shift_n} Sharpe"] = met["Sharpe Ratio"]
+    return _save_strategy_workbook(wb, filepath, sharpes)
+
+
+def save_value_v1_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, f2r: pd.Series,
+                                   phase: pd.Series, contract: str, lookback: int, threshold: float,
+                                   unit_label: str, filepath: Path) -> dict:
+    """Value V1 MA-Reversion tradebook -- 6 sheets total (3 timing variants x Python+Formulas)."""
+    sharpes = {}
+    wb = Workbook()
+    wb.remove(wb.active)
+    for shift_n, label in TIMING_VARIANTS:
+        tb = build_value_v1_tradebook(curve=curve, f1r=f1r, f1c=f1c, contract=contract, lookback=lookback,
+                                       threshold=threshold, shift_n=shift_n, f2r=f2r, phase=phase)
+        pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
+        pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), shift_n, unit_label)
+        _write_xl_sheet(wb, tb, met, f"{label} Python")
+        write_manual_formula_sheet_value_v1(wb, tb, shift_n, contract, lookback, threshold, f"{label} Formulas")
+        sharpes[f"Shift-{shift_n} Sharpe"] = met["Sharpe Ratio"]
+    return _save_strategy_workbook(wb, filepath, sharpes)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -378,6 +902,7 @@ def main():
                                       verbose=False, config=p["config"])
         f1_df = f1_df[f1_df.index.year >= 2006]
         f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
+        f2r, phase = f1_df["F2_raw"], f1_df["Phase"]
 
         if p["loader"] == "simple":
             curve = load_curve_simple(p["futures_file"], p["config"][code]["price_sheet"])
@@ -388,23 +913,27 @@ def main():
 
         out_dir = TRADEBOOKS_DIR / code
 
+        def _fmt_sh(sh: dict) -> str:
+            return "  ".join(f"{k}={v}" for k, v in sh.items())
+
         # ── Momentum: 3 default benchmark MA pairs ──────────────────────────
         for m, n in MOMENTUM_PAIRS:
             fpath = out_dir / f"Momentum_MA_{m}_{n}.xlsx"
-            sh = save_tradebook_excel(build_ma_tradebook, f1r, f1c, unit, fpath, m=m, n=n)
-            print(f"  Momentum MA({m},{n})  Lag-1={sh['lag']}  Same-Day={sh['same']}  -> {fpath.name}")
+            sh = save_momentum_tradebook_excel(f1r, f1c, f2r, phase, m=m, n=n, unit_label=unit, filepath=fpath)
+            print(f"  Momentum MA({m},{n})  {_fmt_sh(sh)}  -> {fpath.name}")
             log_rows.append({"code": code, "name": name, "strategy": f"Momentum MA({m},{n})", **sh})
 
         # ── Carry: V1 Roll Yield (F1-F2)/F1, V3 Z-score(252d) ───────────────
         if "F1" in curve.columns and "F2" in curve.columns:
             fpath = out_dir / "Carry_V1_RollYield.xlsx"
-            sh = save_tradebook_excel(build_carry_v1_tradebook, f1r, f1c, unit, fpath, curve=curve)
-            print(f"  Carry V1 (F1-F2)/F1  Lag-1={sh['lag']}  Same-Day={sh['same']}  -> {fpath.name}")
+            sh = save_carry_v1_tradebook_excel(curve, f1r, f1c, f2r, phase, unit_label=unit, filepath=fpath)
+            print(f"  Carry V1 (F1-F2)/F1  {_fmt_sh(sh)}  -> {fpath.name}")
             log_rows.append({"code": code, "name": name, "strategy": "Carry V1", **sh})
 
             fpath = out_dir / "Carry_V3_Zscore252.xlsx"
-            sh = save_tradebook_excel(build_carry_v3_tradebook, f1r, f1c, unit, fpath, curve=curve, window=252)
-            print(f"  Carry V3 Z-score(252d)  Lag-1={sh['lag']}  Same-Day={sh['same']}  -> {fpath.name}")
+            sh = save_carry_v3_tradebook_excel(curve, f1r, f1c, f2r, phase, window=252,
+                                                unit_label=unit, filepath=fpath)
+            print(f"  Carry V3 Z-score(252d)  {_fmt_sh(sh)}  -> {fpath.name}")
             log_rows.append({"code": code, "name": name, "strategy": "Carry V3", **sh})
         else:
             print("  Carry skipped -- F1/F2 not found in curve.")
@@ -415,10 +944,10 @@ def main():
         if contracts:
             contract = contracts[min(7, len(contracts) - 1)]
             fpath = out_dir / f"Value_V1_{contract}.xlsx"
-            sh = save_tradebook_excel(build_value_v1_tradebook, f1r, f1c, unit, fpath,
-                                       curve=curve, contract=contract,
-                                       lookback=VALUE_LOOKBACK_DAYS, threshold=VALUE_THRESHOLD)
-            print(f"  Value V1 {contract} 5yr +-10%  Lag-1={sh['lag']}  Same-Day={sh['same']}  -> {fpath.name}")
+            sh = save_value_v1_tradebook_excel(curve, f1r, f1c, f2r, phase, contract=contract,
+                                                lookback=VALUE_LOOKBACK_DAYS, threshold=VALUE_THRESHOLD,
+                                                unit_label=unit, filepath=fpath)
+            print(f"  Value V1 {contract} 5yr +-10%  {_fmt_sh(sh)}  -> {fpath.name}")
             log_rows.append({"code": code, "name": name, "strategy": f"Value V1 {contract}", **sh})
         else:
             print("  Value skipped -- no usable Fk contracts in curve.")

@@ -204,11 +204,6 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     with timing_col:
         timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_mom_timing")
         shift_n = TIMING_SHIFT[timing]
-        if shift_n == 0:
-            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t−1], the earliest a position "
-                       "can be established without pairing it with the same-bar return that produced the "
-                       "signal, which would introduce look-ahead bias. Lag-1 adds one additional day of "
-                       "delay (Signal[t−2]); Lag-2 adds two (Signal[t−3]).")
 
     # ── Strategies to Compare: 3 default benchmarks + custom (selection UI only) ──
     st.markdown("**Strategies to Compare**")

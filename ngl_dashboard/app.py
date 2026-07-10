@@ -13,6 +13,15 @@ were originally mislabeled (cyclically swapped commodities); corrected
 2026-07-10 after cross-verification against the Mark Bogorad NGL paper
 replication and the expiry calendar file's own (independently correct)
 sheet names. See that workbook's README "CORRECTION NOTE" for detail.
+
+Front-contract note: unlike every other dashboard, this one treats F2 as
+the effective front/tradeable contract (F3 as next), not F1 -- NGL swaps
+are monthly-averaging instruments where the nominal front contract (F1)
+can be a stale/partial-month price. Set via NGL_CONFIG's f1_col/f2_col in
+rolling_continuous.py (2026-07-10), matching Mark Bogorad's
+paper2_energy_risk_premia NGL_SKIP_FRONT=True convention. The engine's
+output is still internally named F1_raw/F1_continuous (generic across all
+dashboards) but for this dashboard those values are F2/F2-continuous.
 """
 
 import os
@@ -47,13 +56,14 @@ PRODUCT_UNITS = {
 }
 PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD", "PCW", "PGP"]
 
-# ── Defaults tuned for NGL/petrochemical products (2026-07-10) ──────────────
+# ── Defaults tuned for NGL/petrochemical products (2026-07-10, re-checked
+# after switching to F2-as-front on the same date -- see note below) ────────
 # Momentum: best of the 3 fixed benchmark MA pairs, by net Sharpe (full
 # history, Lag-1, 5bps) -- the benchmark set itself is untouched, this only
 # picks which one is pre-featured in Performance Metrics.
 MOMENTUM_DEFAULT_FEATURE = {
-    "CAP": (1, 20), "BAP": (5, 60), "DAE": (5, 60),
-    "IBD": (1, 20), "PCW": (1, 20), "PGP": (1, 20),
+    "CAP": (1, 20), "BAP": (20, 250), "DAE": (5, 60),
+    "IBD": (20, 250), "PCW": (1, 20), "PGP": (1, 20),
 }
 # Carry: (F1-F2)/F1 near-tenor roll yield is dominated by front-of-curve
 # heating-season seasonality for NGLs, not genuine term structure -- it is
@@ -91,6 +101,10 @@ with st.sidebar:
     st.caption("Ethane/Propane/Butane/Isobutane are Mt Belvieu NGL swaps; Ethylene/Propylene are "
                "Mt Belvieu / Polymer Grade petrochemical futures. Same Momentum/Carry/Value format "
                "as the Metals and Energy dashboards.")
+    st.caption("Front contract: **F2**, not F1 -- NGL swaps are monthly-averaging instruments where "
+               "F1 can be a stale/partial-month price. All Momentum/Carry/Value PnL and the Momentum "
+               "signal are based on F2 (rolling into F3), matching Mark Bogorad's NGL_SKIP_FRONT "
+               "convention.")
 
 cfg = NGL_CONFIG[product_code]
 unit = PRODUCT_UNITS[product_code]

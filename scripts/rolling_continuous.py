@@ -289,36 +289,48 @@ NGL_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.x
 # independently confirm the CAP=Ethane/BAP=Propane/DAE=Butane/PCW=Ethylene
 # mapping used to correct NGL_Futures_Updated.xlsx's price-sheet names
 # on 2026-07-10 (see that workbook's README "CORRECTION NOTE").
+#
+# f1_col/f2_col = 2/3 (i.e. the price sheet's F2/F3 columns), NOT 1/2 --
+# NGL swaps are monthly-averaging instruments where the nominal front
+# contract (F1) can be a stale/partial-month price, so F2 is treated as
+# the effective front contract and F3 as next -- same reasoning as Mark
+# Bogorad's paper2_energy_risk_premia (NGL_SKIP_FRONT=True there). This
+# reuses the existing LTD-calendar roll engine unchanged (roll dates are
+# computed from each contract's own LAST_TRADEABLE_DT regardless of which
+# column position is fed in as "front"), just shifted one contract out --
+# changed 2026-07-10, was f1_col=1/f2_col=2 (true F1) before. The output
+# columns are still NAMED F1_raw/F1_continuous by the generic engine, but
+# for NGL products they hold F2/F2-continuous values.
 NGL_CONFIG: dict[str, dict] = {
     "CAP": {
         "name": "Ethane (Mt Belvieu)", "price_sheet": "Ethane Argus",
         "calendar_sheet": "CAP - Ethane — Mt Belvieu Swap ",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+        "f1_col": 2, "f2_col": 3, "data_start_row": 2,
     },
     "BAP": {
         "name": "Propane (Mt Belvieu)", "price_sheet": "Propane Argus",
         "calendar_sheet": "BAP - Propane — Mt Belvieu Swap",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+        "f1_col": 2, "f2_col": 3, "data_start_row": 2,
     },
     "DAE": {
         "name": "Butane (Mt Belvieu)", "price_sheet": "Butane Argus",
         "calendar_sheet": "DAE - Butane — Mt Belvieu Swap ",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+        "f1_col": 2, "f2_col": 3, "data_start_row": 2,
     },
     "IBD": {
         "name": "Isobutane (Mt Belvieu)", "price_sheet": "Isobutane Argus",
         "calendar_sheet": "IBD - Isobutane — Mt Belvieu Sw",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+        "f1_col": 2, "f2_col": 3, "data_start_row": 2,
     },
     "PCW": {
         "name": "Ethylene (Mt Belvieu)", "price_sheet": "Ethylene Argus",
         "calendar_sheet": "PCW - Ethylene — Mt Belvieu Fut",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+        "f1_col": 2, "f2_col": 3, "data_start_row": 2,
     },
     "PGP": {
         "name": "Propylene (Polymer Grade)", "price_sheet": "Propylene Argus",
         "calendar_sheet": "PGP - Propylene — Polymer Grade",
-        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+        "f1_col": 2, "f2_col": 3, "data_start_row": 2,
     },
 }
 

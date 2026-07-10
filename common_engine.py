@@ -187,8 +187,9 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
 
     section_header(f"MOMENTUM — {product}")
-    st.caption("MA crossover: signal(t) = sign[ MA(F1_raw, fast) − MA(F1_raw, slow) ]. "
-               "No CTA/Baz-Granger, no Anchors — Stage 2 scope.")
+    st.caption("Moving-average crossover: signal(t) = sign[MA(F1_raw, fast) − MA(F1_raw, slow)]. "
+               "Scope is limited to MA crossover; CTA/Baz-Granger and structural anchor signals "
+               "are not included.")
 
     tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
@@ -199,9 +200,10 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_mom_timing")
         shift_n = TIMING_SHIFT[timing]
         if shift_n == 0:
-            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t-1] -- the fastest a position "
-                       "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
-                       "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
+            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t−1], the earliest a position "
+                       "can be established without pairing it with the same-bar return that produced the "
+                       "signal, which would introduce look-ahead bias. Lag-1 adds one additional day of "
+                       "delay (Signal[t−2]); Lag-2 adds two (Signal[t−3]).")
 
     # ── Strategies to Compare: 3 default benchmarks + custom (selection UI only) ──
     st.markdown("**Strategies to Compare**")
@@ -359,8 +361,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     signal + position chart, performance metrics, TC filter.
     `phase` (if passed) adds roll-day TC on top of position-change TC."""
     section_header(f"CARRY — {product}")
-    st.caption("Term structure carry: long in backwardation, short in contango. "
-               "V1 Roll Yield, V2 Long Slope, V3 Z-score, V4 Carry-Momentum. Stage 2 scope.")
+    st.caption("Term structure carry: long in backwardation, short in contango. Four variants are "
+               "available: V1 Roll Yield, V2 Long Slope, V3 Z-score, and V4 Carry-Momentum.")
 
     tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
@@ -371,9 +373,10 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_car_timing")
         shift_n = TIMING_SHIFT[timing]
         if shift_n == 0:
-            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t-1] -- the fastest a position "
-                       "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
-                       "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
+            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t−1], the earliest a position "
+                       "can be established without pairing it with the same-bar return that produced the "
+                       "signal, which would introduce look-ahead bias. Lag-1 adds one additional day of "
+                       "delay (Signal[t−2]); Lag-2 adds two (Signal[t−3]).")
 
     if tenor_pairs is None:
         tenor_pairs = [("F3", "F15"), ("F6", "F18"), ("F9", "F21"), ("F12", "F24")]
@@ -438,8 +441,34 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     positions = {label: _build_position(label) for label in chosen}
     positions = {k: v for k, v in positions.items() if not v.empty}
+    if not positions:
+        st.info("No valid data for the selected carry variant(s).")
+        return
 
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car", unit_label, phase=phase)
+    # ── Performance Metrics: ONE featured strategy from the active list above ──
+    st.markdown("**Performance Metrics**")
+    feature_options = list(positions.keys())
+    default_feature = "V1 (F1-F2)" if "V1 (F1-F2)" in feature_options else feature_options[0]
+    feature_label = st.selectbox("Strategy to feature", options=feature_options,
+                                  index=feature_options.index(default_feature), key=f"{key_prefix}_car_feature")
+    m = pos_metrics_generic(positions[feature_label], f1r, f1c, tc_bps, phase)
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
+    with c2:
+        metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
+    with c3:
+        metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+    with c4:
+        metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+    with c5:
+        metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+
+    # ── Cumulative PnL / Rolling Sharpe / Signal & Position: every strategy
+    # checked in "Active carry variants" above, overlaid simultaneously.
+    # show_metrics=False since Performance Metrics is already shown above. ───
+    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car", unit_label,
+                                  show_metrics=False, phase=phase)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -467,8 +496,9 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     performance metrics, TC filter.
     `phase` (if passed) adds roll-day TC on top of position-change TC."""
     section_header(f"VALUE — {product}")
-    st.caption("MA-reversion: deviation = (Fk − MA_N)/MA_N. +1 if cheap (< −T), −1 if expensive (> +T), "
-               "0 otherwise. Stage 2 scope: V1 MA-reversion only, no Baz-Granger reversal.")
+    st.caption("Moving-average reversion: deviation = (Fk − MA_N)/MA_N. Long (+1) when cheap "
+               "(below −T), short (−1) when expensive (above +T), flat otherwise. Only the "
+               "MA-reversion variant is implemented; the Baz-Granger reversal variant is not included.")
 
     tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
@@ -479,9 +509,10 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=2, key=f"{key_prefix}_val_timing")
         shift_n = TIMING_SHIFT[timing]
         if shift_n == 0:
-            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t-1] -- the fastest a position "
-                       "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
-                       "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
+            st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t−1], the earliest a position "
+                       "can be established without pairing it with the same-bar return that produced the "
+                       "signal, which would introduce look-ahead bias. Lag-1 adds one additional day of "
+                       "delay (Signal[t−2]); Lag-2 adds two (Signal[t−3]).")
 
     if contracts is None:
         contracts = [c for c in curve.columns if c.startswith("F")]
@@ -527,8 +558,35 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         for c, lb, thr in chosen
     }
     positions = {k: v for k, v in positions.items() if not v.empty}
+    if not positions:
+        st.info("No valid data for the selected value variant(s).")
+        return
 
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_val", unit_label, phase=phase)
+    # ── Performance Metrics: ONE featured strategy from the active list above ──
+    st.markdown("**Performance Metrics**")
+    feature_options = list(positions.keys())
+    default_label = f"{default_contract} 5yr ±10%"
+    default_feature = default_label if default_label in feature_options else feature_options[0]
+    feature_label = st.selectbox("Strategy to feature", options=feature_options,
+                                  index=feature_options.index(default_feature), key=f"{key_prefix}_val_feature")
+    m = pos_metrics_generic(positions[feature_label], f1r, f1c, tc_bps, phase)
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
+    with c2:
+        metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
+    with c3:
+        metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+    with c4:
+        metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+    with c5:
+        metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+
+    # ── Cumulative PnL / Rolling Sharpe / Signal & Position: every strategy
+    # checked in "Active value variants" above, overlaid simultaneously.
+    # show_metrics=False since Performance Metrics is already shown above. ───
+    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_val", unit_label,
+                                  show_metrics=False, phase=phase)
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -47,6 +47,31 @@ PRODUCT_UNITS = {
 }
 PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD", "PCW", "PGP"]
 
+# ── Defaults tuned for NGL/petrochemical products (2026-07-10) ──────────────
+# Momentum: best of the 3 fixed benchmark MA pairs, by net Sharpe (full
+# history, Lag-1, 5bps) -- the benchmark set itself is untouched, this only
+# picks which one is pre-featured in Performance Metrics.
+MOMENTUM_DEFAULT_FEATURE = {
+    "CAP": (1, 20), "BAP": (5, 60), "DAE": (5, 60),
+    "IBD": (1, 20), "PCW": (1, 20), "PGP": (1, 20),
+}
+# Carry: (F1-F2)/F1 near-tenor roll yield is dominated by front-of-curve
+# heating-season seasonality for NGLs, not genuine term structure -- it is
+# strongly negative-Sharpe for every NGL ticker. V2 Long Slope (F4-F15),
+# matching Mark Bogorad's paper2_energy_risk_premia carry convention, is
+# positive-Sharpe for 5 of 6 tickers and tracks the paper's own Ethane/
+# Propane/Butane results far more closely. Applied uniformly (not
+# per-product) to match the existing Metals/Energy convention of one fixed
+# default carry set.
+CARRY_DEFAULT_ACTIVE = ["V2 (F4-F15)", "V3 (win=252)"]
+CARRY_DEFAULT_FEATURE = "V2 (F4-F15)"
+# Value: F12 / 10yr / +-10% (Mark's paper2 convention) ranks top-1-3 of a
+# 9-combo grid (F8/F10/F12 x 5yr/7yr/10yr) for 4 of 6 tickers and is never
+# negative for any of them, unlike the Metals/Energy default of F8/5yr
+# (tuned for Copper), which is flat-to-negative for CAP/IBD/PCW/PGP.
+# Applied uniformly for the same reason as Carry above.
+VALUE_DEFAULT_ACTIVE = ("F12", "10yr", 0.10)
+
 with st.sidebar:
     st.markdown('<p class="main-title">🧪 NGL Dashboard</p>', unsafe_allow_html=True)
     st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
@@ -95,12 +120,16 @@ st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
 tab_mom, tab_carry, tab_val = st.tabs(["⚡ Momentum", "📐 Carry", "📏 Value"])
 
 with tab_mom:
-    render_momentum_tab(f1r, f1c, cfg["name"], unit, key_prefix=f"ngl_{product_code}", phase=phase)
+    render_momentum_tab(f1r, f1c, cfg["name"], unit, key_prefix=f"ngl_{product_code}", phase=phase,
+                         default_feature_pair=MOMENTUM_DEFAULT_FEATURE.get(product_code))
 
 with tab_carry:
-    render_carry_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=f"ngl_{product_code}", phase=phase)
+    render_carry_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=f"ngl_{product_code}", phase=phase,
+                      default_active_variants=CARRY_DEFAULT_ACTIVE,
+                      default_feature_variant=CARRY_DEFAULT_FEATURE)
 
 with tab_val:
     contracts = [c for c in curve.columns if c.startswith("F") and c[1:].isdigit() and int(c[1:]) <= 15]
     render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=f"ngl_{product_code}",
-                      contracts=contracts, phase=phase)
+                      contracts=contracts, phase=phase,
+                      default_active_combo=VALUE_DEFAULT_ACTIVE)

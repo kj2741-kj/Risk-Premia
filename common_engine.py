@@ -180,10 +180,15 @@ def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
 
 
 def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label: str,
-                         key_prefix: str, heatmap_max_window: int = 250, phase: pd.Series | None = None):
+                         key_prefix: str, heatmap_max_window: int = 250, phase: pd.Series | None = None,
+                         default_feature_pair: tuple[int, int] | None = None):
     """Momentum tab: heatmap w/ year-range toggle, 3 default benchmark MAs + custom MA,
     multi-strategy equity curve, rolling Sharpe, performance metrics, TC filter.
-    `phase` (if passed) adds roll-day TC on top of position-change TC."""
+    `phase` (if passed) adds roll-day TC on top of position-change TC.
+    `default_feature_pair` overrides which of the active strategies is
+    pre-selected in the Performance Metrics card (falls back to MA(1,20) if
+    omitted or not in the active list) -- does NOT change the 3 benchmark
+    pairs themselves, only which one is shown first."""
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
 
     section_header(f"MOMENTUM — {product}")
@@ -254,7 +259,12 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     if not chosen:
         st.info("Select at least one strategy above to see its performance metrics.")
     else:
-        default_feature = (1, 20) if (1, 20) in chosen else chosen[0]
+        if default_feature_pair is not None and default_feature_pair in chosen:
+            default_feature = default_feature_pair
+        elif (1, 20) in chosen:
+            default_feature = (1, 20)
+        else:
+            default_feature = chosen[0]
         feature_pair = st.selectbox(
             "Strategy to feature", options=chosen, index=chosen.index(default_feature),
             format_func=lambda p: f"MA({p[0]},{p[1]})", key=f"{key_prefix}_mom_feature",
@@ -356,10 +366,18 @@ def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1) 
 
 def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
                       unit_label: str, key_prefix: str, tenor_pairs: list[tuple[str, str]] | None = None,
-                      phase: pd.Series | None = None):
+                      phase: pd.Series | None = None,
+                      default_active_variants: list[str] | None = None,
+                      default_feature_variant: str | None = None):
     """Carry tab: V1-V4 sub-variant selector, equity curve compare, rolling Sharpe,
     signal + position chart, performance metrics, TC filter.
-    `phase` (if passed) adds roll-day TC on top of position-change TC."""
+    `phase` (if passed) adds roll-day TC on top of position-change TC.
+    `default_active_variants`/`default_feature_variant` override the
+    pre-selected carry variant(s) (falls back to V1 (F1-F2) + V3 (win=252),
+    featuring V1, if omitted) -- for products where the near-tenor V1
+    definition isn't the appropriate carry signal (e.g. NGL swaps, where
+    F1-F2 is dominated by front-of-curve seasonality rather than genuine
+    term structure)."""
     section_header(f"CARRY — {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. Four variants are "
                "available: V1 Roll Yield, V2 Long Slope, V3 Z-score, and V4 Carry-Momentum.")
@@ -402,7 +420,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     ss_key = f"{key_prefix}_car_active"
     if ss_key not in st.session_state:
-        st.session_state[ss_key] = ["V1 (F1-F2)", "V3 (win=252)"]
+        st.session_state[ss_key] = (list(default_active_variants) if default_active_variants
+                                     else ["V1 (F1-F2)", "V3 (win=252)"])
 
     if add_clicked:
         label = {
@@ -448,7 +467,12 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     # ── Performance Metrics: ONE featured strategy from the active list above ──
     st.markdown("**Performance Metrics**")
     feature_options = list(positions.keys())
-    default_feature = "V1 (F1-F2)" if "V1 (F1-F2)" in feature_options else feature_options[0]
+    if default_feature_variant and default_feature_variant in feature_options:
+        default_feature = default_feature_variant
+    elif "V1 (F1-F2)" in feature_options:
+        default_feature = "V1 (F1-F2)"
+    else:
+        default_feature = feature_options[0]
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
                                   index=feature_options.index(default_feature), key=f"{key_prefix}_car_feature")
     m = pos_metrics_generic(positions[feature_label], f1r, f1c, tc_bps, phase)
@@ -495,10 +519,14 @@ def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, thresho
 
 def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
                       unit_label: str, key_prefix: str, contracts: list[str] | None = None,
-                      phase: pd.Series | None = None):
+                      phase: pd.Series | None = None,
+                      default_active_combo: tuple[str, str, float] | None = None):
     """Value tab: V1 MA-reversion only, equity curve compare, rolling Sharpe,
     performance metrics, TC filter.
-    `phase` (if passed) adds roll-day TC on top of position-change TC."""
+    `phase` (if passed) adds roll-day TC on top of position-change TC.
+    `default_active_combo` is a (contract, lookback_label, threshold) tuple
+    overriding the pre-selected value variant (falls back to the 8th
+    contract / 5yr / 10% if omitted)."""
     section_header(f"VALUE — {product}")
     st.caption("Moving-average reversion: deviation = (Fk − MA_N)/MA_N. Long (+1) when cheap "
                "(below −T), short (−1) when expensive (above +T), flat otherwise. Only the "
@@ -540,8 +568,9 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     ss_key = f"{key_prefix}_val_active"
     default_contract = contracts[min(7, len(contracts) - 1)]
+    default_combo = default_active_combo if default_active_combo else (default_contract, "5yr", 0.10)
     if ss_key not in st.session_state:
-        st.session_state[ss_key] = [(default_contract, "5yr", 0.10)]
+        st.session_state[ss_key] = [default_combo]
 
     if add_clicked:
         combo = (v_contract, v_lb_label, v_thr)
@@ -569,7 +598,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     # ── Performance Metrics: ONE featured strategy from the active list above ──
     st.markdown("**Performance Metrics**")
     feature_options = list(positions.keys())
-    default_label = f"{default_contract} 5yr ±10%"
+    default_label = f"{default_combo[0]} {default_combo[1]} ±{default_combo[2]*100:.0f}%"
     default_feature = default_label if default_label in feature_options else feature_options[0]
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
                                   index=feature_options.index(default_feature), key=f"{key_prefix}_val_feature")

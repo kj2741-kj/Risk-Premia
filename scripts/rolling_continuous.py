@@ -280,6 +280,48 @@ PRECIOUS_CONFIG: dict[str, dict] = {
     },
 }
 
+NGL_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "NGL_Futures_Updated.xlsx")
+NGL_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
+
+# Calendar sheet names for NGL/petrochemical tickers use an em dash (—,
+# not a hyphen) and are truncated at Excel's 31-char sheet-name limit -- copied
+# verbatim from expiry_calendars_20260701.xlsx's own sheet names, which
+# independently confirm the CAP=Ethane/BAP=Propane/DAE=Butane/PCW=Ethylene
+# mapping used to correct NGL_Futures_Updated.xlsx's price-sheet names
+# on 2026-07-10 (see that workbook's README "CORRECTION NOTE").
+NGL_CONFIG: dict[str, dict] = {
+    "CAP": {
+        "name": "Ethane (Mt Belvieu)", "price_sheet": "Ethane Argus",
+        "calendar_sheet": "CAP - Ethane — Mt Belvieu Swap ",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "BAP": {
+        "name": "Propane (Mt Belvieu)", "price_sheet": "Propane Argus",
+        "calendar_sheet": "BAP - Propane — Mt Belvieu Swap",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "DAE": {
+        "name": "Butane (Mt Belvieu)", "price_sheet": "Butane Argus",
+        "calendar_sheet": "DAE - Butane — Mt Belvieu Swap ",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "IBD": {
+        "name": "Isobutane (Mt Belvieu)", "price_sheet": "Isobutane Argus",
+        "calendar_sheet": "IBD - Isobutane — Mt Belvieu Sw",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "PCW": {
+        "name": "Ethylene (Mt Belvieu)", "price_sheet": "Ethylene Argus",
+        "calendar_sheet": "PCW - Ethylene — Mt Belvieu Fut",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "PGP": {
+        "name": "Propylene (Polymer Grade)", "price_sheet": "Propylene Argus",
+        "calendar_sheet": "PGP - Propylene — Polymer Grade",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Data loaders
@@ -651,9 +693,19 @@ def reanchor_f1_continuous(f1_df: pd.DataFrame) -> pd.DataFrame:
     construction) -- call this immediately after slicing a get_metal_rolling_f1
     (or get_rolling_f1_5td) result to a start date, in every caller, so the
     dashboard and the tradebook generator never show two different
-    F1_continuous levels for the same window."""
+    F1_continuous levels for the same window.
+
+    Anchors off the first row where BOTH F1_continuous and F1_raw are
+    non-NaN, not blindly row 0 -- a handful of products (e.g. the NGL
+    tickers) have 1-2 missing F1 quotes at the very start of their sliced
+    window, and iloc[0] landing on one of those would make offset NaN,
+    which then poisons every row (anything minus NaN is NaN)."""
     f1_df = f1_df.copy()
-    offset = f1_df["F1_continuous"].iloc[0] - f1_df["F1_raw"].iloc[0]
+    valid = f1_df["F1_continuous"].notna() & f1_df["F1_raw"].notna()
+    if not valid.any():
+        return f1_df
+    anchor = f1_df.loc[valid].iloc[0]
+    offset = anchor["F1_continuous"] - anchor["F1_raw"]
     f1_df["F1_continuous"] = f1_df["F1_continuous"] - offset
     return f1_df
 
@@ -693,6 +745,12 @@ if __name__ == "__main__":
         ("HG", "Copper_CME",         PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
         ("PL", "Platinum_NYMEX",     PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
         ("PA", "Palladium_NYMEX",    PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
+        ("CAP", "Ethane",            NGL_CONFIG,      NGL_FUTURES_FILE,      NGL_CALENDAR_FILE),
+        ("BAP", "Propane",           NGL_CONFIG,      NGL_FUTURES_FILE,      NGL_CALENDAR_FILE),
+        ("DAE", "Butane",            NGL_CONFIG,      NGL_FUTURES_FILE,      NGL_CALENDAR_FILE),
+        ("IBD", "Isobutane",         NGL_CONFIG,      NGL_FUTURES_FILE,      NGL_CALENDAR_FILE),
+        ("PCW", "Ethylene",          NGL_CONFIG,      NGL_FUTURES_FILE,      NGL_CALENDAR_FILE),
+        ("PGP", "Propylene",         NGL_CONFIG,      NGL_FUTURES_FILE,      NGL_CALENDAR_FILE),
     ]
 
     HEADER_FILL  = PatternFill("solid", fgColor="2B3A47")

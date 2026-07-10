@@ -56,7 +56,7 @@ DASHBOARD_LINKS = {
     "Precious Metals": {"url": None, "ready": False,
                         "desc": "Gold, Silver, Platinum, Palladium, Copper-CME. Stage 2, in progress."},
     "NGL / Refined":  {"url": None, "ready": False,
-                        "desc": "Propane, Butane, Ethane, Isobutane, Ethylene, Propylene. Stage 2 — paused pending a ticker-mapping data check."},
+                        "desc": "Ethane, Propane, Butane, Isobutane, Ethylene, Propylene. Momentum, Carry, Value. Built — awaiting deployment."},
 }
 
 # ═══════════════════════════════════════════════

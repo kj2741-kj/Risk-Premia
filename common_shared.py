@@ -302,7 +302,12 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5) -> dict:
     floor at zero: confirmed to go negative for a majority of history on several products
     (Aluminium 75% of days, Nat Gas 88%, Fuel Oil 65%, WTI 42%), which can silently flip
     the sign of a return or blow up its magnitude by 2-3 orders of magnitude. Dollar PnL
-    has no such division and is immune to this."""
+    has no such division and is immune to this.
+
+    `ann`/`mdd` are computed on NET (TC-adjusted) PnL, matching the equity
+    curve chart these feed (explicitly labeled "Net of TC") -- both move when
+    tc_bps changes, same as `net` Sharpe. `gross` Sharpe is kept as the
+    before-costs reference point."""
     pos = pos.reindex(f1c.index).fillna(0.0)
     gp = pos * f1c.diff()
     chg = pos.diff().abs()
@@ -315,8 +320,8 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5) -> dict:
         a = pnl[pos != 0].dropna()
         return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
 
-    cum = gp.fillna(0).cumsum()
-    ann_pnl = gp.dropna().mean() * 252 if gp.notna().any() else np.nan
+    cum = net.fillna(0).cumsum()
+    ann_pnl = net.dropna().mean() * 252 if net.notna().any() else np.nan
     return dict(gross=_s(gp), net=_s(net),
                 ann=float(ann_pnl) if pd.notna(ann_pnl) else np.nan,
                 mdd=float((cum - cum.cummax()).min()), nact=int((pos != 0).sum()),

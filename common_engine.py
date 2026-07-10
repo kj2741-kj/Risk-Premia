@@ -43,7 +43,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic, section_header, tc_label_map
+from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic, section_header, tc_label_map, metric_card
 
 _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
                    "#A78BFA", "#F472B6", "#22D3EE", "#FB923C", "#60A5FA"]
@@ -519,6 +519,10 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 # SHARED: multi-strategy equity curve + rolling Sharpe + metrics table
 # ═══════════════════════════════════════════════════════════════
 
+def _fmt_metric(x, fmt: str) -> str:
+    return "N/A" if x is None or (isinstance(x, float) and np.isnan(x)) else fmt.format(x)
+
+
 def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
                                   tc_bps: int, key_prefix: str, unit_label: str = "/unit"):
     if not positions:
@@ -526,21 +530,44 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
         return
 
     st.divider()
-    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
-    fig_eq = go.Figure()
-    metrics_rows = []
+
+    # Compute once, up front -- every section below (cards, equity curve,
+    # rolling Sharpe, signal & position) reads from this same pass, so
+    # nothing is recomputed and nothing here is hardcoded to a fixed number
+    # of strategies: the loop just runs over whatever `positions` holds.
     pnl_cache = {}
-    for i, (label, pos) in enumerate(positions.items()):
+    metrics_by_label = {}
+    for label, pos in positions.items():
         gross_pnl, net_pnl = daily_returns(pos, f1r, f1c, tc_bps)
         pnl_cache[label] = (gross_pnl, net_pnl)
+        metrics_by_label[label] = pos_metrics_generic(pos, f1r, f1c, tc_bps)
+
+    # ── Performance Metrics (cards, one row per active strategy) ────────────
+    st.markdown("**Performance Metrics**")
+    for label, m in metrics_by_label.items():
+        if len(positions) > 1:
+            st.caption(label)
+        c1, c2, c3, c4, c5 = st.columns(5)
+        with c1:
+            metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
+        with c2:
+            metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
+        with c3:
+            metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+        with c4:
+            metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+        with c5:
+            metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+
+    st.divider()
+
+    # ── Cumulative PnL (Equity Curve) ────────────────────────────────────────
+    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
+    fig_eq = go.Figure()
+    for i, (label, (gross_pnl, net_pnl)) in enumerate(pnl_cache.items()):
         eq = equity_curve(net_pnl)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-        m = pos_metrics_generic(pos, f1r, f1c, tc_bps)
-        metrics_rows.append({
-            "Strategy": label, "Gross Sharpe": m["gross"], "Net Sharpe": m["net"],
-            f"Ann PnL ({unit_label})": m["ann"], f"Max DD ({unit_label})": m["mdd"], "% Flat": m["flat_pct"],
-        })
     fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
     st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity")
 
@@ -555,16 +582,6 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     fig_rs.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
     fig_rs.update_layout(**CHART_LAYOUT, height=320, yaxis_title="Rolling Sharpe")
     st.plotly_chart(fig_rs, use_container_width=True, key=f"{key_prefix}_rollsharpe")
-
-    st.markdown("**Performance Metrics**")
-    mdf = pd.DataFrame(metrics_rows).set_index("Strategy")
-    st.dataframe(
-        mdf.style.format({
-            "Gross Sharpe": "{:+.2f}", "Net Sharpe": "{:+.2f}",
-            f"Ann PnL ({unit_label})": "{:+,.2f}", f"Max DD ({unit_label})": "{:+,.2f}", "% Flat": "{:.0f}",
-        }),
-        use_container_width=True,
-    )
 
     # Signal & Position history -- user picks which active strategy to show
     # (the chart is inherently single-strategy: a price + long/short bar

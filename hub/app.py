@@ -1,5 +1,5 @@
 """
-Metals Risk Premia - Project Hub
+Risk Premia - Project Hub
 ==================================
 Standalone landing dashboard: project overview, methodology, headline
 findings, and conclusion, with buttons linking OUT to each asset-class
@@ -17,8 +17,8 @@ independently without touching this hub or each other's deployment.
 This file depends on common_shared.py (repo root) plus, for the
 Fundamental Analysis tab only, the GHR inventory-spline engine under
 scripts/ (ghr_spline_core.py, ghr_copper_inventory_spline.py,
-ghr_wti_inventory_spline.py) and the underlying data/ files -- not on
-any other dashboard folder (metals_dashboard/, energy_dashboard/).
+ghr_wti_inventory_spline.py) and the underlying data/ files, and does not
+depend on any other dashboard folder (metals_dashboard/, energy_dashboard/).
 """
 
 import os
@@ -36,21 +36,18 @@ import ghr_copper_inventory_spline as ghr_copper
 import ghr_wti_inventory_spline as ghr_wti
 
 st.set_page_config(
-    page_title="Metals Risk Premia - Hub",
+    page_title="Risk Premia - Hub",
     page_icon="⚙️",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
 inject_css()
 
-# ═══════════════════════════════════════════════
 # Deployment URLs for each asset-class dashboard.
-# Fill in as each one is deployed as its own Streamlit Cloud app.
-# ═══════════════════════════════════════════════
 DASHBOARD_LINKS = {
     "Metals":         {"url": "https://risk-premia-metals.streamlit.app/", "ready": True,
-                        "desc": "LME Copper & Aluminium. Momentum, Carry, Value — Stage 2 rebuild. "
-                                "(Original 10-tab Stage 1 dashboard: metals-risk-premia-kj.streamlit.app)"},
+                        "desc": "LME Copper and Aluminium. Momentum, Carry, and Value strategies. A fuller "
+                                "10-tab research build is also available at metals-risk-premia-kj.streamlit.app."},
     "Energy":         {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
                         "desc": "WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil. Momentum, Carry, Value."},
     "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
@@ -59,12 +56,10 @@ DASHBOARD_LINKS = {
                         "desc": "Ethane, Propane, Butane, Isobutane, Ethylene, Propylene. Momentum, Carry, Value."},
 }
 
-# ═══════════════════════════════════════════════
-# Cached data loaders for the Fundamental Analysis tab.
-# Cached separately from run_spline_analysis (the regression fit itself is
-# cheap) so tweaking the date range / trailing-weeks / bandwidth doesn't
-# re-read the underlying Excel/CSV files on every widget interaction.
-# ═══════════════════════════════════════════════
+# Cached data loaders for the Fundamental Analysis tab. Cached separately from
+# run_spline_analysis (the regression fit itself is cheap) so tweaking the date
+# range, trailing-weeks, or bandwidth doesn't re-read the underlying files on
+# every widget interaction.
 
 @st.cache_data(ttl=3600, show_spinner="Loading Copper F1/F2 basis...")
 def _copper_basis_f1f2():
@@ -93,14 +88,13 @@ def _wti_inventory():
 
 tab_overview, tab_fund = st.tabs(["🏠 Overview", "📊 Fundamental Analysis"])
 
-# ═══════════════════════════════════════════════
-# TAB 1 — Overview (unchanged content, just moved under a tab)
-# ═══════════════════════════════════════════════
+# TAB 1: Overview
 with tab_overview:
-    st.markdown('<p class="main-title">⚙️ Metals Risk Premia</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">⚙️ Risk Premia</p>', unsafe_allow_html=True)
     st.markdown(
-        '<p class="main-subtitle">Systematic Momentum, Carry &amp; Value risk premia across LME metals, '
-        'energy, and refined products &mdash; supervised research with Prof. Ilia Bouchoev</p>',
+        '<p class="main-subtitle">Systematic Momentum, Carry, and Value risk premia across LME metals, '
+        'energy, precious metals, and refined products, developed as supervised research with '
+        'Prof. Ilia Bouchoev.</p>',
         unsafe_allow_html=True,
     )
     st.divider()
@@ -108,16 +102,16 @@ with tab_overview:
     section_header("WHAT THIS PROJECT IS")
     st.markdown(
         """
-A systematic framework that decomposes commodity futures returns into three economically distinct,
-near-uncorrelated risk premia — **Momentum** (trend persistence), **Carry** (curve shape / roll yield),
-and **Value** (mean-reversion to a long-run anchor) — then combines them into an equal-weight portfolio.
-The central result on the metals pilot (Copper, Aluminium): three orthogonal sleeves of similar
-stand-alone Sharpe combine into a portfolio whose risk-adjusted return materially exceeds any single
-sleeve, while roughly halving drawdown.
+This project is a systematic framework that decomposes commodity futures returns into three
+economically distinct, near-uncorrelated risk premia: **Momentum** (trend persistence), **Carry**
+(curve shape and roll yield), and **Value** (mean-reversion to a long-run anchor), combined into an
+equal-weight portfolio. The central result from the metals pilot on Copper and Aluminium is that three
+orthogonal sleeves of similar stand-alone Sharpe ratio combine into a portfolio whose risk-adjusted
+return materially exceeds any single sleeve, while roughly halving drawdown.
 
-Stage 1 (complete) validated the framework on LME Copper and Aluminium. Stage 2 (in progress) extends
-the same three strategies — kept deliberately simple for now (no CTA-paper trend, no structural
-Anchors, no walk-forward OOS yet) — to Oil & Energy, Precious Metals, and refined NGL products.
+The framework was first validated on LME Copper and Aluminium, then extended, using the same three
+strategies in a deliberately simplified form (no CTA-paper trend, no structural anchors, no
+walk-forward out-of-sample testing yet), to oil and energy, precious metals, and refined NGL products.
 """
     )
 
@@ -129,52 +123,42 @@ Anchors, no walk-forward OOS yet) — to Oil & Energy, Precious Metals, and refi
                    "PnL always realises on F1_continuous.")
     with c2:
         metric_card("Sharpe Convention", "Active-Day", unit="")
-        st.caption("Annualised mean/std of daily returns × √252, computed over days the strategy actually "
-                   "holds a position — flat days don't dilute the ratio.")
+        st.caption("Annualised mean and standard deviation of daily returns, scaled by the square root of "
+                   "252 and computed over days the strategy actually holds a position, so flat days do not "
+                   "dilute the ratio.")
     with c3:
         metric_card("Transaction Costs", "On F1_raw", unit="")
         st.caption("Round-trip cost = |Δposition| × (bps/10000/2) × F1_raw, charged at every position "
                    "change on the real traded price, not the adjusted series.")
 
     st.caption(
-        "Execution timing: **Same-Day** = position(t) = signal(t−1) (shift-1). **Lag-1** = position(t) = "
-        "signal(t−2) (shift-2, one extra day, no look-ahead either way). Which convention wins is "
-        "strategy-specific and re-checked per asset class, not assumed."
+        "Execution timing follows two conventions: **Same-Day**, where position(t) = signal(t−1), and "
+        "**Lag-1**, where position(t) = signal(t−2), one additional day of delay with no look-ahead bias "
+        "in either case. Which convention performs better is strategy-specific and is re-checked for "
+        "every asset class rather than assumed."
     )
 
-    section_header("HEADLINE FINDINGS (STAGE 1 — METALS)")
-    f1, f2, f3, f4 = st.columns(4)
-    with f1:
-        metric_card("Copper EW Portfolio", "+0.73", unit=" Sharpe")
-        st.caption("Net of 5bps, full sample 2006-2025. Best single sleeve (Momentum): +0.62.")
-    with f2:
-        metric_card("Aluminium EW Portfolio", "+0.85", unit=" Sharpe")
-        st.caption("Net of 5bps, full sample 2006-2026. Best single sleeve (Carry): +0.64.")
-    with f3:
-        metric_card("Optimal Config", "Metal-Specific", unit="")
-        st.caption("Copper wants a faster trend + curve-momentum carry; Aluminium wants a slower trend + "
-                   "mean-reverting z-score carry. No one-size template.")
-    with f4:
-        metric_card("Diversification", "Corr < 0.25", unit="")
-        st.caption("Momentum-Carry-Value position correlations mostly modest to negative — the combination, "
-                   "not any one sleeve, is the product.")
+    section_header("HEADLINE FINDINGS")
+    st.info("Coming soon. Consolidated headline findings across Metals, Energy, Precious Metals, "
+            "and NGL will be published here once results from all four asset classes are finalized.")
 
     section_header("CONCLUSION")
     st.markdown(
         """
-The diversification thesis holds on every metal tested so far: combining three economically distinct
-premia consistently beats any single sleeve on a risk-adjusted basis, with materially lower drawdown.
-Optimal parameters are asset-specific, not a one-size template — each new product gets its own
-momentum speed, carry variant, and value anchor selected on its own data, same methodology throughout.
-Stage 2 extends this test to a genuinely different asset class (energy, refined products) to see
-whether the same three-premia structure holds outside metals.
+The diversification thesis holds on every metal tested to date: combining three economically distinct
+premia consistently outperforms any single sleeve on a risk-adjusted basis, with materially lower
+drawdown. Optimal parameters are asset-specific rather than a single template; each new product is
+assigned its own momentum speed, carry variant, and value anchor, selected from its own data using the
+same methodology throughout. The framework has since been extended to genuinely different asset
+classes, including energy and refined products, to test whether the same three-premia structure holds
+outside metals.
 """
     )
 
     st.divider()
     section_header("EXPLORE THE DASHBOARDS")
-    st.caption("Each asset class below is its own independent dashboard — click through for live signals, "
-               "parameter controls, equity curves, rolling Sharpe, and performance metrics.")
+    st.caption("Each asset class below is its own independent dashboard. Open one to explore live "
+               "signals, parameter controls, equity curves, rolling Sharpe, and performance metrics.")
 
     nav_cols = st.columns(4)
     for col, (name, info) in zip(nav_cols, DASHBOARD_LINKS.items()):
@@ -188,20 +172,18 @@ whether the same three-premia structure holds outside metals.
 
     st.divider()
     st.caption(
-        "Data: LME futures curves (F1–F27), NYMEX/ICE/COMEX futures curves, LME Cash & 3M prices. "
-        "Research prototype for academic purposes — in-sample backtests unless stated otherwise. Not "
-        "investment advice."
+        "Data sources: LME futures curves (F1-F27), NYMEX, ICE, and COMEX futures curves, and LME Cash "
+        "and 3-Month prices. This is a research prototype for academic purposes; all backtests are "
+        "in-sample unless otherwise stated, and nothing here constitutes investment advice."
     )
 
-# ═══════════════════════════════════════════════
-# TAB 2 — Fundamental Analysis (GHR inventory-vs-basis cubic spline)
-# ═══════════════════════════════════════════════
+# TAB 2: Fundamental Analysis (GHR inventory-vs-basis cubic spline)
 with tab_fund:
-    st.markdown('<p class="main-title">📊 Fundamental Analysis — Inventory vs Basis</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">📊 Fundamental Analysis: Inventory vs Basis</p>', unsafe_allow_html=True)
     st.caption(
-        "Gorton, Hayashi & Rouwenhorst (2013) replication: fits the futures basis on normalized inventory "
-        "(I/I\\*, trailing 52-week average) via a cubic spline knotted at I/I\\*=1, plus monthly seasonal "
-        "dummies, with Newey-West HAC standard errors. Weekly frequency throughout."
+        "A replication of Gorton, Hayashi & Rouwenhorst (2013): the futures basis is fit on normalized "
+        "inventory (I/I\\*, trailing 52-week average) using a cubic spline knotted at I/I\\*=1, with "
+        "monthly seasonal dummies and Newey-West HAC standard errors, all at weekly frequency."
     )
 
     COMMODITY_OPTIONS = {"Copper (LME)": "copper", "WTI Crude (NYMEX)": "wti"}

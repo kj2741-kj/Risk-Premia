@@ -202,66 +202,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
                        "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
                        "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
 
-    # ── Shared year-range toggle (drives both the drill-down below and the heatmap) ──
-    hm_yr = st.slider("Year range for heatmap / drill-down", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_mom_hm_yr")
-    range_start, range_end = pd.Timestamp(f"{hm_yr[0]}-01-01"), pd.Timestamp(f"{hm_yr[1]}-12-31")
-    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
-    f1r_scoped = f1r[range_mask]
-    f1c_scoped = f1c.reindex(f1r_scoped.index)
-
-    # ── Drill-down: analyze one specific MA pair, scoped to the year range above ──
-    st.markdown("**Analyze a Specific MA Pair (scoped to the year range above)**")
-    st.caption("Pick any Fast/Slow pair -- same MA crossover math as the heatmap below, computed only "
-               "over the selected year range (identical scoping to the heatmap itself, so the Sharpe here "
-               "lines up with that pair's heatmap cell).")
-    dcol1, dcol2, _ = st.columns([1, 1, 2])
-    with dcol1:
-        df_fast = st.number_input("Fast", min_value=1, max_value=heatmap_max_window, value=1,
-                                   key=f"{key_prefix}_mom_drill_fast")
-    with dcol2:
-        df_slow = st.number_input("Slow", min_value=2, max_value=heatmap_max_window, value=20,
-                                   key=f"{key_prefix}_mom_drill_slow")
-    if df_slow <= df_fast:
-        st.warning("Slow MA must be greater than Fast MA.")
-    elif len(f1r_scoped) < df_slow + 20:
-        st.info("Not enough data in the selected year range for this pair.")
-    else:
-        drill_label = f"MA({int(df_fast)},{int(df_slow)}) [{hm_yr[0]}-{hm_yr[1]}]"
-        _render_multi_strategy_block(
-            {drill_label: ma_crossover_position(f1r_scoped, int(df_fast), int(df_slow), shift_n=shift_n)},
-            f1r_scoped, f1c_scoped, tc_bps, key_prefix + "_mom_drill", unit_label,
-        )
-
-    st.divider()
-
-    # ── Heatmap with year-range toggle ──────────────────────────────────────
-    st.markdown(f"**Sharpe Heatmap — Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
-    st.caption("Scroll/drag to zoom into any region, double-click to reset. Every integer "
-               f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
-    hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
-                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n, tc_bps)
-    if not hm_df.empty and hm_df["sharpe"].notna().any():
-        pivot = hm_df.pivot(index="fast", columns="slow", values="sharpe")
-        fig_hm = go.Figure(data=go.Heatmap(
-            z=pivot.values, x=pivot.columns, y=pivot.index,
-            colorscale="RdYlGn", zmid=0, colorbar=dict(title="Sharpe"),
-            hovertemplate="Fast MA: %{y}<br>Slow MA: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
-        ))
-        fig_hm.update_layout(**CHART_LAYOUT, height=560, dragmode="zoom",
-                              title=dict(text=f"{product} — Sharpe by MA Crossover", font=dict(size=13)),
-                              xaxis_title="Slow MA", yaxis_title="Fast MA")
-        fig_hm.update_xaxes(rangeslider=dict(visible=False))
-        st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_mom_hm",
-                         config={"scrollZoom": True})
-        best = hm_df.loc[hm_df["sharpe"].idxmax()]
-        st.caption(f"Best in range {hm_yr[0]}-{hm_yr[1]}: MA({int(best['fast'])},{int(best['slow'])}) "
-                   f"gross Sharpe {best['sharpe']:+.2f}.")
-    else:
-        st.info("Not enough data in the selected year range to compute a heatmap.")
-
-    st.divider()
-
-    # ── Strategy selection: 3 default benchmarks + custom ───────────────────
+    # ── Strategy selection: 3 default benchmarks + custom (full history) ────
     st.markdown("**Strategies to Compare**")
     default_pairs = [(1, 20), (5, 60), (20, 250)]
     ss_key = f"{key_prefix}_mom_active"
@@ -295,12 +236,70 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
 
     if not chosen:
         st.info("Select at least one strategy above.")
-        return
+    else:
+        _render_multi_strategy_block(
+            {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen},
+            f1r, f1c, tc_bps, key_prefix + "_mom", unit_label,
+        )
 
-    _render_multi_strategy_block(
-        {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen},
-        f1r, f1c, tc_bps, key_prefix + "_mom", unit_label,
-    )
+    st.divider()
+
+    # ── Heatmap with year-range toggle ──────────────────────────────────────
+    st.markdown(f"**Sharpe Heatmap — Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
+    st.caption("Scroll/drag to zoom into any region, double-click to reset. Every integer "
+               f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
+    hm_yr = st.slider("Year range for heatmap / drill-down", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_mom_hm_yr")
+    hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
+                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n, tc_bps)
+    if not hm_df.empty and hm_df["sharpe"].notna().any():
+        pivot = hm_df.pivot(index="fast", columns="slow", values="sharpe")
+        fig_hm = go.Figure(data=go.Heatmap(
+            z=pivot.values, x=pivot.columns, y=pivot.index,
+            colorscale="RdYlGn", zmid=0, colorbar=dict(title="Sharpe"),
+            hovertemplate="Fast MA: %{y}<br>Slow MA: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
+        ))
+        fig_hm.update_layout(**CHART_LAYOUT, height=560, dragmode="zoom",
+                              title=dict(text=f"{product} — Sharpe by MA Crossover", font=dict(size=13)),
+                              xaxis_title="Slow MA", yaxis_title="Fast MA")
+        fig_hm.update_xaxes(rangeslider=dict(visible=False))
+        st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_mom_hm",
+                         config={"scrollZoom": True})
+        best = hm_df.loc[hm_df["sharpe"].idxmax()]
+        st.caption(f"Best in range {hm_yr[0]}-{hm_yr[1]}: MA({int(best['fast'])},{int(best['slow'])}) "
+                   f"gross Sharpe {best['sharpe']:+.2f}.")
+    else:
+        st.info("Not enough data in the selected year range to compute a heatmap.")
+
+    st.divider()
+
+    # ── Drill-down: analyze one specific MA pair, scoped to the heatmap's year range ──
+    range_start, range_end = pd.Timestamp(f"{hm_yr[0]}-01-01"), pd.Timestamp(f"{hm_yr[1]}-12-31")
+    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
+    f1r_scoped = f1r[range_mask]
+    f1c_scoped = f1c.reindex(f1r_scoped.index)
+
+    st.markdown("**Drill-Down: Analyze a Specific MA Pair (scoped to the heatmap's year range)**")
+    st.caption("Pick any Fast/Slow pair to inspect a single heatmap cell in detail -- same MA crossover "
+               "math as the heatmap above, computed only over its year range, so the Sharpe here lines up "
+               "exactly with that pair's heatmap cell. This is a single-pair view, separate from the "
+               "multi-strategy comparison above.")
+    dcol1, dcol2, _ = st.columns([1, 1, 2])
+    with dcol1:
+        df_fast = st.number_input("Fast", min_value=1, max_value=heatmap_max_window, value=1,
+                                   key=f"{key_prefix}_mom_drill_fast")
+    with dcol2:
+        df_slow = st.number_input("Slow", min_value=2, max_value=heatmap_max_window, value=20,
+                                   key=f"{key_prefix}_mom_drill_slow")
+    if df_slow <= df_fast:
+        st.warning("Slow MA must be greater than Fast MA.")
+    elif len(f1r_scoped) < df_slow + 20:
+        st.info("Not enough data in the selected year range for this pair.")
+    else:
+        drill_label = f"MA({int(df_fast)},{int(df_slow)}) [{hm_yr[0]}-{hm_yr[1]}]"
+        _render_multi_strategy_block(
+            {drill_label: ma_crossover_position(f1r_scoped, int(df_fast), int(df_slow), shift_n=shift_n)},
+            f1r_scoped, f1c_scoped, tc_bps, key_prefix + "_mom_drill", unit_label,
+        )
 
 
 # ═══════════════════════════════════════════════════════════════

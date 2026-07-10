@@ -43,7 +43,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic, section_header, tc_label_map, metric_card
+from common_shared import (CHART_LAYOUT, COLORS, pos_metrics_generic, section_header, tc_label_map,
+                            metric_card, transaction_cost)
 
 _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
                    "#A78BFA", "#F472B6", "#22D3EE", "#FB923C", "#60A5FA"]
@@ -53,17 +54,16 @@ _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
 # GENERIC RETURN / EQUITY / ROLLING-SHARPE HELPERS
 # ═══════════════════════════════════════════════════════════════
 
-def daily_returns(pos: pd.Series, f1r: pd.Series, f1c: pd.Series, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+def daily_returns(pos: pd.Series, f1r: pd.Series, f1c: pd.Series, tc_bps: int,
+                   phase: pd.Series | None = None) -> tuple[pd.Series, pd.Series]:
     """Gross and net daily $PnL (native unit, e.g. USD/MT) for a position series.
     Dollar terms, not %-of-notional -- %-of-notional requires dividing by
     F1_continuous[t-1], which can be zero/negative (confirmed for Aluminium, WTI,
-    Nat Gas, Fuel Oil), silently flipping return signs or inflating magnitudes."""
+    Nat Gas, Fuel Oil), silently flipping return signs or inflating magnitudes.
+    Pass `phase` to also charge roll-day TC (see common_shared.transaction_cost())."""
     pos = pos.reindex(f1c.index).fillna(0.0)
     gp = pos * f1c.diff()
-    chg = pos.diff().abs()
-    if len(chg):
-        chg.iloc[0] = abs(pos.iloc[0])
-    tc = chg * (tc_bps / 10000.0 / 2.0) * f1r.reindex(f1c.index)
+    tc = transaction_cost(pos, f1r, tc_bps, phase)
     net = gp - tc
     return gp, net
 
@@ -180,9 +180,10 @@ def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
 
 
 def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label: str,
-                         key_prefix: str, heatmap_max_window: int = 250):
+                         key_prefix: str, heatmap_max_window: int = 250, phase: pd.Series | None = None):
     """Momentum tab: heatmap w/ year-range toggle, 3 default benchmark MAs + custom MA,
-    multi-strategy equity curve, rolling Sharpe, performance metrics, TC filter."""
+    multi-strategy equity curve, rolling Sharpe, performance metrics, TC filter.
+    `phase` (if passed) adds roll-day TC on top of position-change TC."""
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
 
     section_header(f"MOMENTUM — {product}")
@@ -202,7 +203,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
                        "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
                        "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
 
-    # ── Strategy selection: 3 default benchmarks + custom (full history) ────
+    # ── Strategies to Compare: 3 default benchmarks + custom (selection UI only) ──
     st.markdown("**Strategies to Compare**")
     default_pairs = [(1, 20), (5, 60), (20, 250)]
     ss_key = f"{key_prefix}_mom_active"
@@ -228,30 +229,58 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
 
     active = st.session_state[ss_key]
     chosen = st.multiselect(
-        "Active strategies (equity curve / rolling Sharpe / metrics below)",
+        "Active strategies (performance metrics / equity curve / rolling Sharpe below)",
         options=active, default=active,
         format_func=lambda p: f"MA({p[0]},{p[1]})",
         key=f"{key_prefix}_mom_multiselect",
     )
 
+    st.divider()
+
+    # ── Year-range slider: shared by Performance Metrics (below) and the heatmap ──
+    hm_yr = st.slider("Year range for performance metrics / heatmap", yr0, yr1, (yr0, yr1),
+                       key=f"{key_prefix}_mom_hm_yr")
+    range_start, range_end = pd.Timestamp(f"{hm_yr[0]}-01-01"), pd.Timestamp(f"{hm_yr[1]}-12-31")
+    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
+    f1r_scoped = f1r[range_mask]
+    f1c_scoped = f1c.reindex(f1r_scoped.index)
+    phase_scoped = phase.reindex(f1r_scoped.index) if phase is not None else None
+
+    # ── Performance Metrics: ONE featured strategy from the active list above,
+    # scoped to the year range above -- recomputes when either changes. ──────
+    st.markdown("**Performance Metrics**")
     if not chosen:
-        st.info("Select at least one strategy above.")
+        st.info("Select at least one strategy above to see its performance metrics.")
     else:
-        # show_charts=False: equity curve / rolling Sharpe / signal & position
-        # for a specific strategy are already covered by the drill-down below
-        # the heatmap -- showing them again here would just duplicate it.
-        _render_multi_strategy_block(
-            {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen},
-            f1r, f1c, tc_bps, key_prefix + "_mom", unit_label, show_charts=False,
+        default_feature = (1, 20) if (1, 20) in chosen else chosen[0]
+        feature_pair = st.selectbox(
+            "Strategy to feature", options=chosen, index=chosen.index(default_feature),
+            format_func=lambda p: f"MA({p[0]},{p[1]})", key=f"{key_prefix}_mom_feature",
         )
+        f_fast, f_slow = feature_pair
+        if len(f1r_scoped) < f_slow + 20:
+            st.info("Not enough data in the selected year range for this pair.")
+        else:
+            feature_pos = ma_crossover_position(f1r_scoped, f_fast, f_slow, shift_n=shift_n)
+            m = pos_metrics_generic(feature_pos, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1:
+                metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
+            with c2:
+                metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
+            with c3:
+                metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+            with c4:
+                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+            with c5:
+                metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
 
     st.divider()
 
-    # ── Heatmap with year-range toggle ──────────────────────────────────────
+    # ── Heatmap (uses the same year-range slider) ────────────────────────────
     st.markdown(f"**Sharpe Heatmap — Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
     st.caption("Scroll/drag to zoom into any region, double-click to reset. Every integer "
                f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
-    hm_yr = st.slider("Year range for heatmap / drill-down", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_mom_hm_yr")
     hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
                               f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n, tc_bps)
     if not hm_df.empty and hm_df["sharpe"].notna().any():
@@ -273,35 +302,16 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     else:
         st.info("Not enough data in the selected year range to compute a heatmap.")
 
-    st.divider()
-
-    # ── Drill-down: analyze one specific MA pair, scoped to the heatmap's year range ──
-    range_start, range_end = pd.Timestamp(f"{hm_yr[0]}-01-01"), pd.Timestamp(f"{hm_yr[1]}-12-31")
-    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
-    f1r_scoped = f1r[range_mask]
-    f1c_scoped = f1c.reindex(f1r_scoped.index)
-
-    st.markdown("**Drill-Down: Analyze a Specific MA Pair (scoped to the heatmap's year range)**")
-    st.caption("Pick any Fast/Slow pair to inspect a single heatmap cell in detail -- same MA crossover "
-               "math as the heatmap above, computed only over its year range, so the Sharpe here lines up "
-               "exactly with that pair's heatmap cell. This is a single-pair view, separate from the "
-               "multi-strategy comparison above.")
-    dcol1, dcol2, _ = st.columns([1, 1, 2])
-    with dcol1:
-        df_fast = st.number_input("Fast", min_value=1, max_value=heatmap_max_window, value=1,
-                                   key=f"{key_prefix}_mom_drill_fast")
-    with dcol2:
-        df_slow = st.number_input("Slow", min_value=2, max_value=heatmap_max_window, value=20,
-                                   key=f"{key_prefix}_mom_drill_slow")
-    if df_slow <= df_fast:
-        st.warning("Slow MA must be greater than Fast MA.")
-    elif len(f1r_scoped) < df_slow + 20:
-        st.info("Not enough data in the selected year range for this pair.")
+    # ── Cumulative PnL / Rolling Sharpe / Signal & Position: every active
+    # strategy overlaid simultaneously, full history. show_metrics=False since
+    # Performance Metrics is already shown (featured strategy) above. ────────
+    if not chosen:
+        st.divider()
+        st.info("Select at least one strategy above to see its equity curve.")
     else:
-        drill_label = f"MA({int(df_fast)},{int(df_slow)}) [{hm_yr[0]}-{hm_yr[1]}]"
         _render_multi_strategy_block(
-            {drill_label: ma_crossover_position(f1r_scoped, int(df_fast), int(df_slow), shift_n=shift_n)},
-            f1r_scoped, f1c_scoped, tc_bps, key_prefix + "_mom_drill", unit_label,
+            {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen},
+            f1r, f1c, tc_bps, key_prefix + "_mom", unit_label, show_metrics=False, phase=phase,
         )
 
 
@@ -343,9 +353,11 @@ def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1) 
 
 
 def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
-                      unit_label: str, key_prefix: str, tenor_pairs: list[tuple[str, str]] | None = None):
+                      unit_label: str, key_prefix: str, tenor_pairs: list[tuple[str, str]] | None = None,
+                      phase: pd.Series | None = None):
     """Carry tab: V1-V4 sub-variant selector, equity curve compare, rolling Sharpe,
-    signal + position chart, performance metrics, TC filter."""
+    signal + position chart, performance metrics, TC filter.
+    `phase` (if passed) adds roll-day TC on top of position-change TC."""
     section_header(f"CARRY — {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. "
                "V1 Roll Yield, V2 Long Slope, V3 Z-score, V4 Carry-Momentum. Stage 2 scope.")
@@ -427,7 +439,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     positions = {label: _build_position(label) for label in chosen}
     positions = {k: v for k, v in positions.items() if not v.empty}
 
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car", unit_label)
+    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car", unit_label, phase=phase)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -449,9 +461,11 @@ def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, thresho
 
 
 def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
-                      unit_label: str, key_prefix: str, contracts: list[str] | None = None):
+                      unit_label: str, key_prefix: str, contracts: list[str] | None = None,
+                      phase: pd.Series | None = None):
     """Value tab: V1 MA-reversion only, equity curve compare, rolling Sharpe,
-    performance metrics, TC filter."""
+    performance metrics, TC filter.
+    `phase` (if passed) adds roll-day TC on top of position-change TC."""
     section_header(f"VALUE — {product}")
     st.caption("MA-reversion: deviation = (Fk − MA_N)/MA_N. +1 if cheap (< −T), −1 if expensive (> +T), "
                "0 otherwise. Stage 2 scope: V1 MA-reversion only, no Baz-Granger reversal.")
@@ -514,7 +528,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     }
     positions = {k: v for k, v in positions.items() if not v.empty}
 
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_val", unit_label)
+    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_val", unit_label, phase=phase)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -527,11 +541,15 @@ def _fmt_metric(x, fmt: str) -> str:
 
 def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
                                   tc_bps: int, key_prefix: str, unit_label: str = "/unit",
-                                  show_charts: bool = True):
+                                  show_charts: bool = True, show_metrics: bool = True,
+                                  phase: pd.Series | None = None):
     """show_charts=False renders ONLY the Performance Metrics section (no
-    equity curve / rolling Sharpe / signal & position) -- for call sites that
-    already have a dedicated single-strategy drill-down elsewhere on the same
-    page, so the same chart trio isn't shown twice."""
+    equity curve / rolling Sharpe / signal & position). show_metrics=False
+    renders ONLY the charts (no Performance Metrics) -- for call sites that
+    already show a Performance Metrics card/table for this same set of
+    strategies elsewhere on the page, so it isn't shown twice. Pass `phase`
+    so TC also charges for rolling a held position forward (see
+    common_shared.transaction_cost())."""
     if not positions:
         st.info("No valid strategies to display.")
         return
@@ -545,50 +563,52 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     pnl_cache = {}
     metrics_by_label = {}
     for label, pos in positions.items():
-        gross_pnl, net_pnl = daily_returns(pos, f1r, f1c, tc_bps)
+        gross_pnl, net_pnl = daily_returns(pos, f1r, f1c, tc_bps, phase)
         pnl_cache[label] = (gross_pnl, net_pnl)
-        metrics_by_label[label] = pos_metrics_generic(pos, f1r, f1c, tc_bps)
+        metrics_by_label[label] = pos_metrics_generic(pos, f1r, f1c, tc_bps, phase)
 
     # ── Performance Metrics ───────────────────────────────────────────────
     # Single strategy -> cards (spacious, nothing to compare against).
     # Multiple strategies -> one compact row per strategy in a small table,
     # so comparing several active strategies doesn't take a full card-row
     # each -- scales to however many strategies are actually selected.
-    st.markdown("**Performance Metrics**")
-    if len(metrics_by_label) == 1:
-        label, m = next(iter(metrics_by_label.items()))
-        c1, c2, c3, c4, c5 = st.columns(5)
-        with c1:
-            metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
-        with c2:
-            metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
-        with c3:
-            metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
-        with c4:
-            metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
-        with c5:
-            metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
-    else:
-        table_rows = [{
-            "Strategy": label,
-            "Gross Sharpe": m["gross"], "Net Sharpe": m["net"],
-            f"Ann PnL Net ({unit_label})": m["ann"], f"Max DD Net ({unit_label})": m["mdd"],
-            "% Flat": m["flat_pct"],
-        } for label, m in metrics_by_label.items()]
-        mdf = pd.DataFrame(table_rows).set_index("Strategy")
-        st.dataframe(
-            mdf.style.format({
-                "Gross Sharpe": "{:+.2f}", "Net Sharpe": "{:+.2f}",
-                f"Ann PnL Net ({unit_label})": "{:+,.2f}", f"Max DD Net ({unit_label})": "{:+,.2f}",
-                "% Flat": "{:.0f}",
-            }),
-            use_container_width=True,
-        )
+    if show_metrics:
+        st.markdown("**Performance Metrics**")
+        if len(metrics_by_label) == 1:
+            label, m = next(iter(metrics_by_label.items()))
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1:
+                metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
+            with c2:
+                metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
+            with c3:
+                metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+            with c4:
+                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+            with c5:
+                metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+        else:
+            table_rows = [{
+                "Strategy": label,
+                "Gross Sharpe": m["gross"], "Net Sharpe": m["net"],
+                f"Ann PnL Net ({unit_label})": m["ann"], f"Max DD Net ({unit_label})": m["mdd"],
+                "% Flat": m["flat_pct"],
+            } for label, m in metrics_by_label.items()]
+            mdf = pd.DataFrame(table_rows).set_index("Strategy")
+            st.dataframe(
+                mdf.style.format({
+                    "Gross Sharpe": "{:+.2f}", "Net Sharpe": "{:+.2f}",
+                    f"Ann PnL Net ({unit_label})": "{:+,.2f}", f"Max DD Net ({unit_label})": "{:+,.2f}",
+                    "% Flat": "{:.0f}",
+                }),
+                use_container_width=True,
+            )
 
     if not show_charts:
         return
 
-    st.divider()
+    if show_metrics:
+        st.divider()
 
     # ── Cumulative PnL (Equity Curve) ────────────────────────────────────────
     st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")

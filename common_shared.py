@@ -294,7 +294,39 @@ def exec_shift(sigbin, shift_n):
     return sigbin.shift(shift_n + 1)
 
 
-def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5) -> dict:
+def transaction_cost(pos, f1r, tc_bps: int, phase=None):
+    """Shared TC convention, used by pos_metrics_generic() and daily_returns():
+    tc[t] = |position[t]-position[t-1]| * (tc_bps/10000/2) * F1_raw[t], first
+    day's TC based on the position's absolute size (a flip from flat).
+
+    PLUS a roll-day charge: rolling a futures position forward (selling the
+    expiring contract, buying the next one) is a REAL trade even when the
+    strategy's directional position doesn't change across the roll -- e.g.
+    staying long through a roll still means exiting the old contract and
+    re-entering the new one. Without this, holding a constant position
+    through every roll cycle would look free. Charged only on the actual
+    roll day (Phase == "Roll_LTD-N"), only for the exposure that's the SAME
+    sign before and after (nothing to re-establish if flat or flipping,
+    since the ordinary position-change cost above already covers a fresh
+    entry/exit that day) -- positions here are always -1/0/+1, so this is a
+    simple same-sign-and-nonzero indicator, not a magnitude calculation."""
+    pos = pos.reindex(f1r.index).fillna(0.0)
+    chg = pos.diff().abs()
+    if len(chg):
+        chg.iloc[0] = abs(pos.iloc[0])
+    tc = chg * (tc_bps / 10000.0 / 2.0) * f1r.reindex(pos.index)
+
+    if phase is not None:
+        phase = phase.reindex(pos.index)
+        is_roll_day = phase.astype(str).str.startswith("Roll_LTD")
+        prev_pos = pos.shift(1)
+        held_through_roll = is_roll_day & (pos != 0) & (prev_pos != 0) & (np.sign(pos) == np.sign(prev_pos))
+        tc = tc + held_through_roll.astype(float) * (tc_bps / 10000.0 / 2.0) * f1r.reindex(pos.index)
+
+    return tc
+
+
+def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
     """Active-day gross/net Sharpe, annualized $PnL, max-DD ($) for a position series.
     PnL on F1_continuous; TC on F1_raw. All metrics in native dollar/unit terms (e.g.
     USD/MT, USD/bbl) -- NOT %-of-notional. %-of-notional was dropped because it requires
@@ -307,13 +339,11 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5) -> dict:
     `ann`/`mdd` are computed on NET (TC-adjusted) PnL, matching the equity
     curve chart these feed (explicitly labeled "Net of TC") -- both move when
     tc_bps changes, same as `net` Sharpe. `gross` Sharpe is kept as the
-    before-costs reference point."""
+    before-costs reference point. Pass `phase` to also charge roll-day TC
+    (see transaction_cost())."""
     pos = pos.reindex(f1c.index).fillna(0.0)
     gp = pos * f1c.diff()
-    chg = pos.diff().abs()
-    if len(chg):
-        chg.iloc[0] = abs(pos.iloc[0])
-    tc = chg * (tc_bps / 10000.0 / 2.0) * f1r.reindex(f1c.index)
+    tc = transaction_cost(pos, f1r, tc_bps, phase)
     net = gp - tc
 
     def _s(pnl):

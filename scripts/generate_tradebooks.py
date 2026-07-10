@@ -122,16 +122,39 @@ def exec_shift(sigbin: pd.Series, shift_n: int) -> pd.Series:
     return sigbin.shift(shift_n + 1)
 
 
-def _tc_columns(position: pd.Series, daily_pnl: pd.Series, f1r: pd.Series, tc_bps: int = TC_BPS_DEFAULT):
+def _tc_columns(position: pd.Series, daily_pnl: pd.Series, f1r: pd.Series, tc_bps: int = TC_BPS_DEFAULT,
+                 phase: pd.Series | None = None):
     """Shared TC convention across every builder AND compute_performance --
-    identical to common_shared.pos_metrics_generic(): tc[t] = |position[t] -
+    identical to common_shared.transaction_cost(): tc[t] = |position[t] -
     position[t-1]| * (tc_bps/10000/2) * F1_raw[t], first day's TC based on
-    the position's absolute size (a flip from flat). Returns (position_change,
-    tc_cost, daily_pnl_net, cum_pnl_net)."""
+    the position's absolute size (a flip from flat).
+
+    PLUS a roll-day charge when `phase` is passed: rolling a futures position
+    forward (selling the expiring contract, buying the next one) is a REAL
+    trade even when the strategy's directional position doesn't change
+    across the roll -- staying long through a roll still means exiting the
+    old contract and re-entering the new one, which would otherwise look
+    free. Charged only on the actual roll day (Phase == "Roll_LTD-N"), only
+    for exposure that's the SAME sign before and after (nothing to
+    re-establish if flat or flipping, since the ordinary position-change
+    cost already covers a fresh entry/exit that day) -- positions here are
+    always -1/0/+1, so this is a same-sign-and-nonzero indicator, not a
+    magnitude calculation. Returns (position_change, tc_cost, daily_pnl_net,
+    cum_pnl_net) -- position_change (the returned/displayed column) is the
+    pure directional change only; the roll charge is folded into tc_cost."""
     chg = position.diff().abs()
     if len(chg):
         chg.iloc[0] = abs(position.iloc[0])
-    tc_cost = chg * (tc_bps / 10000.0 / 2.0) * f1r.reindex(position.index)
+
+    chargeable_units = chg.copy()
+    if phase is not None:
+        phase = phase.reindex(position.index)
+        is_roll_day = phase.astype(str).str.startswith("Roll_LTD")
+        prev_pos = position.shift(1)
+        held_through_roll = is_roll_day & (position != 0) & (prev_pos != 0) & (np.sign(position) == np.sign(prev_pos))
+        chargeable_units = chargeable_units + held_through_roll.astype(float)
+
+    tc_cost = chargeable_units * (tc_bps / 10000.0 / 2.0) * f1r.reindex(position.index)
     daily_pnl_net = daily_pnl - tc_cost
     cum_pnl_net = daily_pnl_net.cumsum()
     return chg, tc_cost, daily_pnl_net, cum_pnl_net
@@ -153,7 +176,8 @@ def _consecutive(arr: np.ndarray, val: int) -> int:
 
 
 def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.Series, f1_raw: pd.Series,
-                         shift_n: int, unit_label: str, tc_bps: int = TC_BPS_DEFAULT) -> dict:
+                         shift_n: int, unit_label: str, tc_bps: int = TC_BPS_DEFAULT,
+                         phase: pd.Series | None = None) -> dict:
     """All return/risk metrics in native dollar/unit terms (e.g. USD/MT, USD/bbl),
     not %-of-notional. %-of-notional requires dividing by F1_continuous[t-1], an
     additively back-adjusted level with no floor at zero -- confirmed to go
@@ -164,15 +188,16 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
 
     Transaction costs: charged on POSITION CHANGES (not on notional), using
     F1_raw as the traded price -- identical convention to common_shared.
-    pos_metrics_generic(): tc[t] = |position[t]-position[t-1]| * (tc_bps/10000/2)
+    transaction_cost(): tc[t] = |position[t]-position[t-1]| * (tc_bps/10000/2)
     * F1_raw[t], with the first live day's TC based on the position's absolute
-    size (a flip from flat). Net PnL = Gross PnL - TC. Gross and Net
+    size (a flip from flat), PLUS a roll-day charge when `phase` is passed
+    (see _tc_columns()'s docstring). Net PnL = Gross PnL - TC. Gross and Net
     Sharpe/Sortino/MaxDD/Calmar are both reported at the top of the summary;
     every other stat (Hit Rate, Avg Win/Loss, Profit Factor, streaks) is
     computed on GROSS PnL, matching the tradebook's Daily_PnL column (Net PnL
     lives in the separate Daily_PnL_Net column)."""
     position = position.reindex(daily_pnl.index).fillna(0)
-    _, tc_cost, daily_pnl_net, _ = _tc_columns(position, daily_pnl, f1_raw, tc_bps)
+    _, tc_cost, daily_pnl_net, _ = _tc_columns(position, daily_pnl, f1_raw, tc_bps, phase)
 
     active_pnl = daily_pnl[position != 0].dropna()
     active_pnl_net = daily_pnl_net[position != 0].dropna()
@@ -278,7 +303,7 @@ def build_ma_tradebook(f1r: pd.Series, f1c: pd.Series, m: int, n: int, shift_n: 
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
-    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r, tc_bps)
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r, tc_bps, phase)
 
     cols = {
         "Date": f1r.index, "F1_raw": f1r.round(4).values,
@@ -316,7 +341,7 @@ def build_carry_v1_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
-    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps)
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps, phase)
 
     cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
     if f2r is not None:
@@ -356,7 +381,7 @@ def build_carry_v2_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
-    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps)
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps, phase)
 
     cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
     if f2r is not None:
@@ -389,7 +414,7 @@ def build_carry_v3_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
-    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps)
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps, phase)
 
     cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
     if f2r is not None:
@@ -424,7 +449,7 @@ def build_carry_v4_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
-    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps)
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps, phase)
 
     cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
     if f2r is not None:
@@ -459,7 +484,7 @@ def build_value_v1_tradebook(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series
     daily_pnl = position * delta
     cum_pnl = daily_pnl.cumsum()
     mtm = position * f1c
-    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps)
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r.reindex(f1c.index), tc_bps, phase)
 
     cols = {"Date": f1c.index, "F1_raw": f1r.reindex(f1c.index).round(4).values}
     if f2r is not None:
@@ -694,9 +719,21 @@ def write_manual_formula_sheet_ma(wb: Workbook, tb: pd.DataFrame, m: int, n: int
         row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
         # Daily_PnL
         row_vals.append(f'=IF(OR(J{r}="",K{r}=""),0,J{r}*K{r})')
-        # Position_Change / TC_Cost / Daily_PnL_Net
+        # Position_Change / TC_Cost / Daily_PnL_Net. TC_Cost adds a roll-day
+        # charge on top of the ordinary position-change charge: rolling a
+        # held position forward is a real trade even with no signal change,
+        # so if today is a roll day AND the position is the same sign
+        # (nonzero) before and after, one extra chargeable unit applies (see
+        # _tc_columns()'s docstring for the full rationale). i==0 has no
+        # prior row to compare against, so it can never be a roll-through.
         row_vals.append(f"=ABS(J{r})" if i == 0 else f"=ABS(J{r}-J{r-1})")
-        row_vals.append(f"=M{r}*({tc_bps}/10000/2)*B{r}")
+        if i == 0:
+            row_vals.append(f"=M{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(M{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",J{r}<>0,J{r-1}<>0,SIGN(J{r})=SIGN(J{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
         row_vals.append(f"=L{r}-N{r}")
         # MTM
         row_vals.append(f"=J{r}*E{r}")
@@ -997,9 +1034,16 @@ def write_manual_formula_sheet_carry_v1(wb: Workbook, tb: pd.DataFrame, shift_n:
         row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
         # Daily_PnL
         row_vals.append(f'=IF(OR(H{r}="",I{r}=""),0,H{r}*I{r})')
-        # Position_Change / TC_Cost / Daily_PnL_Net
+        # Position_Change / TC_Cost / Daily_PnL_Net (TC_Cost includes the
+        # roll-day charge -- see MA sheet's comment for the full rationale)
         row_vals.append(f"=ABS(H{r})" if i == 0 else f"=ABS(H{r}-H{r-1})")
-        row_vals.append(f"=K{r}*({tc_bps}/10000/2)*B{r}")
+        if i == 0:
+            row_vals.append(f"=K{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(K{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",H{r}<>0,H{r-1}<>0,SIGN(H{r})=SIGN(H{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
         row_vals.append(f"=J{r}-L{r}")
         # MTM
         row_vals.append(f"=H{r}*E{r}")
@@ -1073,9 +1117,16 @@ def write_manual_formula_sheet_carry_v2(wb: Workbook, tb: pd.DataFrame, shift_n:
         row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
         # Daily_PnL
         row_vals.append(f'=IF(OR(J{r}="",K{r}=""),0,J{r}*K{r})')
-        # Position_Change / TC_Cost / Daily_PnL_Net
+        # Position_Change / TC_Cost / Daily_PnL_Net (TC_Cost includes the
+        # roll-day charge -- see MA sheet's comment for the full rationale)
         row_vals.append(f"=ABS(J{r})" if i == 0 else f"=ABS(J{r}-J{r-1})")
-        row_vals.append(f"=M{r}*({tc_bps}/10000/2)*B{r}")
+        if i == 0:
+            row_vals.append(f"=M{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(M{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",J{r}<>0,J{r-1}<>0,SIGN(J{r})=SIGN(J{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
         row_vals.append(f"=L{r}-N{r}")
         # MTM
         row_vals.append(f"=J{r}*E{r}")
@@ -1152,9 +1203,16 @@ def write_manual_formula_sheet_carry_v3(wb: Workbook, tb: pd.DataFrame, shift_n:
         row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
         # Daily_PnL
         row_vals.append(f'=IF(OR(I{r}="",J{r}=""),0,I{r}*J{r})')
-        # Position_Change / TC_Cost / Daily_PnL_Net
+        # Position_Change / TC_Cost / Daily_PnL_Net (TC_Cost includes the
+        # roll-day charge -- see MA sheet's comment for the full rationale)
         row_vals.append(f"=ABS(I{r})" if i == 0 else f"=ABS(I{r}-I{r-1})")
-        row_vals.append(f"=L{r}*({tc_bps}/10000/2)*B{r}")
+        if i == 0:
+            row_vals.append(f"=L{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(L{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",I{r}<>0,I{r-1}<>0,SIGN(I{r})=SIGN(I{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
         row_vals.append(f"=K{r}-M{r}")
         # MTM
         row_vals.append(f"=I{r}*E{r}")
@@ -1226,9 +1284,16 @@ def write_manual_formula_sheet_carry_v4(wb: Workbook, tb: pd.DataFrame, shift_n:
         row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
         # Daily_PnL
         row_vals.append(f'=IF(OR(I{r}="",J{r}=""),0,I{r}*J{r})')
-        # Position_Change / TC_Cost / Daily_PnL_Net
+        # Position_Change / TC_Cost / Daily_PnL_Net (TC_Cost includes the
+        # roll-day charge -- see MA sheet's comment for the full rationale)
         row_vals.append(f"=ABS(I{r})" if i == 0 else f"=ABS(I{r}-I{r-1})")
-        row_vals.append(f"=L{r}*({tc_bps}/10000/2)*B{r}")
+        if i == 0:
+            row_vals.append(f"=L{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(L{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",I{r}<>0,I{r-1}<>0,SIGN(I{r})=SIGN(I{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
         row_vals.append(f"=K{r}-M{r}")
         # MTM
         row_vals.append(f"=I{r}*E{r}")
@@ -1322,9 +1387,16 @@ def write_manual_formula_sheet_value_v1(wb: Workbook, tb: pd.DataFrame, shift_n:
         row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
         # Daily_PnL
         row_vals.append(f'=IF(OR(J{r}="",K{r}=""),0,J{r}*K{r})')
-        # Position_Change / TC_Cost / Daily_PnL_Net
+        # Position_Change / TC_Cost / Daily_PnL_Net (TC_Cost includes the
+        # roll-day charge -- see MA sheet's comment for the full rationale)
         row_vals.append(f"=ABS(J{r})" if i == 0 else f"=ABS(J{r}-J{r-1})")
-        row_vals.append(f"=M{r}*({tc_bps}/10000/2)*B{r}")
+        if i == 0:
+            row_vals.append(f"=M{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(M{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",J{r}<>0,J{r-1}<>0,SIGN(J{r})=SIGN(J{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
         row_vals.append(f"=L{r}-N{r}")
         # MTM
         row_vals.append(f"=J{r}*E{r}")
@@ -1366,7 +1438,8 @@ def save_momentum_tradebook_excel(f1r: pd.Series, f1c: pd.Series, f2r: pd.Series
         pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
         pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
         f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
-        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps)
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
         met["EXCEL RECONCILIATION"] = _reconcile_ma(tb, m, n, shift_n)
         _write_xl_sheet(wb, tb, met, f"{label} Python")
         write_manual_formula_sheet_ma(wb, tb, m, n, shift_n, f"{label} Formulas", tc_bps)
@@ -1387,7 +1460,8 @@ def save_carry_v1_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.S
         pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
         pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
         f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
-        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps)
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
         met["EXCEL RECONCILIATION"] = _reconcile_carry_v1(tb, shift_n)
         _write_xl_sheet(wb, tb, met, f"{label} Python")
         write_manual_formula_sheet_carry_v1(wb, tb, shift_n, f"{label} Formulas", tc_bps)
@@ -1409,7 +1483,8 @@ def save_carry_v2_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.S
         pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
         pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
         f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
-        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps)
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
         met["EXCEL RECONCILIATION"] = _reconcile_carry_v2(tb, shift_n, near, far)
         _write_xl_sheet(wb, tb, met, f"{label} Python")
         write_manual_formula_sheet_carry_v2(wb, tb, shift_n, near, far, f"{label} Formulas", tc_bps)
@@ -1430,7 +1505,8 @@ def save_carry_v3_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.S
         pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
         pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
         f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
-        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps)
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
         met["EXCEL RECONCILIATION"] = _reconcile_carry_v3(tb, shift_n, window)
         _write_xl_sheet(wb, tb, met, f"{label} Python")
         write_manual_formula_sheet_carry_v3(wb, tb, shift_n, window, f"{label} Formulas", tc_bps)
@@ -1451,7 +1527,8 @@ def save_carry_v4_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.S
         pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
         pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
         f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
-        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps)
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
         met["EXCEL RECONCILIATION"] = _reconcile_carry_v4(tb, shift_n, horizon)
         _write_xl_sheet(wb, tb, met, f"{label} Python")
         write_manual_formula_sheet_carry_v4(wb, tb, shift_n, horizon, f"{label} Formulas", tc_bps)
@@ -1472,7 +1549,8 @@ def save_value_v1_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.S
         pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
         pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
         f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
-        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps)
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
         met["EXCEL RECONCILIATION"] = _reconcile_value_v1(tb, contract, lookback, threshold, shift_n)
         _write_xl_sheet(wb, tb, met, f"{label} Python")
         write_manual_formula_sheet_value_v1(wb, tb, shift_n, contract, lookback, threshold, f"{label} Formulas", tc_bps)

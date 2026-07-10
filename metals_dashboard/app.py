@@ -75,6 +75,7 @@ if f1_df.empty:
     st.stop()
 f1_df = reanchor_f1_continuous(f1_df[f1_df.index.year >= 2006])
 f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
+phase = f1_df["Phase"]
 
 curve = load_curve_simple(CURVE_FILE, cfg["curve_sheet"])
 curve = curve[curve.index.year >= 2006]
@@ -86,11 +87,12 @@ st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
 tab_mom, tab_carry, tab_val = st.tabs(["⚡ Momentum", "📐 Carry", "📏 Value"])
 
 with tab_mom:
-    render_momentum_tab(f1r, f1c, metal, cfg["unit"], key_prefix=f"metals_{cfg['code']}")
+    render_momentum_tab(f1r, f1c, metal, cfg["unit"], key_prefix=f"metals_{cfg['code']}", phase=phase)
 
 with tab_carry:
-    render_carry_tab(curve, f1r, f1c, metal, cfg["unit"], key_prefix=f"metals_{cfg['code']}")
+    render_carry_tab(curve, f1r, f1c, metal, cfg["unit"], key_prefix=f"metals_{cfg['code']}", phase=phase)
 
 with tab_val:
     contracts = [c for c in curve.columns if c.startswith("F") and int(c[1:]) <= 15]
-    render_value_tab(curve, f1r, f1c, metal, cfg["unit"], key_prefix=f"metals_{cfg['code']}", contracts=contracts)
+    render_value_tab(curve, f1r, f1c, metal, cfg["unit"], key_prefix=f"metals_{cfg['code']}",
+                      contracts=contracts, phase=phase)

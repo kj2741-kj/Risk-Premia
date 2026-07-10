@@ -464,11 +464,15 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
 
-    # ── Cumulative PnL / Rolling Sharpe / Signal & Position: every strategy
-    # checked in "Active carry variants" above, overlaid simultaneously.
-    # show_metrics=False since Performance Metrics is already shown above. ───
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_car", unit_label,
-                                  show_metrics=False, phase=phase)
+    # ── Cumulative PnL and Rolling Sharpe each get their OWN independent
+    # strategy selector (defaulting to every active carry variant), so one
+    # chart can show a different subset of strategies than the other. ───────
+    st.divider()
+    _render_equity_curve_with_selector(positions, f1r, f1c, tc_bps, key_prefix + "_car", unit_label, phase=phase)
+    st.divider()
+    _render_rolling_sharpe_with_selector(positions, f1r, f1c, tc_bps, key_prefix + "_car", phase=phase)
+    st.divider()
+    _render_signal_position_section(positions, f1r, key_prefix + "_car")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -582,11 +586,15 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
 
-    # ── Cumulative PnL / Rolling Sharpe / Signal & Position: every strategy
-    # checked in "Active value variants" above, overlaid simultaneously.
-    # show_metrics=False since Performance Metrics is already shown above. ───
-    _render_multi_strategy_block(positions, f1r, f1c, tc_bps, key_prefix + "_val", unit_label,
-                                  show_metrics=False, phase=phase)
+    # ── Cumulative PnL and Rolling Sharpe each get their OWN independent
+    # strategy selector (defaulting to every active value variant), so one
+    # chart can show a different subset of strategies than the other. ───────
+    st.divider()
+    _render_equity_curve_with_selector(positions, f1r, f1c, tc_bps, key_prefix + "_val", unit_label, phase=phase)
+    st.divider()
+    _render_rolling_sharpe_with_selector(positions, f1r, f1c, tc_bps, key_prefix + "_val", phase=phase)
+    st.divider()
+    _render_signal_position_section(positions, f1r, key_prefix + "_val")
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -693,6 +701,65 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     # Signal & Position history -- user picks which active strategy to show
     # (the chart is inherently single-strategy: a price + long/short bar
     # panel), matching the Stage 1 Metals dashboard's two-panel style.
+    st.markdown("**Signal & Position History**")
+    focus_label = st.selectbox("Strategy to display", options=list(positions.keys()),
+                                key=f"{key_prefix}_sigpos_focus")
+    render_signal_position_chart(positions[focus_label], f1r, focus_label, key_prefix)
+
+
+def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
+                                        tc_bps: int, key_prefix: str, unit_label: str = "/unit",
+                                        phase: pd.Series | None = None):
+    """Cumulative PnL (equity curve) with its OWN strategy multiselect,
+    independent of whatever is chosen for the Rolling Sharpe chart."""
+    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
+    options = list(positions.keys())
+    chosen = st.multiselect("Strategies to show", options=options, default=options,
+                            key=f"{key_prefix}_equity_select")
+    if not chosen:
+        st.info("Select at least one strategy above.")
+        return
+
+    fig_eq = go.Figure()
+    for i, label in enumerate(chosen):
+        _, net_pnl = daily_returns(positions[label], f1r, f1c, tc_bps, phase)
+        eq = equity_curve(net_pnl)
+        fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
+                                     line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity_chart")
+
+
+def _render_rolling_sharpe_with_selector(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
+                                          tc_bps: int, key_prefix: str, phase: pd.Series | None = None):
+    """Rolling Sharpe (252-day) with its OWN strategy multiselect,
+    independent of whatever is chosen for the Cumulative PnL chart."""
+    st.markdown("**Rolling Sharpe (252-Day)**")
+    options = list(positions.keys())
+    chosen = st.multiselect("Strategies to show", options=options, default=options,
+                            key=f"{key_prefix}_rollsharpe_select")
+    if not chosen:
+        st.info("Select at least one strategy above.")
+        return
+
+    basis = st.radio("Basis", ["Gross", "Net of TC"], index=1, horizontal=True, key=f"{key_prefix}_rs_basis")
+    fig_rs = go.Figure()
+    for i, label in enumerate(chosen):
+        gross_pnl, net_pnl = daily_returns(positions[label], f1r, f1c, tc_bps, phase)
+        pnl = net_pnl if basis.startswith("Net") else gross_pnl
+        rs = rolling_sharpe(pnl, 252)
+        fig_rs.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=label,
+                                     line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.3)))
+    fig_rs.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
+    fig_rs.update_layout(**CHART_LAYOUT, height=320, yaxis_title="Rolling Sharpe")
+    st.plotly_chart(fig_rs, use_container_width=True, key=f"{key_prefix}_rollsharpe_chart")
+
+
+def _render_signal_position_section(positions: dict[str, pd.Series], f1r: pd.Series, key_prefix: str):
+    """Signal & Position history -- single-strategy view (a price + long/short
+    bar panel), so it keeps its own focus selector drawing from the full
+    active-strategy list, independent of the equity curve/rolling Sharpe
+    selectors above."""
     st.markdown("**Signal & Position History**")
     focus_label = st.selectbox("Strategy to display", options=list(positions.keys()),
                                 key=f"{key_prefix}_sigpos_focus")

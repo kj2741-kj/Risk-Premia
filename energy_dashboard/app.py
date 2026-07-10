@@ -27,7 +27,8 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
 from common_engine import render_momentum_tab, render_carry_tab, render_value_tab
-from rolling_continuous import get_metal_rolling_f1, ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE
+from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
+                                 ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 
 st.set_page_config(
@@ -80,7 +81,7 @@ else:
 if f1_df.empty:
     st.error(f"Could not build F1_continuous for {cfg['name']}.")
     st.stop()
-f1_df = f1_df[f1_df.index.year >= 2006]
+f1_df = reanchor_f1_continuous(f1_df[f1_df.index.year >= 2006])
 f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
 
 curve = load_curve_simple(ENERGY_FUTURES_FILE, cfg["price_sheet"])

@@ -202,11 +202,42 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
                        "can legitimately go live, since pairing it with Signal[t]'s own same-bar return would "
                        "be a look-ahead leak. Lag-1 adds one more day of delay (Signal[t-2]), Lag-2 adds two (Signal[t-3]).")
 
+    # ── Shared year-range toggle (drives both the drill-down below and the heatmap) ──
+    hm_yr = st.slider("Year range for heatmap / drill-down", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_mom_hm_yr")
+    range_start, range_end = pd.Timestamp(f"{hm_yr[0]}-01-01"), pd.Timestamp(f"{hm_yr[1]}-12-31")
+    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
+    f1r_scoped = f1r[range_mask]
+    f1c_scoped = f1c.reindex(f1r_scoped.index)
+
+    # ── Drill-down: analyze one specific MA pair, scoped to the year range above ──
+    st.markdown("**Analyze a Specific MA Pair (scoped to the year range above)**")
+    st.caption("Pick any Fast/Slow pair -- same MA crossover math as the heatmap below, computed only "
+               "over the selected year range (identical scoping to the heatmap itself, so the Sharpe here "
+               "lines up with that pair's heatmap cell).")
+    dcol1, dcol2, _ = st.columns([1, 1, 2])
+    with dcol1:
+        df_fast = st.number_input("Fast", min_value=1, max_value=heatmap_max_window, value=1,
+                                   key=f"{key_prefix}_mom_drill_fast")
+    with dcol2:
+        df_slow = st.number_input("Slow", min_value=2, max_value=heatmap_max_window, value=20,
+                                   key=f"{key_prefix}_mom_drill_slow")
+    if df_slow <= df_fast:
+        st.warning("Slow MA must be greater than Fast MA.")
+    elif len(f1r_scoped) < df_slow + 20:
+        st.info("Not enough data in the selected year range for this pair.")
+    else:
+        drill_label = f"MA({int(df_fast)},{int(df_slow)}) [{hm_yr[0]}-{hm_yr[1]}]"
+        _render_multi_strategy_block(
+            {drill_label: ma_crossover_position(f1r_scoped, int(df_fast), int(df_slow), shift_n=shift_n)},
+            f1r_scoped, f1c_scoped, tc_bps, key_prefix + "_mom_drill", unit_label,
+        )
+
+    st.divider()
+
     # ── Heatmap with year-range toggle ──────────────────────────────────────
     st.markdown(f"**Sharpe Heatmap — Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
     st.caption("Scroll/drag to zoom into any region, double-click to reset. Every integer "
                f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
-    hm_yr = st.slider("Year range for heatmap", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_mom_hm_yr")
     hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
                               f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n, tc_bps)
     if not hm_df.empty and hm_df["sharpe"].notna().any():
@@ -535,9 +566,12 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
         use_container_width=True,
     )
 
-    # Signal & Position history for the first active strategy, matching the
-    # Stage 1 Metals dashboard's two-panel price + long/short bar chart style.
-    focus_label = next(iter(positions))
+    # Signal & Position history -- user picks which active strategy to show
+    # (the chart is inherently single-strategy: a price + long/short bar
+    # panel), matching the Stage 1 Metals dashboard's two-panel style.
+    st.markdown("**Signal & Position History**")
+    focus_label = st.selectbox("Strategy to display", options=list(positions.keys()),
+                                key=f"{key_prefix}_sigpos_focus")
     render_signal_position_chart(positions[focus_label], f1r, focus_label, key_prefix)
 
 

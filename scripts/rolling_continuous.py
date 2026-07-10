@@ -629,6 +629,35 @@ def get_metal_rolling_f1(
     return result
 
 
+def reanchor_f1_continuous(f1_df: pd.DataFrame) -> pd.DataFrame:
+    """Re-anchors F1_continuous so its FIRST row equals F1_raw's first row.
+
+    build_rolling_f1() anchors F1_continuous to F1_raw on the first day of
+    the FULL underlying price history (which may start years before any
+    analysis window we actually use), then every subsequent value is a
+    running sum of day-over-day deltas. Once a caller slices the result to a
+    shorter analysis window (e.g. `f1_df[f1_df.index.year >= 2006]`), that
+    original anchor point is no longer the first visible row -- so
+    F1_continuous[first visible day] silently carries forward whatever net
+    roll-adjustment accumulated over ALL the sliced-off history before it,
+    and no longer equals F1_raw[first visible day].
+
+    This is purely a display/level convention -- PnL and Sharpe only ever
+    use day-over-day deltas (a constant shift cancels exactly in diff()), so
+    this has zero effect on any backtest result. It exists so the series is
+    anchored to the actual analysis window's first day (matching what the
+    manual Excel-formula tradebooks reconstruct from Phase+F1_raw+F2_raw,
+    which have no visibility into pre-window history and so anchor there by
+    construction) -- call this immediately after slicing a get_metal_rolling_f1
+    (or get_rolling_f1_5td) result to a start date, in every caller, so the
+    dashboard and the tradebook generator never show two different
+    F1_continuous levels for the same window."""
+    f1_df = f1_df.copy()
+    offset = f1_df["F1_continuous"].iloc[0] - f1_df["F1_raw"].iloc[0]
+    f1_df["F1_continuous"] = f1_df["F1_continuous"] - offset
+    return f1_df
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 5. Generate verification Excel files when run directly
 # ─────────────────────────────────────────────────────────────────────────────

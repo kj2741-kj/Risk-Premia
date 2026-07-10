@@ -237,9 +237,12 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     if not chosen:
         st.info("Select at least one strategy above.")
     else:
+        # show_charts=False: equity curve / rolling Sharpe / signal & position
+        # for a specific strategy are already covered by the drill-down below
+        # the heatmap -- showing them again here would just duplicate it.
         _render_multi_strategy_block(
             {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen},
-            f1r, f1c, tc_bps, key_prefix + "_mom", unit_label,
+            f1r, f1c, tc_bps, key_prefix + "_mom", unit_label, show_charts=False,
         )
 
     st.divider()
@@ -523,17 +526,22 @@ def _fmt_metric(x, fmt: str) -> str:
 
 
 def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
-                                  tc_bps: int, key_prefix: str, unit_label: str = "/unit"):
+                                  tc_bps: int, key_prefix: str, unit_label: str = "/unit",
+                                  show_charts: bool = True):
+    """show_charts=False renders ONLY the Performance Metrics section (no
+    equity curve / rolling Sharpe / signal & position) -- for call sites that
+    already have a dedicated single-strategy drill-down elsewhere on the same
+    page, so the same chart trio isn't shown twice."""
     if not positions:
         st.info("No valid strategies to display.")
         return
 
     st.divider()
 
-    # Compute once, up front -- every section below (cards, equity curve,
-    # rolling Sharpe, signal & position) reads from this same pass, so
-    # nothing is recomputed and nothing here is hardcoded to a fixed number
-    # of strategies: the loop just runs over whatever `positions` holds.
+    # Compute once, up front -- every section below reads from this same
+    # pass, so nothing is recomputed and nothing here is hardcoded to a
+    # fixed number of strategies: the loop just runs over whatever
+    # `positions` holds.
     pnl_cache = {}
     metrics_by_label = {}
     for label, pos in positions.items():
@@ -541,11 +549,14 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
         pnl_cache[label] = (gross_pnl, net_pnl)
         metrics_by_label[label] = pos_metrics_generic(pos, f1r, f1c, tc_bps)
 
-    # ── Performance Metrics (cards, one row per active strategy) ────────────
+    # ── Performance Metrics ───────────────────────────────────────────────
+    # Single strategy -> cards (spacious, nothing to compare against).
+    # Multiple strategies -> one compact row per strategy in a small table,
+    # so comparing several active strategies doesn't take a full card-row
+    # each -- scales to however many strategies are actually selected.
     st.markdown("**Performance Metrics**")
-    for label, m in metrics_by_label.items():
-        if len(positions) > 1:
-            st.caption(label)
+    if len(metrics_by_label) == 1:
+        label, m = next(iter(metrics_by_label.items()))
         c1, c2, c3, c4, c5 = st.columns(5)
         with c1:
             metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
@@ -557,6 +568,25 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
             metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
         with c5:
             metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+    else:
+        table_rows = [{
+            "Strategy": label,
+            "Gross Sharpe": m["gross"], "Net Sharpe": m["net"],
+            f"Ann PnL Net ({unit_label})": m["ann"], f"Max DD Net ({unit_label})": m["mdd"],
+            "% Flat": m["flat_pct"],
+        } for label, m in metrics_by_label.items()]
+        mdf = pd.DataFrame(table_rows).set_index("Strategy")
+        st.dataframe(
+            mdf.style.format({
+                "Gross Sharpe": "{:+.2f}", "Net Sharpe": "{:+.2f}",
+                f"Ann PnL Net ({unit_label})": "{:+,.2f}", f"Max DD Net ({unit_label})": "{:+,.2f}",
+                "% Flat": "{:.0f}",
+            }),
+            use_container_width=True,
+        )
+
+    if not show_charts:
+        return
 
     st.divider()
 

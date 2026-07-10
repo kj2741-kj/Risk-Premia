@@ -53,8 +53,8 @@ DASHBOARD_LINKS = {
                                 "(Original 10-tab Stage 1 dashboard: metals-risk-premia-kj.streamlit.app)"},
     "Energy":         {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
                         "desc": "WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil. Momentum, Carry, Value."},
-    "Precious Metals": {"url": None, "ready": False,
-                        "desc": "Gold, Silver, Copper (CME), Platinum, Palladium. Momentum, Carry, Value. Built — awaiting deployment."},
+    "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
+                        "desc": "Gold, Silver, Copper (CME), Platinum, Palladium. Momentum, Carry, Value."},
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
                         "desc": "Ethane, Propane, Butane, Isobutane, Ethylene, Propylene. Momentum, Carry, Value."},
 }

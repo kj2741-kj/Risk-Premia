@@ -428,21 +428,21 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         if label not in st.session_state[ss_key]:
             st.session_state[ss_key] = st.session_state[ss_key] + [label]
 
-    def _build_position(label: str) -> pd.Series:
+    def _build_position(label: str, crv: pd.DataFrame) -> pd.Series:
         if label.startswith("V1"):
             pair = label[label.index("(") + 1: label.index(")")]
             a, b = pair.split("-")
-            return carry_v1_position(curve, a, b, shift_n=shift_n)
+            return carry_v1_position(crv, a, b, shift_n=shift_n)
         if label.startswith("V2"):
             pair = label[label.index("(") + 1: label.index(")")]
             a, b = pair.split("-")
-            return carry_v2_position(curve, a, b, shift_n=shift_n)
+            return carry_v2_position(crv, a, b, shift_n=shift_n)
         if label.startswith("V3"):
             win = int(label.split("=")[1].rstrip(")"))
-            return carry_v3_position(curve, win, shift_n=shift_n)
+            return carry_v3_position(crv, win, shift_n=shift_n)
         if label.startswith("V4"):
             n = int(label.split("=")[1].rstrip(")"))
-            return carry_v4_position(curve, n, shift_n=shift_n)
+            return carry_v4_position(crv, n, shift_n=shift_n)
         return pd.Series(dtype=float)
 
     chosen = st.multiselect(
@@ -453,13 +453,28 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         st.info("Add at least one carry variant above.")
         return
 
-    positions = {label: _build_position(label) for label in chosen}
+    positions = {label: _build_position(label, curve) for label in chosen}
     positions = {k: v for k, v in positions.items() if not v.empty}
     if not positions:
         st.info("No valid data for the selected carry variant(s).")
         return
 
-    # ── Performance Metrics: ONE featured strategy from the active list above ──
+    # ── Year-range slider: scoped ONLY to Performance Metrics below -- the
+    # equity curve, rolling Sharpe, and signal/position charts further down
+    # keep using the full-history `positions` dict, unaffected by this. ─────
+    yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
+    car_yr = st.slider("Year range for performance metrics", yr0, yr1, (yr0, yr1),
+                        key=f"{key_prefix}_car_yr")
+    range_start, range_end = pd.Timestamp(f"{car_yr[0]}-01-01"), pd.Timestamp(f"{car_yr[1]}-12-31")
+    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
+    f1r_scoped = f1r[range_mask]
+    f1c_scoped = f1c.reindex(f1r_scoped.index)
+    phase_scoped = phase.reindex(f1r_scoped.index) if phase is not None else None
+    curve_scoped = curve[(curve.index >= range_start) & (curve.index <= range_end)]
+
+    # ── Performance Metrics: ONE featured strategy from the active list above,
+    # recomputed on the year-scoped curve above -- recomputes when either the
+    # feature choice or the year range changes. ──────────────────────────────
     st.markdown("**Performance Metrics**")
     feature_options = list(positions.keys())
     if default_feature_variant and default_feature_variant in feature_options:
@@ -470,7 +485,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         default_feature = feature_options[0]
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
                                   index=feature_options.index(default_feature), key=f"{key_prefix}_car_feature")
-    m = pos_metrics_generic(positions[feature_label], f1r, f1c, tc_bps, phase)
+    feature_pos_scoped = _build_position(feature_label, curve_scoped)
+    m = pos_metrics_generic(feature_pos_scoped, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
@@ -581,23 +597,41 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         st.info("Add at least one value variant above.")
         return
 
+    label_to_combo = {f"{c} {lb} ±{thr*100:.0f}%": (c, lb, thr) for c, lb, thr in chosen}
     positions = {
-        f"{c} {lb} ±{thr*100:.0f}%": value_v1_position(curve, c, lookback_map[lb], thr, shift_n=shift_n)
-        for c, lb, thr in chosen
+        label: value_v1_position(curve, c, lookback_map[lb], thr, shift_n=shift_n)
+        for label, (c, lb, thr) in label_to_combo.items()
     }
     positions = {k: v for k, v in positions.items() if not v.empty}
     if not positions:
         st.info("No valid data for the selected value variant(s).")
         return
 
-    # ── Performance Metrics: ONE featured strategy from the active list above ──
+    # ── Year-range slider: scoped ONLY to Performance Metrics below -- the
+    # equity curve, rolling Sharpe, and signal/position charts further down
+    # keep using the full-history `positions` dict, unaffected by this. ─────
+    yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
+    val_yr = st.slider("Year range for performance metrics", yr0, yr1, (yr0, yr1),
+                        key=f"{key_prefix}_val_yr")
+    range_start, range_end = pd.Timestamp(f"{val_yr[0]}-01-01"), pd.Timestamp(f"{val_yr[1]}-12-31")
+    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
+    f1r_scoped = f1r[range_mask]
+    f1c_scoped = f1c.reindex(f1r_scoped.index)
+    phase_scoped = phase.reindex(f1r_scoped.index) if phase is not None else None
+    curve_scoped = curve[(curve.index >= range_start) & (curve.index <= range_end)]
+
+    # ── Performance Metrics: ONE featured strategy from the active list above,
+    # recomputed on the year-scoped curve above -- recomputes when either the
+    # feature choice or the year range changes. ──────────────────────────────
     st.markdown("**Performance Metrics**")
     feature_options = list(positions.keys())
     default_label = f"{default_combo[0]} {default_combo[1]} ±{default_combo[2]*100:.0f}%"
     default_feature = default_label if default_label in feature_options else feature_options[0]
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
                                   index=feature_options.index(default_feature), key=f"{key_prefix}_val_feature")
-    m = pos_metrics_generic(positions[feature_label], f1r, f1c, tc_bps, phase)
+    v_c, v_lb, v_thr = label_to_combo[feature_label]
+    feature_pos_scoped = value_v1_position(curve_scoped, v_c, lookback_map[v_lb], v_thr, shift_n=shift_n)
+    m = pos_metrics_generic(feature_pos_scoped, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))

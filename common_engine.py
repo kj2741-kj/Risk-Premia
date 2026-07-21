@@ -790,6 +790,27 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     render_signal_position_chart(positions[focus_label], f1r, focus_label, key_prefix)
 
 
+def _sync_multiselect_new_options(key: str, options: list[str]) -> None:
+    """Keeps a persisted multiselect selection in sync with `options`: any
+    label not present the last time this ran (e.g. a variant just added via
+    the "Add a ... Variant" button above) is auto-selected, while labels the
+    user has deliberately deselected stay deselected. Must run BEFORE the
+    widget with this `key` is instantiated -- Streamlit widgets read their
+    value from session_state on creation and otherwise ignore `default`
+    once that key already exists, which is exactly why newly-added
+    strategies previously didn't show up without picking them again."""
+    prev_key = f"{key}__prev_options"
+    prev_options = st.session_state.get(prev_key, [])
+    stored = st.session_state.get(key)
+    if stored is None:
+        st.session_state[key] = list(options)
+    else:
+        newly_added = [o for o in options if o not in prev_options]
+        kept = [o for o in stored if o in options]
+        st.session_state[key] = kept + [o for o in newly_added if o not in kept]
+    st.session_state[prev_key] = list(options)
+
+
 def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
                                         tc_bps: int, key_prefix: str, unit_label: str = "/unit",
                                         phase: pd.Series | None = None):
@@ -797,7 +818,8 @@ def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.
     independent of whatever is chosen for the Rolling Sharpe chart."""
     st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
     options = list(positions.keys())
-    chosen = st.multiselect("Strategies to show", options=options, default=options,
+    _sync_multiselect_new_options(f"{key_prefix}_equity_select", options)
+    chosen = st.multiselect("Strategies to show", options=options,
                             key=f"{key_prefix}_equity_select")
     if not chosen:
         st.info("Select at least one strategy above.")
@@ -819,7 +841,8 @@ def _render_rolling_sharpe_with_selector(positions: dict[str, pd.Series], f1r: p
     independent of whatever is chosen for the Cumulative PnL chart."""
     st.markdown("**Rolling Sharpe (252-Day)**")
     options = list(positions.keys())
-    chosen = st.multiselect("Strategies to show", options=options, default=options,
+    _sync_multiselect_new_options(f"{key_prefix}_rollsharpe_select", options)
+    chosen = st.multiselect("Strategies to show", options=options,
                             key=f"{key_prefix}_rollsharpe_select")
     if not chosen:
         st.info("Select at least one strategy above.")

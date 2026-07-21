@@ -521,11 +521,19 @@ def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, thresho
     fk = curve[contract].dropna()
     if len(fk) < max(lookback // 2, 60):
         return pd.Series(dtype=float)
-    ma = fk.rolling(lookback, min_periods=max(lookback // 2, 60)).mean()
+    ma = fk.rolling(lookback, min_periods=max(lookback // 2, min(lookback, 60))).mean()
     dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan).dropna()
     sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                      index=dev.index)
     return exec_shift(sig, shift_n).fillna(0)
+
+
+def _resolve_lookback_days(lb_label: str, lookback_map: dict[str, int]) -> int:
+    """Preset labels (e.g. '5yr') resolve via lookback_map; custom entries are
+    encoded as 'NNd' (e.g. '45d') by the Value tab's manual-lookback input."""
+    if lb_label in lookback_map:
+        return lookback_map[lb_label]
+    return int(lb_label.rstrip("d"))
 
 
 def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
@@ -560,7 +568,8 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     if contracts is None:
         contracts = [c for c in curve.columns if c.startswith("F")]
 
-    lookback_map = {"1yr": 252, "3yr": 756, "5yr": 1260, "7yr": 1764, "10yr": 2520}
+    lookback_map = {"1mo": 20, "1qtr": 60, "6mo": 120, "1yr": 252, "3yr": 756,
+                     "5yr": 1260, "7yr": 1764, "10yr": 2520}
 
     st.markdown("**Add a Value Variant**")
     vcol1, vcol2, vcol3, vcol4 = st.columns([1, 1, 1, 1])
@@ -568,10 +577,26 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         v_contract = st.selectbox("Contract", contracts, index=min(7, len(contracts) - 1),
                                    key=f"{key_prefix}_val_contract")
     with vcol2:
-        v_lb_label = st.selectbox("Lookback", list(lookback_map.keys()), index=2, key=f"{key_prefix}_val_lb")
+        lb_labels = list(lookback_map.keys()) + ["Custom"]
+        v_lb_choice = st.selectbox("Lookback", lb_labels, index=lb_labels.index("5yr"),
+                                    key=f"{key_prefix}_val_lb")
+        if v_lb_choice == "Custom":
+            v_lb_days = st.number_input("Custom lookback (trading days)", min_value=5, max_value=5000,
+                                         value=252, step=1, key=f"{key_prefix}_val_lb_custom")
+            v_lb_label = f"{int(v_lb_days)}d"
+        else:
+            v_lb_label = v_lb_choice
     with vcol3:
-        v_thr = st.selectbox("Threshold", [0.05, 0.10, 0.15, 0.20], index=1,
-                              format_func=lambda x: f"±{x*100:.0f}%", key=f"{key_prefix}_val_thr")
+        thr_options = [0.05, 0.10, 0.15, 0.20, "Custom"]
+        v_thr_choice = st.selectbox("Threshold", thr_options, index=1,
+                                     format_func=lambda x: f"±{x*100:.0f}%" if isinstance(x, float) else x,
+                                     key=f"{key_prefix}_val_thr")
+        if v_thr_choice == "Custom":
+            v_thr_pct = st.number_input("Custom threshold (%)", min_value=0.5, max_value=100.0,
+                                         value=10.0, step=0.5, key=f"{key_prefix}_val_thr_custom")
+            v_thr = v_thr_pct / 100.0
+        else:
+            v_thr = v_thr_choice
     with vcol4:
         st.write("")
         st.write("")
@@ -599,7 +624,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     label_to_combo = {f"{c} {lb} ±{thr*100:.0f}%": (c, lb, thr) for c, lb, thr in chosen}
     positions = {
-        label: value_v1_position(curve, c, lookback_map[lb], thr, shift_n=shift_n)
+        label: value_v1_position(curve, c, _resolve_lookback_days(lb, lookback_map), thr, shift_n=shift_n)
         for label, (c, lb, thr) in label_to_combo.items()
     }
     positions = {k: v for k, v in positions.items() if not v.empty}
@@ -630,7 +655,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
                                   index=feature_options.index(default_feature), key=f"{key_prefix}_val_feature")
     v_c, v_lb, v_thr = label_to_combo[feature_label]
-    feature_pos_scoped = value_v1_position(curve_scoped, v_c, lookback_map[v_lb], v_thr, shift_n=shift_n)
+    feature_pos_scoped = value_v1_position(curve_scoped, v_c, _resolve_lookback_days(v_lb, lookback_map), v_thr, shift_n=shift_n)
     m = pos_metrics_generic(feature_pos_scoped, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:

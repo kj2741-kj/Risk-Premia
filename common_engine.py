@@ -188,7 +188,9 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     `default_feature_pair` overrides which of the active strategies is
     pre-selected in the Performance Metrics card (falls back to MA(1,20) if
     omitted or not in the active list) -- does NOT change the 3 benchmark
-    pairs themselves, only which one is shown first."""
+    pairs themselves, only which one is shown first.
+    Returns the {label: position} dict of the currently active/chosen
+    strategies, for the Comparison tab to overlay alongside Carry/Value."""
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
 
     section_header(f"MOMENTUM — {product}")
@@ -315,11 +317,13 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     if not chosen:
         st.divider()
         st.info("Select at least one strategy above to see its equity curve.")
-    else:
-        _render_multi_strategy_block(
-            {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen},
-            f1r, f1c, tc_bps, key_prefix + "_mom", unit_label, show_metrics=False, phase=phase,
-        )
+        return {}
+
+    positions = {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen}
+    _render_multi_strategy_block(
+        positions, f1r, f1c, tc_bps, key_prefix + "_mom", unit_label, show_metrics=False, phase=phase,
+    )
+    return positions
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -372,7 +376,9 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     featuring V1, if omitted) -- for products where the near-tenor V1
     definition isn't the appropriate carry signal (e.g. NGL swaps, where
     F1-F2 is dominated by front-of-curve seasonality rather than genuine
-    term structure)."""
+    term structure).
+    Returns the {label: position} dict of the currently active/chosen
+    variants, for the Comparison tab to overlay alongside Momentum/Value."""
     section_header(f"CARRY — {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. Four variants are "
                "available: V1 Roll Yield, V2 Long Slope, V3 Z-score, and V4 Carry-Momentum.")
@@ -451,13 +457,13 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     )
     if not chosen:
         st.info("Add at least one carry variant above.")
-        return
+        return {}
 
     positions = {label: _build_position(label, curve) for label in chosen}
     positions = {k: v for k, v in positions.items() if not v.empty}
     if not positions:
         st.info("No valid data for the selected carry variant(s).")
-        return
+        return {}
 
     # ── Year-range slider: scoped ONLY to Performance Metrics below -- the
     # equity curve, rolling Sharpe, and signal/position charts further down
@@ -508,6 +514,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     _render_rolling_sharpe_with_selector(positions, f1r, f1c, tc_bps, key_prefix + "_car", phase=phase)
     st.divider()
     _render_signal_position_section(positions, f1r, key_prefix + "_car")
+    return positions
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -545,7 +552,9 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     `phase` (if passed) adds roll-day TC on top of position-change TC.
     `default_active_combo` is a (contract, lookback_label, threshold) tuple
     overriding the pre-selected value variant (falls back to the 8th
-    contract / 5yr / 10% if omitted)."""
+    contract / 5yr / 10% if omitted).
+    Returns the {label: position} dict of the currently active/chosen
+    variants, for the Comparison tab to overlay alongside Momentum/Carry."""
     section_header(f"VALUE — {product}")
     st.caption("Moving-average reversion: deviation = (Fk − MA_N)/MA_N. Long (+1) when cheap "
                "(below −T), short (−1) when expensive (above +T), flat otherwise. Only the "
@@ -620,7 +629,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     )
     if not chosen:
         st.info("Add at least one value variant above.")
-        return
+        return {}
 
     label_to_combo = {f"{c} {lb} ±{thr*100:.0f}%": (c, lb, thr) for c, lb, thr in chosen}
     positions = {
@@ -630,7 +639,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     positions = {k: v for k, v in positions.items() if not v.empty}
     if not positions:
         st.info("No valid data for the selected value variant(s).")
-        return
+        return {}
 
     # ── Year-range slider: scoped ONLY to Performance Metrics below -- the
     # equity curve, rolling Sharpe, and signal/position charts further down
@@ -678,6 +687,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     _render_rolling_sharpe_with_selector(positions, f1r, f1c, tc_bps, key_prefix + "_val", phase=phase)
     st.divider()
     _render_signal_position_section(positions, f1r, key_prefix + "_val")
+    return positions
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -790,6 +800,40 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     render_signal_position_chart(positions[focus_label], f1r, focus_label, key_prefix)
 
 
+def _plot_equity_curve(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
+                        tc_bps: int, key_prefix: str, unit_label: str = "/unit",
+                        phase: pd.Series | None = None):
+    """Plot-only: cumulative net-of-TC PnL for whatever `positions` already
+    contains -- no selector of its own. Shared by the per-tab selector
+    wrappers below and by the Comparison tab's single unified selector."""
+    fig_eq = go.Figure()
+    for i, label in enumerate(positions):
+        _, net_pnl = daily_returns(positions[label], f1r, f1c, tc_bps, phase)
+        eq = equity_curve(net_pnl)
+        fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
+                                     line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity_chart")
+
+
+def _plot_rolling_sharpe(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
+                          tc_bps: int, key_prefix: str, basis: str = "Net of TC",
+                          phase: pd.Series | None = None):
+    """Plot-only: rolling 252-day Sharpe for whatever `positions` already
+    contains -- no selector of its own. Shared by the per-tab selector
+    wrappers below and by the Comparison tab's single unified selector."""
+    fig_rs = go.Figure()
+    for i, label in enumerate(positions):
+        gross_pnl, net_pnl = daily_returns(positions[label], f1r, f1c, tc_bps, phase)
+        pnl = net_pnl if basis.startswith("Net") else gross_pnl
+        rs = rolling_sharpe(pnl, 252)
+        fig_rs.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=label,
+                                     line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.3)))
+    fig_rs.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
+    fig_rs.update_layout(**CHART_LAYOUT, height=320, yaxis_title="Rolling Sharpe")
+    st.plotly_chart(fig_rs, use_container_width=True, key=f"{key_prefix}_rollsharpe_chart")
+
+
 def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
                                         tc_bps: int, key_prefix: str, unit_label: str = "/unit",
                                         phase: pd.Series | None = None):
@@ -802,15 +846,7 @@ def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.
     if not chosen:
         st.info("Select at least one strategy above.")
         return
-
-    fig_eq = go.Figure()
-    for i, label in enumerate(chosen):
-        _, net_pnl = daily_returns(positions[label], f1r, f1c, tc_bps, phase)
-        eq = equity_curve(net_pnl)
-        fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
-                                     line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
-    st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity_chart")
+    _plot_equity_curve({k: positions[k] for k in chosen}, f1r, f1c, tc_bps, key_prefix, unit_label, phase)
 
 
 def _render_rolling_sharpe_with_selector(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
@@ -826,16 +862,7 @@ def _render_rolling_sharpe_with_selector(positions: dict[str, pd.Series], f1r: p
         return
 
     basis = st.radio("Basis", ["Gross", "Net of TC"], index=1, horizontal=True, key=f"{key_prefix}_rs_basis")
-    fig_rs = go.Figure()
-    for i, label in enumerate(chosen):
-        gross_pnl, net_pnl = daily_returns(positions[label], f1r, f1c, tc_bps, phase)
-        pnl = net_pnl if basis.startswith("Net") else gross_pnl
-        rs = rolling_sharpe(pnl, 252)
-        fig_rs.add_trace(go.Scatter(x=rs.index, y=rs.values, mode="lines", name=label,
-                                     line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.3)))
-    fig_rs.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
-    fig_rs.update_layout(**CHART_LAYOUT, height=320, yaxis_title="Rolling Sharpe")
-    st.plotly_chart(fig_rs, use_container_width=True, key=f"{key_prefix}_rollsharpe_chart")
+    _plot_rolling_sharpe({k: positions[k] for k in chosen}, f1r, f1c, tc_bps, key_prefix, basis, phase)
 
 
 def _render_signal_position_section(positions: dict[str, pd.Series], f1r: pd.Series, key_prefix: str):
@@ -885,3 +912,68 @@ def render_signal_position_chart(pos: pd.Series, f1r: pd.Series, label: str, key
                           ticktext=["Short", "Flat", "Long"], row=2, col=1)
     fig_sig.update_xaxes(showspikes=True, spikecolor="#475569", spikethickness=1, spikemode="across")
     st.plotly_chart(fig_sig, use_container_width=True, key=f"{key_prefix}_sigpos")
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMPARISON: cross-strategy overlay (Momentum + Carry + Value)
+# ═══════════════════════════════════════════════════════════════
+
+def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label: str,
+                           key_prefix: str, strategy_groups: dict[str, dict[str, pd.Series]],
+                           phase: pd.Series | None = None):
+    """Comparison tab: superimposes whatever strategies are currently active
+    (checked) in this product's Momentum, Carry, and Value tabs -- there is
+    no separate strategy picker here, it just reads the {label: position}
+    dicts those three tabs already return.
+
+    `strategy_groups` looks like {"Momentum": {...}, "Carry": {...},
+    "Value": {...}}; each label is prefixed with its group name (e.g.
+    "Carry: V1 (F1-F2)") so identically-named variants across groups never
+    collide. A single shared multiselect drives BOTH charts below -- unlike
+    the per-tab equity/rolling-Sharpe selectors (which are independent of
+    each other), removing a strategy here removes it from both at once,
+    since the point of this tab is a like-for-like overlay.
+
+    `phase` (if passed) adds roll-day TC on top of position-change TC.
+    """
+    section_header(f"COMPARISON — {product}")
+    st.caption("Overlays every strategy currently selected in the Momentum, Carry, and Value tabs above "
+               "-- add or remove strategies below in Momentum/Carry/Value, then come back here to see "
+               "them update. One filter controls both charts.")
+
+    all_positions: dict[str, pd.Series] = {}
+    for group_name, group_positions in strategy_groups.items():
+        for label, pos in group_positions.items():
+            all_positions[f"{group_name}: {label}"] = pos
+
+    if not all_positions:
+        st.info("No strategies are currently active -- select at least one in the Momentum, Carry, or "
+                "Value tabs above and it will appear here.")
+        return
+
+    tc_col, _ = st.columns([1, 3])
+    with tc_col:
+        tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
+        tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_cmp_tc")
+        tc_bps = tc_map[tc_label]
+
+    st.markdown("**Strategies to Compare**")
+    options = list(all_positions.keys())
+    chosen = st.multiselect(
+        "Add or remove strategies (drawn from whatever is currently active in Momentum / Carry / Value)",
+        options=options, default=options, key=f"{key_prefix}_cmp_select",
+    )
+    if not chosen:
+        st.info("Select at least one strategy above.")
+        return
+
+    positions = {label: all_positions[label] for label in chosen}
+
+    st.divider()
+    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
+    _plot_equity_curve(positions, f1r, f1c, tc_bps, key_prefix + "_cmp", unit_label, phase)
+
+    st.divider()
+    st.markdown("**Rolling Sharpe (252-Day)**")
+    basis = st.radio("Basis", ["Gross", "Net of TC"], index=1, horizontal=True, key=f"{key_prefix}_cmp_rs_basis")
+    _plot_rolling_sharpe(positions, f1r, f1c, tc_bps, key_prefix + "_cmp", basis, phase)

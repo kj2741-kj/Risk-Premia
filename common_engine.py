@@ -79,6 +79,19 @@ def rolling_sharpe(pnl: pd.Series, window: int = 252) -> pd.Series:
     return r.rolling(window).mean() / r.rolling(window).std() * np.sqrt(252)
 
 
+def rolling_price_vol(price: pd.Series, window: int = 252) -> pd.Series:
+    """Rolling annualized volatility of the underlying itself (not a strategy):
+    std of the price series' daily $ change, scaled by sqrt(252). Native-unit
+    ($ per contract, e.g. USD/MT) terms, same as rolling_sharpe/daily_returns
+    elsewhere in this file -- NOT %-of-notional, which would require dividing
+    by price[t-1] (unsafe for a back-adjusted level, see pos_metrics_generic's
+    docstring). Pass F1_raw (the actual traded front-month price) for this --
+    F1_raw does carry roll-day jumps (unlike F1_continuous), which is a
+    deliberate choice here: this is meant to read as the realized volatility
+    of the real, tradeable contract, not a back-adjusted synthetic series."""
+    return price.diff().rolling(window).std() * np.sqrt(252)
+
+
 TIMING_OPTIONS = ["Same Day (Shift-0)", "Lag-1 (Shift-1)", "Lag-2 (Shift-2)"]
 TIMING_SHIFT = {"Same Day (Shift-0)": 0, "Lag-1 (Shift-1)": 1, "Lag-2 (Shift-2)": 2}
 
@@ -769,15 +782,16 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     if show_metrics:
         st.divider()
 
-    # ── Cumulative PnL (Equity Curve) ────────────────────────────────────────
+    # ── Cumulative PnL (Equity Curve) -- its own time-period slider, default
+    # = full history; narrowing it re-baselines the curve to 0 at that start
+    # date. Reuses pnl_cache's already-computed full-history net PnL (signals
+    # stay warmed up on full history; only the displayed/summed window
+    # narrows), independent of any "Year range for performance metrics"
+    # slider elsewhere on this tab. ──────────────────────────────────────────
     st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
-    fig_eq = go.Figure()
-    for i, (label, (gross_pnl, net_pnl)) in enumerate(pnl_cache.items()):
-        eq = equity_curve(net_pnl)
-        fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
-                                     line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
-    st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity")
+    start, end = _time_window_slider(f1r, key_prefix)
+    pnl_by_label = {label: net_pnl for label, (gross_pnl, net_pnl) in pnl_cache.items()}
+    _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix, unit_label)
 
     st.markdown("**Rolling Sharpe (252-Day)**")
     basis = st.radio("Basis", ["Gross", "Net of TC"], index=1, horizontal=True, key=f"{key_prefix}_rs_basis")
@@ -821,16 +835,33 @@ def _sync_multiselect_new_options(key: str, options: list[str]) -> None:
     st.session_state[prev_key] = list(options)
 
 
-def _plot_equity_curve(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
-                        tc_bps: int, key_prefix: str, unit_label: str = "/unit",
-                        phase: pd.Series | None = None):
-    """Plot-only: cumulative net-of-TC PnL for whatever `positions` already
-    contains -- no selector of its own. Shared by the per-tab selector
-    wrappers below and by the Comparison tab's single unified selector."""
+def _time_window_slider(f1r: pd.Series, key_prefix: str,
+                         label: str = "Time period for equity curve") -> tuple[pd.Timestamp, pd.Timestamp]:
+    """Year-range slider (default = full history) that scopes ONLY the
+    equity curve to a sub-period -- independent of any 'Year range for
+    performance metrics' slider elsewhere on the same tab (that one recomputes
+    signals fresh on truncated price data; this one doesn't touch signals at
+    all, see _plot_equity_curve_from_pnl)."""
+    yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
+    win = st.slider(label, yr0, yr1, (yr0, yr1), key=f"{key_prefix}_eqwin_yr")
+    return pd.Timestamp(f"{win[0]}-01-01"), pd.Timestamp(f"{win[1]}-12-31")
+
+
+def _plot_equity_curve_from_pnl(pnl_by_label: dict[str, pd.Series], start: pd.Timestamp, end: pd.Timestamp,
+                                 key_prefix: str, unit_label: str = "/unit"):
+    """Cumulative PnL restricted to [start, end]. `pnl_by_label` holds each
+    strategy's FULL-HISTORY net PnL (already TC-adjusted, computed from the
+    complete price series so moving-average/rolling-window signals stay
+    properly warmed up) -- this just slices the PnL to the window and cumsums
+    from there, so the curve restarts at 0 at the window's start regardless
+    of what happened before it. Deliberately NOT slicing the price/position
+    series first and recomputing: that would cold-start every rolling signal
+    at the window boundary, degrading the first stretch of the chart with an
+    artifact that never existed in the actual (full-history) strategy."""
     fig_eq = go.Figure()
-    for i, label in enumerate(positions):
-        _, net_pnl = daily_returns(positions[label], f1r, f1c, tc_bps, phase)
-        eq = equity_curve(net_pnl)
+    for i, (label, net_pnl) in enumerate(pnl_by_label.items()):
+        pnl_w = net_pnl[(net_pnl.index >= start) & (net_pnl.index <= end)]
+        eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
     fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
@@ -859,7 +890,10 @@ def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.
                                         tc_bps: int, key_prefix: str, unit_label: str = "/unit",
                                         phase: pd.Series | None = None):
     """Cumulative PnL (equity curve) with its OWN strategy multiselect,
-    independent of whatever is chosen for the Rolling Sharpe chart."""
+    independent of whatever is chosen for the Rolling Sharpe chart. Also has
+    its own time-period slider (default = full history) directly above the
+    chart -- narrowing it re-baselines the curve to 0 at that start date,
+    independent of the 'Year range for performance metrics' slider above."""
     st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
     options = list(positions.keys())
     _sync_multiselect_new_options(f"{key_prefix}_equity_select", options)
@@ -868,7 +902,9 @@ def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.
     if not chosen:
         st.info("Select at least one strategy above.")
         return
-    _plot_equity_curve({k: positions[k] for k in chosen}, f1r, f1c, tc_bps, key_prefix, unit_label, phase)
+    start, end = _time_window_slider(f1r, key_prefix)
+    pnl_by_label = {label: daily_returns(positions[label], f1r, f1c, tc_bps, phase)[1] for label in chosen}
+    _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix, unit_label)
 
 
 def _render_rolling_sharpe_with_selector(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
@@ -958,11 +994,34 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
     since the point of this tab is a like-for-like overlay.
 
     `phase` (if passed) adds roll-day TC on top of position-change TC.
-    """
+
+    Also renders an Underlying Volatility chart at the very top, above the
+    strategy-comparison charts -- a property of the product's F1_raw (actual
+    traded front-month) price itself, independent of any strategy, so it
+    always renders even when no strategy is currently active."""
     section_header(f"COMPARISON — {product}")
     st.caption("Overlays every strategy currently selected in the Momentum, Carry, and Value tabs above "
                "-- add or remove strategies below in Momentum/Carry/Value, then come back here to see "
                "them update. One filter controls both charts.")
+
+    st.markdown(f"**Underlying Volatility — {product}**")
+    st.caption(f"Rolling annualized volatility of {product}'s daily $ change in F1_raw (the actual traded "
+               f"front-month price -- carries roll-day jumps, unlike the back-adjusted F1_continuous used "
+               f"for PnL elsewhere), in {unit_label} terms -- a property of the underlying itself, "
+               "independent of any strategy or the filter below.")
+    vol_window_map = {"21d (1mo)": 21, "63d (1qtr)": 63, "252d (1yr)": 252}
+    vol_window_label = st.radio("Window", list(vol_window_map.keys()), index=1, horizontal=True,
+                                 key=f"{key_prefix}_cmp_vol_window")
+    vol = rolling_price_vol(f1r, vol_window_map[vol_window_label])
+    fig_vol = go.Figure()
+    fig_vol.add_trace(go.Scatter(
+        x=vol.index, y=vol.values, mode="lines", name=f"{product} Volatility",
+        line=dict(color=COLORS["secondary"], width=1.4),
+    ))
+    fig_vol.update_layout(**CHART_LAYOUT, height=300, yaxis_title=f"Annualized Vol ({unit_label})")
+    st.plotly_chart(fig_vol, use_container_width=True, key=f"{key_prefix}_cmp_vol_chart")
+
+    st.divider()
 
     all_positions: dict[str, pd.Series] = {}
     for group_name, group_positions in strategy_groups.items():
@@ -972,31 +1031,33 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
     if not all_positions:
         st.info("No strategies are currently active -- select at least one in the Momentum, Carry, or "
                 "Value tabs above and it will appear here.")
-        return
+    else:
+        tc_col, _ = st.columns([1, 3])
+        with tc_col:
+            tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
+            tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_cmp_tc")
+            tc_bps = tc_map[tc_label]
 
-    tc_col, _ = st.columns([1, 3])
-    with tc_col:
-        tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
-        tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_cmp_tc")
-        tc_bps = tc_map[tc_label]
+        st.markdown("**Strategies to Compare**")
+        options = list(all_positions.keys())
+        chosen = st.multiselect(
+            "Add or remove strategies (drawn from whatever is currently active in Momentum / Carry / Value)",
+            options=options, default=options, key=f"{key_prefix}_cmp_select",
+        )
+        if not chosen:
+            st.info("Select at least one strategy above.")
+        else:
+            positions = {label: all_positions[label] for label in chosen}
 
-    st.markdown("**Strategies to Compare**")
-    options = list(all_positions.keys())
-    chosen = st.multiselect(
-        "Add or remove strategies (drawn from whatever is currently active in Momentum / Carry / Value)",
-        options=options, default=options, key=f"{key_prefix}_cmp_select",
-    )
-    if not chosen:
-        st.info("Select at least one strategy above.")
-        return
+            st.divider()
+            st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
+            start, end = _time_window_slider(f1r, key_prefix + "_cmp")
+            pnl_by_label = {label: daily_returns(positions[label], f1r, f1c, tc_bps, phase)[1]
+                            for label in positions}
+            _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix + "_cmp", unit_label)
 
-    positions = {label: all_positions[label] for label in chosen}
-
-    st.divider()
-    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
-    _plot_equity_curve(positions, f1r, f1c, tc_bps, key_prefix + "_cmp", unit_label, phase)
-
-    st.divider()
-    st.markdown("**Rolling Sharpe (252-Day)**")
-    basis = st.radio("Basis", ["Gross", "Net of TC"], index=1, horizontal=True, key=f"{key_prefix}_cmp_rs_basis")
-    _plot_rolling_sharpe(positions, f1r, f1c, tc_bps, key_prefix + "_cmp", basis, phase)
+            st.divider()
+            st.markdown("**Rolling Sharpe (252-Day)**")
+            basis = st.radio("Basis", ["Gross", "Net of TC"], index=1, horizontal=True,
+                              key=f"{key_prefix}_cmp_rs_basis")
+            _plot_rolling_sharpe(positions, f1r, f1c, tc_bps, key_prefix + "_cmp", basis, phase)

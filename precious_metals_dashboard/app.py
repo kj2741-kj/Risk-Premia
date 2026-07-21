@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 
 from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
-from common_engine import render_momentum_tab, render_carry_tab, render_value_tab
+from common_engine import render_momentum_tab, render_carry_tab, render_value_tab, render_comparison_tab
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
                                  PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
@@ -86,15 +86,22 @@ st.markdown(f'<p class="main-title">✨ Precious Metals Risk Premia — {cfg["na
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
-tab_mom, tab_carry, tab_val = st.tabs(["⚡ Momentum", "📐 Carry", "📏 Value"])
+tab_mom, tab_carry, tab_val, tab_compare = st.tabs(["⚡ Momentum", "📐 Carry", "📏 Value", "🔀 Comparison"])
+
+key_prefix = f"precious_{product_code}"
 
 with tab_mom:
-    render_momentum_tab(f1r, f1c, cfg["name"], unit, key_prefix=f"precious_{product_code}", phase=phase)
+    mom_positions = render_momentum_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase)
 
 with tab_carry:
-    render_carry_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=f"precious_{product_code}", phase=phase)
+    carry_positions = render_carry_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase)
 
 with tab_val:
     contracts = [c for c in curve.columns if c.startswith("F") and c[1:].isdigit() and int(c[1:]) <= 15]
-    render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=f"precious_{product_code}",
-                      contracts=contracts, phase=phase)
+    value_positions = render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix,
+                                        contracts=contracts, phase=phase)
+
+with tab_compare:
+    render_comparison_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,
+                           strategy_groups={"Momentum": mom_positions, "Carry": carry_positions,
+                                            "Value": value_positions})

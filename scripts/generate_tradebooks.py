@@ -45,6 +45,7 @@ from rolling_continuous import (
     METALS_CONFIG, METALS_FUTURES_FILE, METALS_CALENDAR_FILE,
     ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE,
     PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE,
+    NGL_CONFIG, NGL_FUTURES_FILE, NGL_CALENDAR_FILE,
 )
 from common_curve_loader import load_curve_simple, load_curve_legacy_multiheader
 
@@ -89,6 +90,21 @@ PRODUCTS = [
          config=PRECIOUS_CONFIG, futures_file=PRECIOUS_FUTURES_FILE, calendar_file=PRECIOUS_CALENDAR_FILE, loader="simple"),
     dict(asset_class="Precious", code="PA", name="Palladium NYMEX", unit="/oz",
          config=PRECIOUS_CONFIG, futures_file=PRECIOUS_FUTURES_FILE, calendar_file=PRECIOUS_CALENDAR_FILE, loader="simple"),
+    # NGL / Refined -- front contract is F2, not F1 (NGL_CONFIG's f1_col/f2_col
+    # point at the sheet's F2/F3 columns), so f1r/f1c below hold F2/F2-continuous
+    # values for these six, same convention as ngl_dashboard/app.py.
+    dict(asset_class="NGL", code="CAP", name="Ethane (Mt Belvieu)", unit="/gal",
+         config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="NGL", code="BAP", name="Propane (Mt Belvieu)", unit="/gal",
+         config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="NGL", code="DAE", name="Butane (Mt Belvieu)", unit="/gal",
+         config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="NGL", code="IBD", name="Isobutane (Mt Belvieu)", unit="/gal",
+         config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="NGL", code="PCW", name="Ethylene (Mt Belvieu)", unit="/lb",
+         config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="NGL", code="PGP", name="Propylene (Polymer Grade)", unit="/lb",
+         config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
 ]
 
 
@@ -1563,10 +1579,24 @@ def save_value_v1_tradebook_excel(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.S
 # ══════════════════════════════════════════════════════════════════
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Generate tradebooks, optionally restricted to a subset.")
+    parser.add_argument("--codes", type=str, default=None,
+                         help="Comma-separated product codes to run (e.g. NG,QS,FO). Default: all products.")
+    args = parser.parse_args()
+
+    products = PRODUCTS
+    if args.codes:
+        wanted = {c.strip().upper() for c in args.codes.split(",")}
+        products = [p for p in PRODUCTS if p["code"] in wanted]
+        missing = wanted - {p["code"] for p in products}
+        if missing:
+            print(f"WARNING: unknown codes ignored: {sorted(missing)}")
+
     TRADEBOOKS_DIR.mkdir(exist_ok=True)
     log_rows = []
 
-    for p in PRODUCTS:
+    for p in products:
         code, name, unit = p["code"], p["name"], p["unit"]
         print("=" * 78)
         print(f"{p['asset_class']} — {name} ({code})")
@@ -1643,7 +1673,14 @@ def main():
             print("  Value skipped -- no usable Fk contracts in curve.")
 
     summary = pd.DataFrame(log_rows)
-    summary.to_csv(TRADEBOOKS_DIR / "tradebooks_summary.csv", index=False)
+    summary_path = TRADEBOOKS_DIR / "tradebooks_summary.csv"
+    if args.codes and summary_path.exists():
+        # Chunked/resumed run: merge into the existing summary instead of
+        # clobbering rows from codes generated in earlier invocations.
+        prior = pd.read_csv(summary_path)
+        prior = prior[~prior["code"].isin(products and [p["code"] for p in products])]
+        summary = pd.concat([prior, summary], ignore_index=True)
+    summary.to_csv(summary_path, index=False)
     print("\n" + "=" * 78)
     print(f"Done. {len(log_rows)} tradebooks written under {TRADEBOOKS_DIR.resolve()}")
     print("Summary -> tradebooks/tradebooks_summary.csv")

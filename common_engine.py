@@ -709,16 +709,51 @@ def _resolve_lookback_days(lb_label: str, lookback_map: dict[str, int]) -> int:
     return int(lb_label.rstrip("d"))
 
 
+@st.cache_data(show_spinner="Computing value Sharpe heatmap...")
+def value_heatmap(curve: pd.DataFrame, contracts: tuple[str, ...], lookback_items: tuple[tuple[str, int], ...],
+                   threshold: float, f1r: pd.Series, f1c: pd.Series, start: str, end: str,
+                   shift_n: int) -> pd.DataFrame:
+    """Gross Sharpe for every (contract, lookback) combination, over [start, end],
+    at a fixed threshold (selected above the heatmap, not a grid axis -- the
+    deviation signal always needs some threshold to fire, unlike Carry's
+    optional "N/A" Days mode). `lookback_items` is (label, days) pairs, e.g.
+    [("1mo", 20), ...] -- Value's lookbacks are conventionally discrete
+    regimes (1mo through 10yr, per the "Add a Value Variant" presets), not a
+    continuously-tunable window the way Momentum's MA pairs are, so this uses
+    the same preset labels rather than a fine continuous day-count grid.
+    Gross only (no TC), matching momentum_heatmap/carry_heatmap's convention.
+    Plain per-pair loop, same reasoning as carry_heatmap: this grid is
+    similarly small (e.g. 27 contracts x 8 lookbacks = 216 cells)."""
+    mask = (f1r.index >= pd.Timestamp(start)) & (f1r.index <= pd.Timestamp(end))
+    f1r_w = f1r[mask]
+    f1c_w = f1c.reindex(f1r_w.index)
+    curve_w = curve[(curve.index >= pd.Timestamp(start)) & (curve.index <= pd.Timestamp(end))]
+
+    rows = []
+    for contract in contracts:
+        for label, days in lookback_items:
+            pos = value_v1_position(curve_w, contract, days, threshold, shift_n=shift_n)
+            sharpe = np.nan if pos.empty else pos_metrics_generic(pos, f1r_w, f1c_w)["gross"]
+            rows.append({"contract": contract, "lookback": label, "sharpe": sharpe})
+    return pd.DataFrame(rows)
+
+
 def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
                       unit_label: str, key_prefix: str, contracts: list[str] | None = None,
                       phase: pd.Series | None = None,
-                      default_active_combo: tuple[str, str, float] | None = None):
+                      default_active_combo: tuple[str, str, float] | None = None,
+                      skip_front_contract: bool = False):
     """Value tab: V1 MA-reversion only, equity curve compare, rolling Sharpe,
     performance metrics, TC filter.
     `phase` (if passed) adds roll-day TC on top of position-change TC.
     `default_active_combo` is a (contract, lookback_label, threshold) tuple
     overriding the pre-selected value variant (falls back to the 8th
     contract / 5yr / 10% if omitted).
+    `skip_front_contract=True` drops F1 from both the "Add a Value Variant"
+    Contract dropdown and the Sharpe Heatmap's contract axis -- same reason
+    as Carry's: for NGL swaps, F1 is a monthly-averaging, stale/partial-month
+    price rather than a genuine single-expiry-day futures price (see
+    NGL_CONFIG's f1_col/f2_col comment in rolling_continuous.py).
     Returns the {label: position} dict of the currently active/chosen
     variants, for the Comparison tab to overlay alongside Momentum/Carry."""
     section_header(f"VALUE — {product}")
@@ -742,6 +777,8 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     if contracts is None:
         contracts = [c for c in curve.columns if c.startswith("F")]
+    if skip_front_contract:
+        contracts = [c for c in contracts if c != "F1"]
 
     lookback_map = {"1mo": 20, "1qtr": 60, "6mo": 120, "1yr": 252, "3yr": 756,
                      "5yr": 1260, "7yr": 1764, "10yr": 2520}
@@ -843,6 +880,54 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+
+    st.divider()
+
+    # ── Sharpe Heatmap: Contract x Lookback grid, at a fixed Threshold (not a
+    # grid axis -- the deviation signal always needs some threshold to fire,
+    # unlike Carry's optional "N/A" Days mode). Contract axis uses every
+    # contract with real price data, dynamically capped per product (e.g. F27
+    # for Copper) -- not the F15 cap used by "Add a Value Variant" above,
+    # same convention as Carry's heatmap. Has its OWN independent year-range
+    # slider -- not linked to Performance Metrics above or the equity curve's
+    # "Time period" slider below. ─────────────────────────────────────────────
+    st.markdown(f"**Sharpe Heatmap — Contract × Lookback**")
+    st.caption("Deviation = (Fk − MA_N)/MA_N at a fixed threshold below; long (+1) when cheap, short "
+               "(−1) when expensive. Contract and Lookback are the grid; Threshold is a separate "
+               "control since the signal always needs one to fire.")
+    hm_thr = st.selectbox("Threshold", [0.05, 0.10, 0.15, 0.20], index=1,
+                           format_func=lambda x: f"±{x*100:.0f}%", key=f"{key_prefix}_val_hm_thr")
+
+    all_contracts = sorted((c for c in curve.columns
+                            if c.startswith("F") and c[1:].isdigit() and curve[c].notna().any()),
+                           key=lambda c: int(c[1:]))
+    if skip_front_contract and "F1" in all_contracts:
+        all_contracts.remove("F1")
+
+    val_hm_yr = st.slider("Year range for heatmap", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_val_hm_yr")
+
+    lookback_items = tuple(lookback_map.items())
+    hm_df = value_heatmap(curve, tuple(all_contracts), lookback_items, hm_thr, f1r, f1c,
+                          f"{val_hm_yr[0]}-01-01", f"{val_hm_yr[1]}-12-31", shift_n)
+    if not hm_df.empty and hm_df["sharpe"].notna().any():
+        lb_order = list(lookback_map.keys())
+        pivot = hm_df.pivot(index="contract", columns="lookback", values="sharpe").reindex(
+            index=all_contracts, columns=lb_order)
+        fig_hm = go.Figure(data=go.Heatmap(
+            z=pivot.values, x=pivot.columns, y=pivot.index,
+            colorscale="RdYlGn", zmid=0, colorbar=dict(title="Sharpe"),
+            hovertemplate="Contract: %{y}<br>Lookback: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
+        ))
+        fig_hm.update_layout(**CHART_LAYOUT, height=560,
+                             title=dict(text=f"{product} — Value Sharpe by Contract × Lookback "
+                                             f"(±{hm_thr*100:.0f}%)", font=dict(size=13)),
+                             xaxis_title="Lookback", yaxis_title="Contract")
+        st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_val_hm")
+        best = hm_df.loc[hm_df["sharpe"].idxmax()]
+        st.caption(f"Best in range {val_hm_yr[0]}-{val_hm_yr[1]}: {best['contract']} / {best['lookback']} "
+                  f"gross Sharpe {best['sharpe']:+.2f}.")
+    else:
+        st.info("Not enough data in the selected year range to compute a heatmap.")
 
     # ── Cumulative PnL and Rolling Sharpe each get their OWN independent
     # strategy selector (defaulting to every active value variant), so one
@@ -1001,7 +1086,8 @@ def _time_window_slider(f1r: pd.Series, key_prefix: str,
 
 
 def _plot_equity_curve_from_pnl(pnl_by_label: dict[str, pd.Series], start: pd.Timestamp, end: pd.Timestamp,
-                                 key_prefix: str, unit_label: str = "/unit"):
+                                 key_prefix: str, unit_label: str = "/unit",
+                                 vol_series: pd.Series | None = None):
     """Cumulative PnL restricted to [start, end]. `pnl_by_label` holds each
     strategy's FULL-HISTORY net PnL (already TC-adjusted, computed from the
     complete price series so moving-average/rolling-window signals stay
@@ -1010,14 +1096,29 @@ def _plot_equity_curve_from_pnl(pnl_by_label: dict[str, pd.Series], start: pd.Ti
     of what happened before it. Deliberately NOT slicing the price/position
     series first and recomputing: that would cold-start every rolling signal
     at the window boundary, degrading the first stretch of the chart with an
-    artifact that never existed in the actual (full-history) strategy."""
+    artifact that never existed in the actual (full-history) strategy.
+
+    `vol_series` (optional) overlays a rolling-volatility line on a secondary
+    right-hand y-axis, sliced to the same [start, end] window -- lets you see
+    at a glance whether a strategy's equity curve is moving with, against, or
+    independent of the underlying's own volatility regime."""
     fig_eq = go.Figure()
     for i, (label, net_pnl) in enumerate(pnl_by_label.items()):
         pnl_w = net_pnl[(net_pnl.index >= start) & (net_pnl.index <= end)]
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    layout = dict(CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    if vol_series is not None:
+        vol_w = vol_series[(vol_series.index >= start) & (vol_series.index <= end)]
+        fig_eq.add_trace(go.Scatter(
+            x=vol_w.index, y=vol_w.values, mode="lines", name="Volatility (F1_raw, right axis)",
+            line=dict(color="#8A8278", width=1.3, dash="dot"), yaxis="y2",
+        ))
+        layout["yaxis2"] = dict(title=f"Annualized Vol ({unit_label})", overlaying="y", side="right",
+                                 showgrid=False)
+        layout["legend"] = dict(CHART_LAYOUT["legend"], orientation="h", y=1.15)
+    fig_eq.update_layout(**layout)
     st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity_chart")
 
 
@@ -1205,9 +1306,14 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
             st.divider()
             st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
             start, end = _time_window_slider(f1r, key_prefix + "_cmp")
+            show_vol_overlay = st.checkbox(
+                f"Superimpose Volatility ({vol_window_label} window, from the chart above)",
+                key=f"{key_prefix}_cmp_vol_overlay",
+            )
             pnl_by_label = {label: daily_returns(positions[label], f1r, f1c, tc_bps, phase)[1]
                             for label in positions}
-            _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix + "_cmp", unit_label)
+            _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix + "_cmp", unit_label,
+                                        vol_series=vol if show_vol_overlay else None)
 
             st.divider()
             st.markdown("**Rolling Sharpe (252-Day)**")

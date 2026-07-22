@@ -152,7 +152,8 @@ with tab_val:
     contracts = [c for c in curve.columns if c.startswith("F") and c[1:].isdigit() and int(c[1:]) <= 15]
     value_positions = render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix,
                                         contracts=contracts, phase=phase,
-                                        default_active_combo=VALUE_DEFAULT_ACTIVE)
+                                        default_active_combo=VALUE_DEFAULT_ACTIVE,
+                                        skip_front_contract=True)
 
 with tab_compare:
     render_comparison_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,

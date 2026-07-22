@@ -75,8 +75,13 @@ MOMENTUM_DEFAULT_FEATURE = {
 # own Ethane/Propane/Butane results far more closely. Applied uniformly
 # (not per-product) to match the existing Metals/Energy convention of one
 # fixed default carry set. "V2 (win=252)" here is Z-score (formerly V3,
-# renumbered when V1/V2 merged).
-CARRY_DEFAULT_ACTIVE = ["V1 (F4-F15)", "V2 (win=252)"]
+# renumbered when V1/V2 merged). "V3 (N=20)" is Carry-Momentum (formerly
+# V4) -- added to the default set uniformly across all dashboards, matching
+# Bouchouev's Virtual Barrels finding that carry-momentum (his eq. 5.3,
+# sign(Carry - MA(Carry, n))) was his most robust systematic oil signal
+# across "hundreds of different blends," outperforming both plain carry
+# and plain momentum standalone.
+CARRY_DEFAULT_ACTIVE = ["V1 (F4-F15)", "V2 (win=252)", "V3 (N=20)"]
 CARRY_DEFAULT_FEATURE = "V1 (F4-F15)"
 # Value: F12 / 10yr / +-10% (Mark's paper2 convention) ranks top-1-3 of a
 # 9-combo grid (F8/F10/F12 x 5yr/7yr/10yr) for 4 of 6 tickers and is never

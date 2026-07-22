@@ -436,10 +436,11 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     `phase` (if passed) adds roll-day TC on top of position-change TC.
     `default_active_variants`/`default_feature_variant` override the
-    pre-selected carry variant(s) (falls back to V1 (F1-F2) + V2 (win=252),
-    featuring V1, if omitted) -- for products where the near-tenor V1
-    definition isn't the appropriate carry signal (e.g. NGL swaps, where
-    F1-F2 is dominated by front-of-curve seasonality rather than genuine
+    pre-selected carry variant(s) (falls back to V1 (F1-F2) + V2 (win=252)
+    + V3 (N=20), featuring V1, if omitted) -- for products where the
+    near-tenor V1 definition isn't the appropriate carry signal (e.g. NGL
+    swaps, where F1-F2 is dominated by front-of-curve seasonality rather
+    than genuine
     term structure).
     `skip_front_contract=True` shifts every F1/F2-hardcoded default (V1's
     Near/Far picker, V2/V3's near/far base, and the Sharpe Heatmap's
@@ -518,7 +519,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     ss_key = f"{key_prefix}_car_active"
     if ss_key not in st.session_state:
         st.session_state[ss_key] = (list(default_active_variants) if default_active_variants
-                                     else [f"V1 ({near_default}-{far_default})", "V2 (win=252)"])
+                                     else [f"V1 ({near_default}-{far_default})", "V2 (win=252)", "V3 (N=20)"])
 
     if add_clicked:
         if vgroup == V1_LABEL:

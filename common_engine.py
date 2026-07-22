@@ -360,27 +360,63 @@ def carry_v2_position(curve: pd.DataFrame, j: str, k: str, shift_n: int = 1) -> 
     return carry_v1_position(curve, j, k, shift_n)
 
 
-def carry_v3_position(curve: pd.DataFrame, window: int = 252, shift_n: int = 1) -> pd.Series:
-    base = _carry_base(curve, "F1", "F2")
+def carry_v3_position(curve: pd.DataFrame, window: int = 252, shift_n: int = 1,
+                       near: str = "F1", far: str = "F2") -> pd.Series:
+    base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
     z = (base - base.rolling(window).mean()) / base.rolling(window).std()
     return exec_shift(np.sign(z.replace([np.inf, -np.inf], np.nan)), shift_n).fillna(0)
 
 
-def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1) -> pd.Series:
-    base = _carry_base(curve, "F1", "F2")
+def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1,
+                       near: str = "F1", far: str = "F2") -> pd.Series:
+    base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
     raw = base - base.shift(horizon)
     return exec_shift(np.sign(raw), shift_n).fillna(0)
 
 
+@st.cache_data(show_spinner="Computing carry Sharpe heatmap...")
+def carry_heatmap(curve: pd.DataFrame, contracts: tuple[str, ...], days: int | None, mode: str | None,
+                   f1r: pd.Series, f1c: pd.Series, start: str, end: str, shift_n: int) -> pd.DataFrame:
+    """Gross Sharpe for every valid (near, far) contract-pair (near before far
+    in `contracts`, e.g. F1 before F27), over [start, end].
+    `days=None` -> V1/V2 level signal: sign of the raw (near-far)/near yield.
+    `days=N, mode="V4"` -> carry-momentum: sign of the yield's N-day change.
+    `days=N, mode="V3"` -> z-score: sign of (yield - rolling_mean(N)) / rolling_std(N).
+    Gross only (no TC), matching momentum_heatmap's convention -- not needed
+    for a heatmap meant to compare shapes across many combinations at a glance.
+    Uses a plain per-pair loop rather than momentum_heatmap's raw-numpy
+    vectorization: this grid tops out around a few hundred pairs (e.g. 27
+    contracts -> 351 pairs), two orders of magnitude smaller than momentum's
+    250x250/~31k-pair grid, so the extra vectorization isn't needed here."""
+    mask = (f1r.index >= pd.Timestamp(start)) & (f1r.index <= pd.Timestamp(end))
+    f1r_w = f1r[mask]
+    f1c_w = f1c.reindex(f1r_w.index)
+    curve_w = curve[(curve.index >= pd.Timestamp(start)) & (curve.index <= pd.Timestamp(end))]
+
+    rows = []
+    for i, near in enumerate(contracts):
+        for far in contracts[i + 1:]:
+            if days is None:
+                pos = carry_v1_position(curve_w, near, far, shift_n=shift_n)
+            elif mode == "V3":
+                pos = carry_v3_position(curve_w, days, shift_n=shift_n, near=near, far=far)
+            else:
+                pos = carry_v4_position(curve_w, days, shift_n=shift_n, near=near, far=far)
+            sharpe = np.nan if pos.empty else pos_metrics_generic(pos, f1r_w, f1c_w)["gross"]
+            rows.append({"near": near, "far": far, "sharpe": sharpe})
+    return pd.DataFrame(rows)
+
+
 def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, product: str,
                       unit_label: str, key_prefix: str, tenor_pairs: list[tuple[str, str]] | None = None,
                       phase: pd.Series | None = None,
                       default_active_variants: list[str] | None = None,
-                      default_feature_variant: str | None = None):
+                      default_feature_variant: str | None = None,
+                      skip_front_contract: bool = False):
     """Carry tab: V1-V4 sub-variant selector, equity curve compare, rolling Sharpe,
     signal + position chart, performance metrics, TC filter.
     `phase` (if passed) adds roll-day TC on top of position-change TC.
@@ -390,8 +426,18 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     definition isn't the appropriate carry signal (e.g. NGL swaps, where
     F1-F2 is dominated by front-of-curve seasonality rather than genuine
     term structure).
+    `skip_front_contract=True` shifts every F1/F2-hardcoded default (V1's
+    "Add a Carry Variant" pair options, V3/V4's near/far base, and the
+    Sharpe Heatmap's contract axis) one contract out to start at F2/F3
+    instead of F1/F2 -- for NGL swaps specifically, where F1 is a
+    monthly-averaging, stale/partial-month price rather than a genuine
+    single-expiry-day futures price (see NGL_CONFIG's f1_col/f2_col comment
+    in rolling_continuous.py, and the NGL dashboard's own F2-as-front
+    convention already applied to its Momentum tab).
     Returns the {label: position} dict of the currently active/chosen
     variants, for the Comparison tab to overlay alongside Momentum/Value."""
+    near_default, far_default = ("F2", "F3") if skip_front_contract else ("F1", "F2")
+
     section_header(f"CARRY — {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. Four variants are "
                "available: V1 Roll Yield, V2 Long Slope, V3 Z-score, and V4 Carry-Momentum.")
@@ -413,10 +459,13 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     if tenor_pairs is None:
         tenor_pairs = [("F3", "F15"), ("F6", "F18"), ("F9", "F21"), ("F12", "F24")]
 
+    v1_label = f"V1 Roll Yield ({near_default}-{far_default})"
+    next_far = f"F{int(far_default[1:]) + 1}"
+
     st.markdown("**Add a Carry Variant**")
     vcol1, vcol2, vcol3 = st.columns([1.2, 1.6, 1])
     with vcol1:
-        vgroup = st.selectbox("Variant", ["V1 Roll Yield (F1-F2)", "V2 Long Slope", "V3 Z-score (252d)",
+        vgroup = st.selectbox("Variant", [v1_label, "V2 Long Slope", "V3 Z-score (252d)",
                                           "V4 Carry-Momentum"], key=f"{key_prefix}_car_vgroup")
     with vcol2:
         if vgroup == "V2 Long Slope":
@@ -426,7 +475,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         elif vgroup == "V3 Z-score (252d)":
             sub = st.selectbox("Window (days)", [126, 252, 504], index=1, key=f"{key_prefix}_car_sub")
         else:
-            sub = st.selectbox("Pair", ["F1-F2", "F1-F3"], key=f"{key_prefix}_car_sub")
+            sub = st.selectbox("Pair", [f"{near_default}-{far_default}", f"{near_default}-{next_far}"],
+                               key=f"{key_prefix}_car_sub")
     with vcol3:
         st.write("")
         st.write("")
@@ -435,11 +485,11 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     ss_key = f"{key_prefix}_car_active"
     if ss_key not in st.session_state:
         st.session_state[ss_key] = (list(default_active_variants) if default_active_variants
-                                     else ["V1 (F1-F2)", "V3 (win=252)"])
+                                     else [f"V1 ({near_default}-{far_default})", "V3 (win=252)"])
 
     if add_clicked:
         label = {
-            "V1 Roll Yield (F1-F2)": f"V1 ({sub})",
+            v1_label: f"V1 ({sub})",
             "V2 Long Slope": f"V2 ({sub})",
             "V3 Z-score (252d)": f"V3 (win={sub})",
             "V4 Carry-Momentum": f"V4 (N={sub})",
@@ -458,10 +508,10 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
             return carry_v2_position(crv, a, b, shift_n=shift_n)
         if label.startswith("V3"):
             win = int(label.split("=")[1].rstrip(")"))
-            return carry_v3_position(crv, win, shift_n=shift_n)
+            return carry_v3_position(crv, win, shift_n=shift_n, near=near_default, far=far_default)
         if label.startswith("V4"):
             n = int(label.split("=")[1].rstrip(")"))
-            return carry_v4_position(crv, n, shift_n=shift_n)
+            return carry_v4_position(crv, n, shift_n=shift_n, near=near_default, far=far_default)
         return pd.Series(dtype=float)
 
     chosen = st.multiselect(
@@ -479,8 +529,9 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         return {}
 
     # ── Year-range slider: scoped ONLY to Performance Metrics below -- the
+    # heatmap has its own independent year-range slider (see below), and the
     # equity curve, rolling Sharpe, and signal/position charts further down
-    # keep using the full-history `positions` dict, unaffected by this. ─────
+    # keep using the full-history `positions` dict, unaffected by either. ───
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
     car_yr = st.slider("Year range for performance metrics", yr0, yr1, (yr0, yr1),
                         key=f"{key_prefix}_car_yr")
@@ -498,8 +549,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     feature_options = list(positions.keys())
     if default_feature_variant and default_feature_variant in feature_options:
         default_feature = default_feature_variant
-    elif "V1 (F1-F2)" in feature_options:
-        default_feature = "V1 (F1-F2)"
+    elif f"V1 ({near_default}-{far_default})" in feature_options:
+        default_feature = f"V1 ({near_default}-{far_default})"
     else:
         default_feature = feature_options[0]
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
@@ -517,6 +568,77 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+
+    st.divider()
+
+    # ── Sharpe Heatmap: every valid (near, far) contract-pair up to whatever
+    # far-month the product's own curve data actually has (e.g. F27 for
+    # Copper, F15 for Gold) -- not the F15 cap used elsewhere for the Value
+    # tab's contract dropdown. "Horizon (days)" defaults to N/A (the plain
+    # V1/V2 level signal); typing a day-count reveals the Mode radio to
+    # reinterpret that same number as either V4 (carry-momentum) or V3
+    # (z-score), so one grid covers all four variants. Has its OWN
+    # independent year-range slider -- not linked to the Performance Metrics
+    # slider above or the equity curve's "Time period" slider below. ────────
+    st.markdown(f"**Sharpe Heatmap — Contract Pair × Carry Signal**")
+    st.caption('"N/A" -> V1/V2 level signal (long in backwardation, short in contango). Enter a whole '
+               "number of days to reinterpret that same horizon as V4 Carry-Momentum or V3 Z-score.")
+    hcol1, hcol2 = st.columns([1, 1.4])
+    with hcol1:
+        days_raw = st.text_input("Horizon (days)", value="N/A", key=f"{key_prefix}_car_hm_days")
+    days_clean = days_raw.strip()
+    hm_days: int | None = None
+    hm_mode: str | None = None
+    if days_clean.upper() not in ("N/A", "NA", ""):
+        try:
+            parsed = int(days_clean)
+            if parsed <= 0:
+                st.warning("Horizon must be a positive whole number of days -- showing the V1/V2 level "
+                           "signal instead.")
+            else:
+                hm_days = parsed
+        except ValueError:
+            st.warning('Enter a whole number of days, or "N/A" for the level (V1/V2) signal -- showing '
+                       "V1/V2 for now.")
+    if hm_days is not None:
+        with hcol2:
+            mode_label = st.radio("Interpret as", ["V4 Carry-Momentum", "V3 Z-score"], horizontal=True,
+                                   key=f"{key_prefix}_car_hm_mode")
+            hm_mode = "V4" if mode_label.startswith("V4") else "V3"
+
+    car_hm_yr = st.slider("Year range for heatmap", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_car_hm_yr")
+
+    # Only contracts with at least some real price data count as "available" --
+    # a far-month column that exists as a header but is entirely empty (never
+    # actually listed/traded for this product) shouldn't stretch the grid out
+    # to a nominal max that isn't real, and would otherwise just be a
+    # permanently-blank row/column.
+    all_contracts = sorted((c for c in curve.columns
+                            if c.startswith("F") and c[1:].isdigit() and curve[c].notna().any()),
+                           key=lambda c: int(c[1:]))
+    if skip_front_contract and "F1" in all_contracts:
+        all_contracts.remove("F1")
+    hm_df = carry_heatmap(curve, tuple(all_contracts), hm_days, hm_mode, f1r, f1c,
+                          f"{car_hm_yr[0]}-01-01", f"{car_hm_yr[1]}-12-31", shift_n)
+    if not hm_df.empty and hm_df["sharpe"].notna().any():
+        pivot = hm_df.pivot(index="near", columns="far", values="sharpe").reindex(
+            index=all_contracts, columns=all_contracts)
+        fig_hm = go.Figure(data=go.Heatmap(
+            z=pivot.values, x=pivot.columns, y=pivot.index,
+            colorscale="RdYlGn", zmid=0, colorbar=dict(title="Sharpe"),
+            hovertemplate="Near: %{y}<br>Far: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
+        ))
+        signal_desc = "V1/V2 Level" if hm_days is None else f"{hm_mode} ({hm_days}d)"
+        fig_hm.update_layout(**CHART_LAYOUT, height=560,
+                             title=dict(text=f"{product} — Carry Sharpe by Contract Pair ({signal_desc})",
+                                        font=dict(size=13)),
+                             xaxis_title="Far Contract", yaxis_title="Near Contract")
+        st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_car_hm")
+        best = hm_df.loc[hm_df["sharpe"].idxmax()]
+        st.caption(f"Best in range {car_hm_yr[0]}-{car_hm_yr[1]}: ({best['near']}, {best['far']}) "
+                  f"gross Sharpe {best['sharpe']:+.2f}.")
+    else:
+        st.info("Not enough data in the selected year range to compute a heatmap.")
 
     # ── Cumulative PnL and Rolling Sharpe each get their OWN independent
     # strategy selector (defaulting to every active carry variant), so one

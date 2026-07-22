@@ -142,7 +142,8 @@ with tab_mom:
 with tab_carry:
     carry_positions = render_carry_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,
                                         default_active_variants=CARRY_DEFAULT_ACTIVE,
-                                        default_feature_variant=CARRY_DEFAULT_FEATURE)
+                                        default_feature_variant=CARRY_DEFAULT_FEATURE,
+                                        skip_front_contract=True)
 
 with tab_val:
     contracts = [c for c in curve.columns if c.startswith("F") and c[1:].isdigit() and int(c[1:]) <= 15]

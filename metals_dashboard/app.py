@@ -6,7 +6,7 @@ Aluminium, Momentum / Carry / Value only (no Market Overview, Term
 Structure, Volume, Statistics, or Portfolio tabs -- those live in the
 original Stage 1 dashboard at github.com/kj2741-kj/Metals-Risk-Premia,
 untouched). Deliberately simple per spec: MA-crossover momentum only,
-Carry V1-V4, Value V1 MA-reversion only. No walk-forward OOS yet.
+Carry V1-V3, Value V1 MA-reversion only. No walk-forward OOS yet.
 """
 
 import os

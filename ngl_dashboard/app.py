@@ -67,14 +67,17 @@ MOMENTUM_DEFAULT_FEATURE = {
 }
 # Carry: (F1-F2)/F1 near-tenor roll yield is dominated by front-of-curve
 # heating-season seasonality for NGLs, not genuine term structure -- it is
-# strongly negative-Sharpe for every NGL ticker. V2 Long Slope (F4-F15),
-# matching Mark Bogorad's paper2_energy_risk_premia carry convention, is
-# positive-Sharpe for 5 of 6 tickers and tracks the paper's own Ethane/
-# Propane/Butane results far more closely. Applied uniformly (not
-# per-product) to match the existing Metals/Energy convention of one fixed
-# default carry set.
-CARRY_DEFAULT_ACTIVE = ["V2 (F4-F15)", "V3 (win=252)"]
-CARRY_DEFAULT_FEATURE = "V2 (F4-F15)"
+# strongly negative-Sharpe for every NGL ticker. The far-tenor V1 Level
+# pair (F4-F15) -- what used to be a separate "V2 Long Slope" variant
+# before V1/V2 were merged into one Level signal with a free contract
+# pair -- matching Mark Bogorad's paper2_energy_risk_premia carry
+# convention, is positive-Sharpe for 5 of 6 tickers and tracks the paper's
+# own Ethane/Propane/Butane results far more closely. Applied uniformly
+# (not per-product) to match the existing Metals/Energy convention of one
+# fixed default carry set. "V2 (win=252)" here is Z-score (formerly V3,
+# renumbered when V1/V2 merged).
+CARRY_DEFAULT_ACTIVE = ["V1 (F4-F15)", "V2 (win=252)"]
+CARRY_DEFAULT_FEATURE = "V1 (F4-F15)"
 # Value: F12 / 10yr / +-10% (Mark's paper2 convention) ranks top-1-3 of a
 # 9-combo grid (F8/F10/F12 x 5yr/7yr/10yr) for 4 of 6 tickers and is never
 # negative for any of them, unlike the Metals/Energy default of F8/5yr

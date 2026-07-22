@@ -82,16 +82,28 @@ def rolling_sharpe(pnl: pd.Series, window: int = 252) -> pd.Series:
 
 
 def rolling_price_vol(price: pd.Series, window: int = 252) -> pd.Series:
-    """Rolling annualized volatility of the underlying itself (not a strategy):
-    std of the price series' daily $ change, scaled by sqrt(252). Native-unit
-    ($ per contract, e.g. USD/MT) terms, same as rolling_sharpe/daily_returns
-    elsewhere in this file -- NOT %-of-notional, which would require dividing
-    by price[t-1] (unsafe for a back-adjusted level, see pos_metrics_generic's
-    docstring). Pass F1_raw (the actual traded front-month price) for this --
-    F1_raw does carry roll-day jumps (unlike F1_continuous), which is a
-    deliberate choice here: this is meant to read as the realized volatility
-    of the real, tradeable contract, not a back-adjusted synthetic series."""
-    return price.diff().rolling(window).std() * np.sqrt(252)
+    """Exponentially-weighted (EWMA) annualized volatility of the underlying
+    itself (not a strategy): EWMA std of the price series' daily $ change,
+    scaled by sqrt(252). Native-unit ($ per contract, e.g. USD/MT) terms,
+    same as rolling_sharpe/daily_returns elsewhere in this file -- NOT
+    %-of-notional, which would require dividing by price[t-1] (unsafe for a
+    back-adjusted level, see pos_metrics_generic's docstring). Pass F1_raw
+    (the actual traded front-month price) for this -- F1_raw does carry
+    roll-day jumps (unlike F1_continuous), which is a deliberate choice
+    here: this is meant to read as the realized volatility of the real,
+    tradeable contract, not a back-adjusted synthetic series.
+
+    EWMA (span=`window`, pandas' N-day-equivalent decay parametrization)
+    rather than a simple rolling std, per Bouchouev's Virtual Barrels Ch.
+    8.4: a fixed rolling window suffers "volatility ghost" -- a single large
+    historical shock inflates the estimate for exactly the window's length,
+    then vanishes abruptly the instant it drops out of the sample (his own
+    example: the April 2020 negative-WTI shock distorting 6-month and
+    12-month realized vol for exactly 6 and 12 months, then dropping
+    sharply). EWMA lets old shocks fade out smoothly via the decay instead
+    of dropping out all at once."""
+    daily_chg = price.diff()
+    return daily_chg.ewm(span=window, min_periods=max(window // 4, 5)).std() * np.sqrt(252)
 
 
 TIMING_OPTIONS = ["Same Day (Shift-0)", "Lag-1 (Shift-1)", "Lag-2 (Shift-2)"]
@@ -1260,11 +1272,14 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
                "them update. One filter controls both charts.")
 
     st.markdown(f"**Underlying Volatility — {product}**")
-    st.caption(f"Rolling annualized volatility of {product}'s daily $ change in F1_raw (the actual traded "
+    st.caption(f"EWMA annualized volatility of {product}'s daily $ change in F1_raw (the actual traded "
                f"front-month price -- carries roll-day jumps, unlike the back-adjusted F1_continuous used "
                f"for PnL elsewhere), in {unit_label} terms -- a property of the underlying itself, "
-               "independent of any strategy or the filter below.")
-    vol_window_map = {"21d (1mo)": 21, "63d (1qtr)": 63, "252d (1yr)": 252}
+               "independent of any strategy or the filter below. Exponentially-weighted rather than a "
+               "simple rolling window, per Bouchouev's *Virtual Barrels* (Ch. 8.4): a fixed window makes "
+               "old shocks vanish abruptly the instant they drop out of the sample (the \"volatility "
+               "ghost\"); EWMA lets them fade out smoothly instead.")
+    vol_window_map = {"21d (1mo)": 21, "63d (1qtr)": 63, "126d (6mo)": 126, "252d (1yr)": 252}
     vol_window_label = st.radio("Window", list(vol_window_map.keys()), index=1, horizontal=True,
                                  key=f"{key_prefix}_cmp_vol_window")
     vol = rolling_price_vol(f1r, vol_window_map[vol_window_label])

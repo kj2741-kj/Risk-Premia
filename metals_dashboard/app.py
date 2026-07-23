@@ -1,9 +1,9 @@
 """
 Metals Dashboard - Stage 2 (simplified 3-tab rebuild)
 ========================================================
-Standalone Streamlit app, its own separate deployment. LME Copper and
-Aluminium, Momentum / Carry / Value only (no Market Overview, Term
-Structure, Volume, Statistics, or Portfolio tabs -- those live in the
+Standalone Streamlit app, its own separate deployment. LME Copper,
+Aluminium, Lead, and Zinc, Momentum / Carry / Value only (no Market
+Overview, Term Structure, Volume, Statistics, or Portfolio tabs -- those live in the
 original Stage 1 dashboard at github.com/kj2741-kj/Metals-Risk-Premia,
 untouched). Deliberately simple per spec: MA-crossover momentum only,
 Carry V1-V3, Value V1 MA-reversion only. No walk-forward OOS yet.
@@ -42,6 +42,8 @@ CALENDAR_FILE = METALS_CALENDAR_FILE
 METAL_OPTIONS = {
     "Copper": {"code": "LP", "curve_sheet": METALS_CONFIG["LP"]["price_sheet"], "unit": "/MT"},
     "Aluminium": {"code": "LA", "curve_sheet": METALS_CONFIG["LA"]["price_sheet"], "unit": "/MT"},
+    "Lead": {"code": "LL", "curve_sheet": METALS_CONFIG["LL"]["price_sheet"], "unit": "/MT"},
+    "Zinc": {"code": "LX", "curve_sheet": METALS_CONFIG["LX"]["price_sheet"], "unit": "/MT"},
 }
 
 with st.sidebar:

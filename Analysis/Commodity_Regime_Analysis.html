@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Commodity Risk-Premia — Volatility &amp; Curve-Shape Regime Analysis</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --surface-1: #fcfcfb; --page: #f9f9f7; --text-primary:#0b0b0b; --text-secondary:#52514e;
+    --muted:#898781; --grid:#e1e0d9; --border: rgba(11,11,11,0.10);
+    --blue:#2a78d6; --blue-mid:#9ec5f4; --red:#e34948; --red-mid:#f3aeae; --neutral:#f0efec;
+    --navy:#1c355e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      --surface-1:#1a1a19; --page:#0d0d0d; --text-primary:#ffffff; --text-secondary:#c3c2b7;
+      --muted:#898781; --grid:#2c2c2a; --border: rgba(255,255,255,0.10);
+      --blue:#3987e5; --blue-mid:#184f95; --red:#e66767; --red-mid:#6b2b2b; --neutral:#383835;
+      --navy:#9db8dd;
+    }
+  }
+  :root[data-theme="dark"] {
+    --surface-1:#1a1a19; --page:#0d0d0d; --text-primary:#ffffff; --text-secondary:#c3c2b7;
+    --muted:#898781; --grid:#2c2c2a; --border: rgba(255,255,255,0.10);
+    --blue:#3987e5; --blue-mid:#184f95; --red:#e66767; --red-mid:#6b2b2b; --neutral:#383835;
+    --navy:#9db8dd;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background: var(--page); color: var(--text-primary);
+         font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.5rem; margin: 0 0 6px; color: var(--navy); }
+  .sub { color: var(--text-secondary); font-size: 0.92rem; margin: 0 0 4px; }
+  .meta { color: var(--muted); font-size: 0.82rem; margin: 0 0 24px; }
+  .tabs { display:flex; gap:8px; flex-wrap: wrap; margin-bottom: 20px; border-bottom: 1px solid var(--grid); padding-bottom: 12px; }
+  .tab { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1);
+         color: var(--text-secondary); font-size: 0.88rem; cursor:pointer; font-weight: 600; }
+  .tab.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .tab .badge { font-weight: 400; opacity: 0.75; font-size: 0.78rem; margin-left: 4px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
+  .card h2 { font-size: 1.05rem; margin: 0 0 4px; color: var(--navy); }
+  .card .note { color: var(--text-secondary); font-size: 0.82rem; margin: 0 0 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; }
+  th, td { padding: 8px 10px; text-align: center; border: 1px solid var(--grid); }
+  th { background: var(--navy); color: #fff; font-weight: 600; font-size: 0.78rem; }
+  td.rowlabel, th.rowlabel { text-align: left; font-weight: 600; color: var(--text-primary); background: transparent; }
+  td.rowlabel { color: var(--text-secondary); font-weight: 500; }
+  .n-sub { display:block; font-size: 0.68rem; color: var(--muted); font-weight: 400; }
+  .flag { color: var(--red); font-weight: 700; }
+  .freqrow { display:flex; gap: 16px; margin-top: 14px; font-size: 0.82rem; color: var(--text-secondary); flex-wrap: wrap; }
+  .freqrow b { color: var(--text-primary); }
+  .overview-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .stat { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+  .stat .k { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  .stat .v { font-size: 0.95rem; margin-top: 4px; font-weight: 600; }
+  .stat .v small { display:block; font-weight: 400; color: var(--text-secondary); font-size: 0.78rem; margin-top:2px;}
+  .methodology { font-size: 0.82rem; color: var(--text-secondary); line-height: 1.6; }
+  .methodology li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Commodity Risk-Premia — Volatility &amp; Curve-Shape Regime Analysis</h1>
+  <p class="sub">7 systematic strategies (3 Momentum / 3 Carry / 1 Value) tested across two independent regime dimensions, product by product.</p>
+  <p class="meta">Lag-1 execution &middot; TC = 5bps + roll charge &middot; active-day Sharpe convention (net PnL on days where position &ne; 0 and the regime label matches)</p>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="content"></div>
+</div>
+
+<script>
+const DATA = [{"ticker": "LP", "label": "Copper", "asset_class": "Metals", "curve_tenors": ["F1", "F3", "F5"], "vol_rows": [{"group": "Momentum", "name": "MA(1,20)", "lastOfGroup": false, "Low": 0.54, "Low_n": 2099, "Medium": -0.576, "Medium_n": 1615, "High": -0.109, "High_n": 1195}, {"group": "Momentum", "name": "MA(5,60)", "lastOfGroup": false, "Low": 0.436, "Low_n": 2099, "Medium": -0.25, "Medium_n": 1615, "High": -0.013, "High_n": 1197}, {"group": "Momentum", "name": "MA(20,250)", "lastOfGroup": true, "Low": 0.217, "Low_n": 2099, "Medium": -0.195, "Medium_n": 1615, "High": 0.409, "High_n": 1197}, {"group": "Carry", "name": "V1 (F1-F2)", "lastOfGroup": false, "Low": -0.751, "Low_n": 2062, "Medium": 0.234, "Medium_n": 1597, "High": 0.332, "High_n": 1188}, {"group": "Carry", "name": "V2 (win=252)", "lastOfGroup": false, "Low": -0.16, "Low_n": 2099, "Medium": 0.173, "Medium_n": 1615, "High": 0.768, "High_n": 1197}, {"group": "Carry", "name": "V3 (N=20)", "lastOfGroup": true, "Low": -0.048, "Low_n": 2098, "Medium": 1.168, "Medium_n": 1615, "High": -0.291, "High_n": 1197}, {"group": "Value", "name": "F8 5yr +/-10%", "lastOfGroup": true, "Low": 0.563, "Low_n": 1084, "Medium": 0.585, "Medium_n": 876, "High": -0.139, "High_n": 909}], "vol_freq": {"Low": 42.7, "Low_n": 2099, "Medium": 32.9, "Medium_n": 1615, "High": 24.4, "High_n": 1197}, "vol_disagree_pct": 21.1, "curve_results": [{"strategy": "Momentum: MA(1,20)", "regime": "Concave Contango", "n": 2598, "sharpe": -0.404, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Contango", "n": 582, "sharpe": -0.222, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Backwardation", "n": 1077, "sharpe": 0.164, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Concave Backwardation", "n": 883, "sharpe": 0.706, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Contango", "n": 2599, "sharpe": -0.389, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Contango", "n": 583, "sharpe": 0.55, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Backwardation", "n": 1076, "sharpe": 0.255, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Backwardation", "n": 844, "sharpe": 0.749, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Contango", "n": 2569, "sharpe": -0.283, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Contango", "n": 581, "sharpe": 0.229, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Backwardation", "n": 1072, "sharpe": 0.713, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Backwardation", "n": 690, "sharpe": 0.886, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Contango", "n": 2582, "sharpe": -0.042, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Contango", "n": 569, "sharpe": 0.043, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Backwardation", "n": 1067, "sharpe": -0.813, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Backwardation", "n": 874, "sharpe": 1.208, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Contango", "n": 2568, "sharpe": -0.058, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Contango", "n": 580, "sharpe": 0.966, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Backwardation", "n": 1072, "sharpe": -0.002, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Backwardation", "n": 690, "sharpe": 1.221, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Contango", "n": 2598, "sharpe": 0.191, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Contango", "n": 583, "sharpe": 0.084, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Backwardation", "n": 1077, "sharpe": 0.475, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Backwardation", "n": 882, "sharpe": 0.668, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Contango", "n": 1496, "sharpe": 1.121, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Contango", "n": 333, "sharpe": 0.137, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Backwardation", "n": 670, "sharpe": -0.329, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Backwardation", "n": 363, "sharpe": -2.056, "flag": ""}], "curve_freq": {"Concave Contango": 50.3, "Convex Contango": 11.3, "Convex Backwardation": 20.9, "Concave Backwardation": 17.5}, "n_days": 5177, "start_date": "2006-01-03", "end_date": "2026-06-30"}, {"ticker": "CL", "label": "WTI Crude", "asset_class": "Energy", "curve_tenors": ["F1", "F2", "F3"], "vol_rows": [{"group": "Momentum", "name": "MA(1,20)", "lastOfGroup": false, "Low": 0.33, "Low_n": 1802, "Medium": -0.114, "Medium_n": 2034, "High": 0.438, "High_n": 1060}, {"group": "Momentum", "name": "MA(5,60)", "lastOfGroup": false, "Low": 0.292, "Low_n": 1802, "Medium": -0.047, "Medium_n": 2034, "High": 1.245, "High_n": 1060}, {"group": "Momentum", "name": "MA(20,250)", "lastOfGroup": true, "Low": -0.129, "Low_n": 1802, "Medium": 0.082, "Medium_n": 2034, "High": 0.662, "High_n": 1060}, {"group": "Carry", "name": "V1 (F1-F2)", "lastOfGroup": false, "Low": 0.713, "Low_n": 1796, "Medium": -0.097, "Medium_n": 2028, "High": 0.784, "High_n": 1057}, {"group": "Carry", "name": "V2 (win=252)", "lastOfGroup": false, "Low": 0.314, "Low_n": 1802, "Medium": 0.257, "Medium_n": 2034, "High": 0.978, "High_n": 1060}, {"group": "Carry", "name": "V3 (N=20)", "lastOfGroup": true, "Low": 0.422, "Low_n": 1802, "Medium": 0.683, "Medium_n": 2034, "High": 0.518, "High_n": 1060}, {"group": "Value", "name": "F8 5yr +/-10%", "lastOfGroup": true, "Low": 0.15, "Low_n": 999, "Medium": 0.449, "Medium_n": 1166, "High": 0.321, "High_n": 626}], "vol_freq": {"Low": 36.8, "Low_n": 1802, "Medium": 41.5, "Medium_n": 2034, "High": 21.7, "High_n": 1060}, "vol_disagree_pct": 18.9, "curve_results": [{"strategy": "Momentum: MA(1,20)", "regime": "Concave Contango", "n": 1966, "sharpe": -0.215, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Contango", "n": 1062, "sharpe": 1.32, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Backwardation", "n": 714, "sharpe": -0.394, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Concave Backwardation", "n": 1384, "sharpe": 0.237, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Contango", "n": 1926, "sharpe": 0.008, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Contango", "n": 1062, "sharpe": 1.029, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Backwardation", "n": 714, "sharpe": -0.142, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Backwardation", "n": 1384, "sharpe": 0.874, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Contango", "n": 1765, "sharpe": -0.145, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Contango", "n": 1033, "sharpe": 0.079, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Backwardation", "n": 714, "sharpe": 0.294, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Backwardation", "n": 1384, "sharpe": 0.663, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Contango", "n": 1981, "sharpe": 0.169, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Contango", "n": 1063, "sharpe": 1.415, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Backwardation", "n": 714, "sharpe": -0.022, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Backwardation", "n": 1372, "sharpe": 0.379, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Contango", "n": 1764, "sharpe": 0.585, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Contango", "n": 1033, "sharpe": 1.113, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Backwardation", "n": 714, "sharpe": -0.228, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Backwardation", "n": 1384, "sharpe": 0.45, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Contango", "n": 1965, "sharpe": 0.498, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Contango", "n": 1062, "sharpe": 0.402, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Backwardation", "n": 714, "sharpe": 0.594, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Backwardation", "n": 1384, "sharpe": 0.545, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Contango", "n": 1107, "sharpe": 0.499, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Contango", "n": 608, "sharpe": 0.306, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Backwardation", "n": 347, "sharpe": 0.241, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Backwardation", "n": 724, "sharpe": 0.025, "flag": ""}], "curve_freq": {"Concave Contango": 38.6, "Convex Contango": 20.7, "Convex Backwardation": 13.9, "Concave Backwardation": 26.9}, "n_days": 5162, "start_date": "2006-01-03", "end_date": "2026-06-30"}, {"ticker": "CO", "label": "Brent Crude", "asset_class": "Energy", "curve_tenors": ["F1", "F2", "F3"], "vol_rows": [{"group": "Momentum", "name": "MA(1,20)", "lastOfGroup": false, "Low": 0.525, "Low_n": 1878, "Medium": 0.193, "Medium_n": 1771, "High": 0.492, "High_n": 1354}, {"group": "Momentum", "name": "MA(5,60)", "lastOfGroup": false, "Low": 0.723, "Low_n": 1838, "Medium": 0.031, "Medium_n": 1771, "High": 0.624, "High_n": 1354}, {"group": "Momentum", "name": "MA(20,250)", "lastOfGroup": true, "Low": 0.244, "Low_n": 1648, "Medium": 0.006, "Medium_n": 1771, "High": 0.348, "High_n": 1354}, {"group": "Carry", "name": "V1 (F1-F2)", "lastOfGroup": false, "Low": 0.944, "Low_n": 1889, "Medium": -0.2, "Medium_n": 1772, "High": 0.475, "High_n": 1351}, {"group": "Carry", "name": "V2 (win=252)", "lastOfGroup": false, "Low": 0.879, "Low_n": 1893, "Medium": 0.041, "Medium_n": 1776, "High": 0.795, "High_n": 1354}, {"group": "Carry", "name": "V3 (N=20)", "lastOfGroup": true, "Low": 0.457, "Low_n": 1893, "Medium": 0.218, "Medium_n": 1776, "High": 0.593, "High_n": 1354}, {"group": "Value", "name": "F8 5yr +/-10%", "lastOfGroup": true, "Low": 0.131, "Low_n": 1245, "Medium": 0.454, "Medium_n": 1051, "High": 0.172, "High_n": 878}], "vol_freq": {"Low": 37.7, "Low_n": 1894, "Medium": 35.4, "Medium_n": 1776, "High": 27.0, "High_n": 1354}, "vol_disagree_pct": 17.5, "curve_results": [{"strategy": "Momentum: MA(1,20)", "regime": "Concave Contango", "n": 1332, "sharpe": 0.797, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Contango", "n": 933, "sharpe": 1.49, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Backwardation", "n": 1898, "sharpe": 0.252, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Concave Backwardation", "n": 1076, "sharpe": -0.548, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Contango", "n": 1278, "sharpe": 0.738, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Contango", "n": 907, "sharpe": 0.646, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Backwardation", "n": 1898, "sharpe": 0.228, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Backwardation", "n": 1076, "sharpe": 0.144, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Contango", "n": 1090, "sharpe": 0.198, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Contango", "n": 810, "sharpe": 0.381, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Backwardation", "n": 1828, "sharpe": 0.063, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Backwardation", "n": 1052, "sharpe": 0.398, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Contango", "n": 1345, "sharpe": 0.313, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Contango", "n": 956, "sharpe": 0.456, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Backwardation", "n": 1898, "sharpe": 0.368, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Backwardation", "n": 1068, "sharpe": 0.31, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Contango", "n": 1177, "sharpe": 0.513, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Contango", "n": 878, "sharpe": 1.298, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Backwardation", "n": 1896, "sharpe": 0.12, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Backwardation", "n": 1076, "sharpe": 0.838, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Contango", "n": 1338, "sharpe": 0.569, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Contango", "n": 946, "sharpe": 0.413, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Backwardation", "n": 1898, "sharpe": 0.292, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Backwardation", "n": 1076, "sharpe": 0.7, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Contango", "n": 786, "sharpe": 0.189, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Contango", "n": 538, "sharpe": -0.42, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Backwardation", "n": 1201, "sharpe": 0.218, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Backwardation", "n": 641, "sharpe": 0.656, "flag": ""}], "curve_freq": {"Concave Contango": 25.5, "Convex Contango": 18.2, "Convex Backwardation": 35.9, "Concave Backwardation": 20.4}, "n_days": 5290, "start_date": "2006-01-03", "end_date": "2026-06-30"}, {"ticker": "XB", "label": "RBOB Gasoline", "asset_class": "Energy", "curve_tenors": ["F1", "F2", "F3"], "vol_rows": [{"group": "Momentum", "name": "MA(1,20)", "lastOfGroup": false, "Low": 0.219, "Low_n": 1913, "Medium": -0.156, "Medium_n": 1838, "High": 0.766, "High_n": 1144}, {"group": "Momentum", "name": "MA(5,60)", "lastOfGroup": false, "Low": -0.28, "Low_n": 1913, "Medium": 0.321, "Medium_n": 1838, "High": 0.729, "High_n": 1144}, {"group": "Momentum", "name": "MA(20,250)", "lastOfGroup": true, "Low": -0.404, "Low_n": 1913, "Medium": -0.202, "Medium_n": 1838, "High": 0.338, "High_n": 1144}, {"group": "Carry", "name": "V1 (F1-F2)", "lastOfGroup": false, "Low": -0.292, "Low_n": 1909, "Medium": -0.743, "Medium_n": 1838, "High": -0.223, "High_n": 1142}, {"group": "Carry", "name": "V2 (win=252)", "lastOfGroup": false, "Low": -0.144, "Low_n": 1913, "Medium": -0.407, "Medium_n": 1838, "High": -0.086, "High_n": 1144}, {"group": "Carry", "name": "V3 (N=20)", "lastOfGroup": true, "Low": -0.517, "Low_n": 1913, "Medium": -0.068, "Medium_n": 1838, "High": 0.468, "High_n": 1144}, {"group": "Value", "name": "F8 5yr +/-10%", "lastOfGroup": true, "Low": 0.585, "Low_n": 929, "Medium": 0.417, "Medium_n": 1149, "High": 0.081, "High_n": 891}], "vol_freq": {"Low": 39.1, "Low_n": 1913, "Medium": 37.5, "Medium_n": 1838, "High": 23.4, "High_n": 1144}, "vol_disagree_pct": 14.8, "curve_results": [{"strategy": "Momentum: MA(1,20)", "regime": "Concave Contango", "n": 785, "sharpe": 0.125, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Contango", "n": 1088, "sharpe": 0.917, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Backwardation", "n": 1736, "sharpe": 0.103, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Concave Backwardation", "n": 1524, "sharpe": 0.183, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Contango", "n": 764, "sharpe": -0.364, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Contango", "n": 1069, "sharpe": 1.231, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Backwardation", "n": 1736, "sharpe": 0.146, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Backwardation", "n": 1524, "sharpe": 0.177, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Contango", "n": 734, "sharpe": -0.968, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Contango", "n": 994, "sharpe": 1.019, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Backwardation", "n": 1695, "sharpe": -0.394, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Backwardation", "n": 1480, "sharpe": 0.131, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Contango", "n": 785, "sharpe": -1.356, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Contango", "n": 1101, "sharpe": -0.694, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Backwardation", "n": 1736, "sharpe": -0.173, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Backwardation", "n": 1522, "sharpe": -0.124, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Contango", "n": 734, "sharpe": -1.558, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Contango", "n": 992, "sharpe": -0.012, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Backwardation", "n": 1695, "sharpe": -0.193, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Backwardation", "n": 1480, "sharpe": 0.269, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Contango", "n": 784, "sharpe": -0.615, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Contango", "n": 1088, "sharpe": 0.37, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Backwardation", "n": 1736, "sharpe": -0.15, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Backwardation", "n": 1524, "sharpe": 0.356, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Contango", "n": 491, "sharpe": 0.55, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Contango", "n": 593, "sharpe": -0.79, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Backwardation", "n": 1034, "sharpe": 0.298, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Backwardation", "n": 847, "sharpe": 0.676, "flag": ""}], "curve_freq": {"Concave Contango": 15.3, "Convex Contango": 21.5, "Convex Backwardation": 33.7, "Concave Backwardation": 29.6}, "n_days": 5161, "start_date": "2006-01-03", "end_date": "2026-06-30"}, {"ticker": "LA", "label": "Aluminium", "asset_class": "Metals", "curve_tenors": ["F1", "F3", "F5"], "vol_rows": [{"group": "Momentum", "name": "MA(1,20)", "lastOfGroup": false, "Low": 0.151, "Low_n": 2725, "Medium": -0.271, "Medium_n": 1351, "High": -0.314, "High_n": 835}, {"group": "Momentum", "name": "MA(5,60)", "lastOfGroup": false, "Low": 0.175, "Low_n": 2725, "Medium": -0.024, "Medium_n": 1351, "High": 0.329, "High_n": 835}, {"group": "Momentum", "name": "MA(20,250)", "lastOfGroup": true, "Low": 0.101, "Low_n": 2622, "Medium": 0.301, "Medium_n": 1334, "High": 0.211, "High_n": 835}, {"group": "Carry", "name": "V1 (F1-F2)", "lastOfGroup": false, "Low": -0.038, "Low_n": 2706, "Medium": 0.482, "Medium_n": 1346, "High": 0.041, "High_n": 831}, {"group": "Carry", "name": "V2 (win=252)", "lastOfGroup": false, "Low": 0.742, "Low_n": 2725, "Medium": -0.334, "Medium_n": 1351, "High": 0.502, "High_n": 835}, {"group": "Carry", "name": "V3 (N=20)", "lastOfGroup": true, "Low": 0.048, "Low_n": 2725, "Medium": -0.41, "Medium_n": 1351, "High": -0.033, "High_n": 835}, {"group": "Value", "name": "F8 5yr +/-10%", "lastOfGroup": true, "Low": 0.453, "Low_n": 1241, "Medium": -0.322, "Medium_n": 553, "High": 0.489, "High_n": 730}], "vol_freq": {"Low": 55.5, "Low_n": 2725, "Medium": 27.5, "Medium_n": 1351, "High": 17.0, "High_n": 835}, "vol_disagree_pct": 17.7, "curve_results": [{"strategy": "Momentum: MA(1,20)", "regime": "Concave Contango", "n": 3096, "sharpe": 0.133, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Contango", "n": 1479, "sharpe": -0.874, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Convex Backwardation", "n": 277, "sharpe": 0.548, "flag": ""}, {"strategy": "Momentum: MA(1,20)", "regime": "Concave Backwardation", "n": 252, "sharpe": -0.182, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Contango", "n": 3001, "sharpe": 0.245, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Contango", "n": 1479, "sharpe": -0.511, "flag": ""}, {"strategy": "Momentum: MA(5,60)", "regime": "Convex Backwardation", "n": 277, "sharpe": 0.624, "flag": "CAUTION: positive autocorr, effective N below nominal N"}, {"strategy": "Momentum: MA(5,60)", "regime": "Concave Backwardation", "n": 238, "sharpe": 0.966, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Contango", "n": 2892, "sharpe": 0.003, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Contango", "n": 1478, "sharpe": -0.026, "flag": ""}, {"strategy": "Momentum: MA(20,250)", "regime": "Convex Backwardation", "n": 242, "sharpe": 2.189, "flag": "CAUTION: positive autocorr, effective N below nominal N"}, {"strategy": "Momentum: MA(20,250)", "regime": "Concave Backwardation", "n": 171, "sharpe": 0.946, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Contango", "n": 3148, "sharpe": 0.583, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Contango", "n": 1462, "sharpe": -0.52, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Convex Backwardation", "n": 277, "sharpe": 0.611, "flag": ""}, {"strategy": "Carry: V1 (F1-F2)", "regime": "Concave Backwardation", "n": 247, "sharpe": -2.284, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Contango", "n": 2971, "sharpe": 0.41, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Contango", "n": 1478, "sharpe": -0.042, "flag": ""}, {"strategy": "Carry: V2 (win=252)", "regime": "Convex Backwardation", "n": 272, "sharpe": 3.29, "flag": "CAUTION: positive autocorr, effective N below nominal N"}, {"strategy": "Carry: V2 (win=252)", "regime": "Concave Backwardation", "n": 191, "sharpe": -1.459, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Contango", "n": 3135, "sharpe": 0.075, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Contango", "n": 1479, "sharpe": -0.392, "flag": ""}, {"strategy": "Carry: V3 (N=20)", "regime": "Convex Backwardation", "n": 277, "sharpe": 1.849, "flag": "CAUTION: positive autocorr, effective N below nominal N"}, {"strategy": "Carry: V3 (N=20)", "regime": "Concave Backwardation", "n": 252, "sharpe": -0.755, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Contango", "n": 1444, "sharpe": 0.457, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Contango", "n": 738, "sharpe": 1.392, "flag": ""}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Convex Backwardation", "n": 167, "sharpe": -2.526, "flag": "CAUTION: positive autocorr, effective N below nominal N"}, {"strategy": "Value: F8 5yr +/-10%", "regime": "Concave Backwardation", "n": 168, "sharpe": -1.237, "flag": ""}], "curve_freq": {"Concave Contango": 61.0, "Convex Contango": 28.6, "Convex Backwardation": 5.4, "Concave Backwardation": 5.0}, "n_days": 5177, "start_date": "2006-01-03", "end_date": "2026-06-30"}];
+const VOL_ORDER = ["Low","Medium","High"];
+const CURVE_ORDER = ["Concave Contango","Convex Contango","Convex Backwardation","Concave Backwardation"];
+
+function sharpeColor(v) {
+  if (v === null || v === undefined) return null;
+  if (v >= 0.75) return "var(--blue)";
+  if (v >= 0.25) return "var(--blue-mid)";
+  if (v > -0.25) return "var(--neutral)";
+  if (v > -0.75) return "var(--red-mid)";
+  return "var(--red)";
+}
+function sharpeTextColor(v) {
+  if (v === null) return "inherit";
+  return (v >= 0.75 || v <= -0.75) ? "#fff" : "inherit";
+}
+function fmt(v) { return v === null || v === undefined ? "n/a" : v.toFixed(2); }
+
+function renderOverview() {
+  let rows = DATA.map(p => {
+    let bestVol = null;
+    p.vol_rows.forEach(r => VOL_ORDER.forEach(reg => {
+      if (r[reg] !== null && r[reg] !== undefined && (bestVol === null || r[reg] > bestVol.v))
+        bestVol = {v:r[reg], label:`${r.group} ${r.name} × ${reg} vol`};
+    }));
+    let bestCurve = null;
+    p.curve_results.forEach(r => {
+      if (r.sharpe !== null && (bestCurve === null || r.sharpe > bestCurve.v))
+        bestCurve = {v:r.sharpe, label:`${r.strategy} × ${r.regime}`};
+    });
+    return {p, bestVol, bestCurve};
+  });
+  let cards = rows.map(({p,bestVol,bestCurve}) => `
+    <div class="stat">
+      <div class="k">${p.asset_class} — ${p.label}</div>
+      <div class="v">Best vol-regime cell
+        <small>${bestVol ? bestVol.label + " (Sharpe " + bestVol.v.toFixed(2) + ")" : "n/a"}</small>
+      </div>
+      <div class="v">Best curve-regime cell
+        <small>${bestCurve ? bestCurve.label + " (Sharpe " + bestCurve.v.toFixed(2) + ")" : "n/a"}</small>
+      </div>
+    </div>`).join("");
+
+  return `
+  <div class="card">
+    <h2>Overview — ${DATA.length} products tested</h2>
+    <p class="note">Copper is the original pilot; the other products are the first replication pass extending the same methodology.</p>
+    <div class="overview-grid">${cards}</div>
+  </div>
+  <div class="card">
+    <h2>Methodology</h2>
+    <ul class="methodology">
+      <li><b>Part 1 — Volatility regime:</b> EWMA (span-63) realized vol of the continuous F1 daily $ change, annualized by &radic;252. Regime = Low/Medium/High vs. a <b>5-year (1,260-day) trailing rolling</b> mean &plusmn; 0.5&sigma; — no look-ahead.</li>
+      <li><b>Part 2 — Curve-shape regime (Bouchouev fractionation, Ch. 6.1):</b> CV = F1 &minus; 2&middot;F3 + F5. CV&lt;0 concave, CV&gt;0 convex; combined with contango (F1&lt;F5) / backwardation (F1&gt;F5) &rarr; 4 states. Same-day sign test, no rolling window.</li>
+      <li><b>Robustness:</b> every curve-regime cell checked for autocorrelation-inflated Sharpe precision (AR(1)-adjusted effective N vs. nominal N) — flagged cells marked with <span class="flag">*</span>.</li>
+      <li>Sharpe requires &ge;20 active-day observations in the cell, else shown as n/a.</li>
+    </ul>
+  </div>`;
+}
+
+function renderProduct(p) {
+  let volRows = p.vol_rows.map(r => {
+    let cells = VOL_ORDER.map(reg => {
+      let v = r[reg], n = r[reg+"_n"];
+      let bg = sharpeColor(v), fg = sharpeTextColor(v);
+      return `<td style="background:${bg||'transparent'};color:${fg}">${fmt(v)}<span class="n-sub">n=${n}</span></td>`;
+    }).join("");
+    return `<tr><td class="rowlabel">${r.group}</td><td class="rowlabel">${r.name}</td>${cells}</tr>`;
+  }).join("");
+
+  let strategies = [...new Set(p.curve_results.map(r => r.strategy))];
+  let byKey = {};
+  p.curve_results.forEach(r => byKey[r.strategy+"||"+r.regime] = r);
+  let curveRows = strategies.map(strat => {
+    let cells = CURVE_ORDER.map(reg => {
+      let rec = byKey[strat+"||"+reg];
+      let v = rec ? rec.sharpe : null;
+      let bg = sharpeColor(v), fg = sharpeTextColor(v);
+      let flag = rec && rec.flag ? `<span class="flag">*</span>` : "";
+      return `<td style="background:${bg||'transparent'};color:${fg}">${fmt(v)}${flag}<span class="n-sub">n=${rec?rec.n:0}</span></td>`;
+    }).join("");
+    return `<tr><td class="rowlabel">${strat}</td>${cells}</tr>`;
+  }).join("");
+
+  let vf = p.vol_freq, cf = p.curve_freq;
+  return `
+  <div class="card">
+    <h2>${p.label} (${p.ticker}) — ${p.asset_class}</h2>
+    <p class="note">Sample: ${p.start_date} to ${p.end_date} (${p.n_days} trading days) &middot; Curve-shape tenors: ${p.curve_tenors.join("/")}</p>
+    <h3 style="font-size:0.9rem;margin:16px 0 8px;color:var(--text-primary)">Part 1 — Volatility Regime</h3>
+    <table>
+      <tr><th class="rowlabel">Group</th><th class="rowlabel">Strategy</th><th>Low Vol</th><th>Medium Vol</th><th>High Vol</th></tr>
+      ${volRows}
+    </table>
+    <div class="freqrow">
+      <span>Time-in-regime (5yr rolling): <b>Low ${vf.Low}%</b> &middot; <b>Medium ${vf.Medium}%</b> &middot; <b>High ${vf.High}%</b></span>
+      <span>Rolling vs. expanding-window disagreement: <b>${p.vol_disagree_pct ?? "n/a"}%</b> of days</span>
+    </div>
+    <h3 style="font-size:0.9rem;margin:22px 0 8px;color:var(--text-primary)">Part 2 — Curve-Shape Regime (${p.curve_tenors.join("/")})</h3>
+    <table>
+      <tr><th class="rowlabel">Strategy</th><th>Concave<br>Contango</th><th>Convex<br>Contango</th><th>Convex<br>Backw.</th><th>Concave<br>Backw.</th></tr>
+      ${curveRows}
+    </table>
+    <div class="freqrow">
+      <span>Time-in-regime: ${CURVE_ORDER.map(r => `<b>${r}: ${cf[r]}%</b>`).join(" &middot; ")}</span>
+    </div>
+    <p class="note" style="margin-top:14px"><span class="flag">*</span> = caution flag: cell shows positive autocorrelation with effective N materially below nominal N — treat the Sharpe as optimistic.</p>
+  </div>`;
+}
+
+const tabsEl = document.getElementById("tabs");
+const contentEl = document.getElementById("content");
+const tabDefs = [{key:"overview", label:"Overview", badge:""}].concat(
+  DATA.map(p => ({key:p.ticker, label:p.label, badge:p.asset_class}))
+);
+
+function showTab(key) {
+  [...tabsEl.children].forEach(t => t.classList.toggle("active", t.dataset.key === key));
+  if (key === "overview") { contentEl.innerHTML = renderOverview(); return; }
+  let p = DATA.find(d => d.ticker === key);
+  contentEl.innerHTML = renderProduct(p);
+}
+
+tabDefs.forEach(t => {
+  let el = document.createElement("div");
+  el.className = "tab";
+  el.dataset.key = t.key;
+  el.innerHTML = t.label + (t.badge ? `<span class="badge">${t.badge}</span>` : "");
+  el.onclick = () => showTab(t.key);
+  tabsEl.appendChild(el);
+});
+showTab("overview");
+</script>
+</body>
+</html>

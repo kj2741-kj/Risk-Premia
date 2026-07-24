@@ -9,6 +9,8 @@ venv/
 Thumbs.db
 ~$*
 tradebooks/
+tradebooks_logret*/
 outputs/
 Gorton_Hayashi_Rouwenhorst_2013_The Fundamentals of Commodity Futures Returns.pdf
 docs/
+scratch/

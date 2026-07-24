@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Smile vs. Vol-Regime Cross-Check</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb; --surface-2: #f9f9f7; --surface-3: #f2f1ee;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --accent: #2a78d6; --good: #0ca30c; --warn: #fab219; --critical: #d03b3b;
+  --seg-1: #2a78d6; --seg-2: #1baf7a; --seg-3: #eda100; --seg-4: #e87ba4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --surface-2: #0d0d0d; --surface-3: #232322;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --accent: #3987e5; --critical: #e66767;
+    --seg-1: #3987e5; --seg-2: #199e70; --seg-3: #c98500; --seg-4: #d55181;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19; --surface-2: #0d0d0d; --surface-3: #232322;
+  --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+  --grid: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+  --accent: #3987e5; --critical: #e66767;
+  --seg-1: #3987e5; --seg-2: #199e70; --seg-3: #c98500; --seg-4: #d55181;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --surface-1: #fcfcfb; --surface-2: #f9f9f7; --surface-3: #f2f1ee;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+  --grid: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+  --accent: #2a78d6; --critical: #d03b3b;
+  --seg-1: #2a78d6; --seg-2: #1baf7a; --seg-3: #eda100; --seg-4: #e87ba4;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface-2); color: var(--text-primary);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 15px; line-height: 1.55; }
+.num { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-variant-numeric: tabular-nums; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 30px 24px 80px; }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.08em; font-size: 11.5px; color: var(--text-muted); font-weight: 600; margin: 0 0 6px; }
+h1 { font-size: 25px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { color: var(--text-secondary); margin: 0 0 24px; max-width: 74ch; font-size: 14.5px; }
+.pill { display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px; margin-left: 8px; vertical-align: middle;}
+.pill.warn { background: color-mix(in srgb, var(--warn) 22%, transparent); color: #8a5a00; }
+@media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) .pill.warn { color: #ffd685; } }
+:root[data-theme="dark"] .pill.warn { color: #ffd685; }
+section.chk { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; margin-bottom: 22px; }
+section.chk h2 { font-size: 17px; margin: 0 0 4px; }
+section.chk .sub { font-size: 12.5px; color: var(--text-muted); margin: 0 0 16px; }
+.stat-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 10px 0 16px; }
+.stat-tile { background: var(--surface-3); border-radius: 8px; padding: 8px 12px; flex: 1 1 160px; }
+.stat-tile .l { font-size: 10.5px; color: var(--text-muted); text-transform: uppercase; }
+.stat-tile .v { font-family: ui-monospace, monospace; font-size: 16px; font-weight: 600; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+.legend .sw, table .sw { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 6px; vertical-align: -1px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 10px 0; }
+th { text-align: left; padding: 7px 10px; color: var(--text-muted); text-transform: uppercase; font-size: 10.5px;
+  letter-spacing: 0.03em; border-bottom: 1px solid var(--grid); font-weight: 600; }
+td { padding: 7px 10px; border-bottom: 1px solid var(--grid); }
+td.num { text-align: right; }
+.finding { font-size: 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--grid); }
+.finding b { font-weight: 650; }
+footer.foot { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">Multi-Asset Risk Premia &middot; Internal Consistency Check</p>
+  <h1>Does the Momentum Smile Agree with the Vol-Regime Study? <span class="pill warn">DOESN'T HOLD UNIVERSALLY</span></h1>
+  <p class="lede">The momentum smile says momentum is rewarded by big moves. The earlier vol-regime study classified
+  every day as Low/Medium/High realized volatility and measured Momentum's Sharpe in each. Naive prediction: if big
+  moves help momentum, Momentum's Sharpe should be highest in the <b>High</b> vol regime, for every product, and
+  products with a steeper smile should show a bigger High-vs-Low Sharpe gap. Neither held up cleanly.</p>
+
+  <section class="chk">
+    <h2>Headline numbers</h2>
+    <div class="stat-row">
+      <div class="stat-tile"><div class="l">High-vol Sharpe &gt; Low-vol Sharpe</div><div class="v">7 / 20</div></div>
+      <div class="stat-tile"><div class="l">Strictly monotonic Low&lt;Med&lt;High</div><div class="v">1 / 20</div></div>
+      <div class="stat-tile"><div class="l">Correlation: smile steepness vs. spread</div><div class="v">&rho;=-0.07 (p=0.79)</div></div>
+    </div>
+    <div class="finding" style="border-top:none;padding-top:0;margin-top:0;">
+      Only 7 of 20 products even show the directionally-expected result (High vol beats Low vol for Momentum), and
+      only 1 is strictly monotonic. The correlation between how steep a product's smile is and how much its Momentum
+      Sharpe actually improves in high vol is essentially <b>zero</b> (-0.07, not
+      significant) &mdash; smile steepness tells you almost nothing about the vol-regime effect.
+    </div>
+  </section>
+
+  <section class="chk">
+    <h2>But it's not random either &mdash; it splits cleanly by asset class</h2>
+    <p class="sub">Average (High &minus; Low) Momentum Sharpe spread per asset class</p>
+    <table>
+      <thead><tr><th>Asset class</th><th class="num">Avg spread</th><th class="num">Products with positive spread</th></tr></thead>
+      <tbody><tr><td><span class="sw" style="background:var(--seg-1)"></span>Metals</td><td class="num">-0.184</td><td class="num">0/2</td></tr><tr><td><span class="sw" style="background:var(--seg-4)"></span>Precious Metals</td><td class="num">-0.142</td><td class="num">2/5</td></tr><tr><td><span class="sw" style="background:var(--seg-2)"></span>NGL</td><td class="num">-0.727</td><td class="num">1/6</td></tr><tr><td><span class="sw" style="background:var(--seg-3)"></span>Energy</td><td class="num">+0.357</td><td class="num">4/7</td></tr></tbody>
+    </table>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--seg-1)"></span>Metals</span>
+      <span><span class="sw" style="background:var(--seg-4)"></span>Precious Metals</span>
+      <span><span class="sw" style="background:var(--seg-2)"></span>NGL</span>
+      <span><span class="sw" style="background:var(--seg-3)"></span>Energy</span>
+    </div>
+    <svg viewBox="0 0 1000 420" width="100%" style="max-width:100%"><line x1="50" y1="210.0" x2="950" y2="210.0" stroke="var(--baseline)" stroke-width="1"/><rect x="58.5" y="91.2" width="28.0" height="118.8" rx="3" fill="var(--seg-3)"><title>Fuel Oil 3.5%: +0.98</title></rect><rect x="103.5" y="117.5" width="28.0" height="92.5" rx="3" fill="var(--seg-3)"><title>RBOB Gasoline: +0.77</title></rect><rect x="148.5" y="135.4" width="28.0" height="74.6" rx="3" fill="var(--seg-3)"><title>WTI Crude: +0.62</title></rect><rect x="193.5" y="173.3" width="28.0" height="36.7" rx="3" fill="var(--seg-3)"><title>Heating Oil: +0.30</title></rect><rect x="238.5" y="180.8" width="28.0" height="29.2" rx="3" fill="var(--seg-2)"><title>Ethane: +0.24</title></rect><rect x="283.5" y="202.6" width="28.0" height="7.4" rx="3" fill="var(--seg-4)"><title>Platinum: +0.06</title></rect><rect x="328.5" y="207.1" width="28.0" height="2.9" rx="3" fill="var(--seg-4)"><title>Gold: +0.02</title></rect><rect x="373.5" y="210.0" width="28.0" height="1.1" rx="3" fill="var(--seg-3)"><title>Brent Crude: -0.01</title></rect><rect x="418.5" y="210.0" width="28.0" height="2.9" rx="3" fill="var(--seg-4)"><title>Palladium: -0.02</title></rect><rect x="463.5" y="210.0" width="28.0" height="8.1" rx="3" fill="var(--seg-1)"><title>Aluminium: -0.07</title></rect><rect x="508.5" y="210.0" width="28.0" height="9.2" rx="3" fill="var(--seg-3)"><title>Nat Gas: -0.08</title></rect><rect x="553.5" y="210.0" width="28.0" height="10.7" rx="3" fill="var(--seg-4)"><title>Silver: -0.09</title></rect><rect x="598.5" y="210.0" width="28.0" height="10.7" rx="3" fill="var(--seg-3)"><title>Singapore Gasoil: -0.09</title></rect><rect x="643.5" y="210.0" width="28.0" height="36.5" rx="3" fill="var(--seg-1)"><title>Copper (LME): -0.30</title></rect><rect x="688.5" y="210.0" width="28.0" height="39.6" rx="3" fill="var(--seg-2)"><title>Butane: -0.33</title></rect><rect x="733.5" y="210.0" width="28.0" height="82.1" rx="3" fill="var(--seg-4)"><title>Copper (COMEX): -0.68</title></rect><rect x="778.5" y="210.0" width="28.0" height="100.0" rx="3" fill="var(--seg-2)"><title>Propane: -0.83</title></rect><rect x="823.5" y="210.0" width="28.0" height="116.9" rx="3" fill="var(--seg-2)"><title>Ethylene: -0.97</title></rect><rect x="868.5" y="210.0" width="28.0" height="149.8" rx="3" fill="var(--seg-2)"><title>Propylene: -1.24</title></rect><rect x="913.5" y="210.0" width="28.0" height="150.0" rx="3" fill="var(--seg-2)"><title>Isobutane: -1.24</title></rect><text x="72.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 72.5 384)">Fuel Oil 3.5%</text><text x="117.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 117.5 384)">RBOB Gasoline</text><text x="162.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 162.5 384)">WTI Crude</text><text x="207.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 207.5 384)">Heating Oil</text><text x="252.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 252.5 384)">Ethane</text><text x="297.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 297.5 384)">Platinum</text><text x="342.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 342.5 384)">Gold</text><text x="387.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 387.5 384)">Brent Crude</text><text x="432.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 432.5 384)">Palladium</text><text x="477.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 477.5 384)">Aluminium</text><text x="522.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 522.5 384)">Nat Gas</text><text x="567.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 567.5 384)">Silver</text><text x="612.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 612.5 384)">Singapore Gasoil</text><text x="657.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 657.5 384)">Copper (LME)</text><text x="702.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 702.5 384)">Butane</text><text x="747.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 747.5 384)">Copper (COMEX)</text><text x="792.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 792.5 384)">Propane</text><text x="837.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 837.5 384)">Ethylene</text><text x="882.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 882.5 384)">Propylene</text><text x="927.5" y="384" font-size="9" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace" transform="rotate(-55 927.5 384)">Isobutane</text></svg>
+    <div class="finding">
+      <b>Energy is the only asset class that confirms the naive prediction</b> (mean spread +0.36, 4/7 products
+      positive) &mdash; consistent with the original regime study's own finding that Energy leans High-vol for
+      Momentum. <b>NGL is a clear, strong contradiction</b> (mean spread &minus;0.73, only 1/6 positive) &mdash; several
+      NGL products do noticeably <i>better</i> in Low vol than High vol. Metals and Precious Metals sit in between,
+      mildly negative on average.
+    </div>
+  </section>
+
+  <section class="chk">
+    <h2>Smile steepness vs. vol-regime spread, all 20 products</h2>
+    <p class="sub">If the naive prediction held, this should trend up-and-to-the-right. It doesn't.</p>
+    <svg viewBox="0 0 820 380" width="100%" style="max-width:100%"><line x1="50" y1="176.5" x2="770" y2="176.5" stroke="var(--baseline)" stroke-width="1"/><circle cx="386.9" cy="208.1" r="5" fill="var(--seg-1)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Copper (LME): c2=+3.96, spread=-0.30</title></circle><circle cx="598.1" cy="183.5" r="5" fill="var(--seg-1)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Aluminium: c2=+5.81, spread=-0.07</title></circle><circle cx="720.3" cy="174.0" r="5" fill="var(--seg-4)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Gold: c2=+6.89, spread=+0.02</title></circle><circle cx="358.6" cy="185.8" r="5" fill="var(--seg-4)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Silver: c2=+3.71, spread=-0.09</title></circle><circle cx="346.9" cy="247.8" r="5" fill="var(--seg-4)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Copper (COMEX): c2=+3.61, spread=-0.68</title></circle><circle cx="424.7" cy="170.1" r="5" fill="var(--seg-4)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Platinum: c2=+4.29, spread=+0.06</title></circle><circle cx="296.3" cy="179.0" r="5" fill="var(--seg-4)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Palladium: c2=+3.17, spread=-0.02</title></circle><circle cx="155.6" cy="151.1" r="5" fill="var(--seg-2)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Ethane: c2=+1.93, spread=+0.24</title></circle><circle cx="259.7" cy="263.3" r="5" fill="var(--seg-2)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Propane: c2=+2.84, spread=-0.83</title></circle><circle cx="185.7" cy="210.9" r="5" fill="var(--seg-2)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Butane: c2=+2.19, spread=-0.33</title></circle><circle cx="139.5" cy="306.7" r="5" fill="var(--seg-2)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Isobutane: c2=+1.79, spread=-1.24</title></circle><circle cx="127.6" cy="277.9" r="5" fill="var(--seg-2)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Ethylene: c2=+1.69, spread=-0.97</title></circle><circle cx="157.0" cy="306.5" r="5" fill="var(--seg-2)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Propylene: c2=+1.94, spread=-1.24</title></circle><circle cx="99.7" cy="111.7" r="5" fill="var(--seg-3)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>WTI Crude: c2=+1.44, spread=+0.62</title></circle><circle cx="154.1" cy="177.4" r="5" fill="var(--seg-3)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Brent Crude: c2=+1.92, spread=-0.01</title></circle><circle cx="170.3" cy="96.2" r="5" fill="var(--seg-3)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>RBOB Gasoline: c2=+2.06, spread=+0.77</title></circle><circle cx="217.0" cy="144.6" r="5" fill="var(--seg-3)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Heating Oil: c2=+2.47, spread=+0.30</title></circle><circle cx="104.8" cy="184.4" r="5" fill="var(--seg-3)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Nat Gas: c2=+1.49, spread=-0.08</title></circle><circle cx="140.9" cy="185.8" r="5" fill="var(--seg-3)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Singapore Gasoil: c2=+1.80, spread=-0.09</title></circle><circle cx="101.8" cy="73.3" r="5" fill="var(--seg-3)" opacity="0.85" stroke="var(--surface-1)" stroke-width="1.5"><title>Fuel Oil 3.5%: c2=+1.46, spread=+0.98</title></circle><text x="50.0" y="348" font-size="10" fill="var(--text-muted)" text-anchor="middle" font-family="ui-monospace,monospace">1.0</text><text x="42" y="54.0" font-size="10" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace">+1.2</text><text x="230.0" y="348" font-size="10" fill="var(--text-muted)" text-anchor="middle" font-family="ui-monospace,monospace">2.6</text><text x="42" y="124.0" font-size="10" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace">+0.5</text><text x="410.0" y="348" font-size="10" fill="var(--text-muted)" text-anchor="middle" font-family="ui-monospace,monospace">4.2</text><text x="42" y="194.0" font-size="10" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace">-0.1</text><text x="590.0" y="348" font-size="10" fill="var(--text-muted)" text-anchor="middle" font-family="ui-monospace,monospace">5.7</text><text x="42" y="264.0" font-size="10" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace">-0.8</text><text x="770.0" y="348" font-size="10" fill="var(--text-muted)" text-anchor="middle" font-family="ui-monospace,monospace">7.3</text><text x="42" y="334.0" font-size="10" fill="var(--text-muted)" text-anchor="end" font-family="ui-monospace,monospace">-1.5</text><text x="410.0" y="374" font-size="11" fill="var(--text-secondary)" text-anchor="middle">Momentum smile steepness (x&sup2; coeff)</text><text x="14" y="190.0" font-size="11" fill="var(--text-secondary)" text-anchor="middle" transform="rotate(-90 14 190.0)">Vol-regime Sharpe spread (High &minus; Low)</text></svg>
+  </section>
+
+  <section class="chk">
+    <h2>Why they diverge &mdash; the resolution</h2>
+    <div class="finding" style="border-top:none;padding-top:0;margin-top:0;">
+      The two studies measure genuinely different things. The smile's x-axis is <b>net directional return over a
+      month</b> &mdash; a trend. The vol-regime study's "High" bucket is <b>realized volatility</b> &mdash; the
+      magnitude of day-to-day price swings, regardless of direction. A month can be high-volatility and still net out
+      near zero if the swings are choppy and offsetting (a whipsaw month) &mdash; which is exactly the smile's <i>worst</i>
+      case for momentum, even though it would land in the vol study's "High" bucket. High vol is necessary for a big
+      trending move but doesn't guarantee one; it can just as easily mean elevated chop. That gap between "volatile"
+      and "trending" is what breaks the naive prediction, and explains why it survives in Energy (where high-vol
+      periods are more often genuine directional dislocations &mdash; supply shocks, OPEC moves) but fails in NGL
+      (where high-vol periods look more like seasonal/roll-driven noise than sustained trends).
+    </div>
+  </section>
+
+  <footer class="foot">
+    Vol-regime Sharpe: average of the 3 Momentum variants (MA(1,20)/(5,60)/(20,250)) from the original 20-product
+    regime-analysis batch (EWMA-63 vol, 5yr trailing rolling Low/Medium/High threshold). Smile steepness: quadratic
+    x&sup2; coefficient from the Momentum-smile batch (M(20)=MA(1,20), monthly returns). Generated 2026-07-22.
+  </footer>
+</div>
+</body>
+</html>

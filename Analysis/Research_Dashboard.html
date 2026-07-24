@@ -111,6 +111,17 @@
   code { background: var(--neutral); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
   .legend-row { display:flex; gap:16px; align-items:center; font-size:12px; color:var(--text-secondary); margin-top:8px; flex-wrap:wrap; }
   .legend-swatch { display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:5px; }
+  .window-select {
+    font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary); margin-left: 10px;
+  }
+  .window-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 20px 0 8px; }
+  .window-row h3 { margin: 0; }
+  .window-row label { font-size: 12.5px; color: var(--text-secondary); }
+  .compact-table th, .compact-table td { padding: 3px 7px; font-size: 10.5px; white-space: normal; }
+  .strategy-card-key { grid-column: span 2; padding-bottom: 8px; }
+  #panel-statarb.active ~ #strategy-definitions-card { display: none; }
 </style>
 </head>
 <body>
@@ -121,7 +132,136 @@
     <span class="meta" id="last-updated"></span>
   </div>
 
-  <div class="card">
+  <div class="tabs" role="tablist">
+    <button class="tab-btn" role="tab" aria-selected="true" data-tab="metals">Metals</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="energy">Oil / Energy</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="pm">Precious Metals</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="ngl">NGL</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="statarb">StatArb</button>
+  </div>
+
+  <!-- ================= METALS ================= -->
+  <div class="tab-panel active" id="panel-metals">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Metals: Copper, Aluminium, Lead, Zinc (LME)</h2>
+      <p class="note">Source: <code>data/06-30/Metals_Futures_Curve_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all four products aligned on this common window.</p>
+
+      <p class="note">Carry tenors: F1-F3 (the volume peak for every product) and F1-F13 (the annual convention, weaker for Lead and Zinc but retained as a second, disclosed variant).</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="metals-window-select">Horizon: <select id="metals-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="metals-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="metals-table"></table></div>
+      <div class="legend-row">
+        <span><span class="legend-swatch" style="background:var(--pos-strong)"></span>strong positive</span>
+        <span><span class="legend-swatch" style="background:var(--pos-weak)"></span>weak positive</span>
+        <span><span class="legend-swatch" style="background:var(--neutral)"></span>near flat</span>
+        <span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative</span>
+        <span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative</span>
+      </div>
+      <p class="note">Reporting starts 2011-01-01 across every asset class (see the "Full" column), so that every strategy's longest-lookback signal -- Value's 1260-day moving average in particular -- is fully warmed up before the reported window begins; the underlying price data goes back to 2006 and is used to build that warm-up, it just isn't scored on its own. The 2026 YTD column is a partial year (roughly five months) shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+    </div>
+  </div>
+
+  <!-- ================= ENERGY ================= -->
+  <div class="tab-panel" id="panel-energy">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Oil / Energy: WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil</h2>
+      <p class="note">Source: <code>data/06-30/Energy_Futures_Updated.xlsx</code>, 2006-01-04 to 2026-06-30, all seven products aligned on this common window.</p>
+
+      <p class="note">Carry tenors: F1-F3 (solid for all seven products) and F1-F12 (weaker for Fuel Oil, which is only 48% quoted at F12 and has no F13 at all, but retained as a second, disclosed variant).</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="energy-window-select">Horizon: <select id="energy-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="energy-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="energy-table"></table></div>
+      <p class="note">Reporting starts 2011-01-01, matched across every asset class so all four sleeves' longest-lookback signals are fully warmed up before the reported window begins (see the Metals tab's note for the full reasoning). The 2026 YTD column is a partial year shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+    </div>
+  </div>
+
+  <!-- ================= PRECIOUS METALS ================= -->
+  <div class="tab-panel" id="panel-pm">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Precious Metals: Gold, Silver, Copper (COMEX), Platinum, Palladium</h2>
+      <p class="note">Prices: <code>data/06-30/Precious_Metals_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30.</p>
+
+      <p class="note">F1 and F2 are the most liquid contracts across the product set, with liquidity dropping off from F3 onwards, most sharply for Platinum and Palladium. On a conservative basis, F1-F2 is used as the Carry tenor for all Precious Metals products.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="pm-window-select">Horizon: <select id="pm-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="pm-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="pm-table"></table></div>
+      <p class="note">Reporting starts 2011-01-01, matched across every asset class so all four sleeves' longest-lookback signals are fully warmed up before the reported window begins (see the Metals tab's note for the full reasoning). The 2026 YTD column is a partial year shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+    </div>
+  </div>
+
+  <!-- ================= NGL ================= -->
+  <div class="tab-panel" id="panel-ngl">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> NGL: Ethane, Propane, Butane, Isobutane, Ethylene, Propylene</h2>
+      <p class="note">Source: <code>data/06-30/NGL_Futures_Updated.xlsx</code>, 2010-12-13 to 2026-06-30, all six products aligned on this common window (NGL's own history starts 2009-08, shorter than the other asset classes).</p>
+
+      <p class="note">Carry tenor: F4-F15, Bogorad's own convention (front-month prices are stale/index-settled for this asset class, unlike the other three).</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="ngl-window-select">Horizon: <select id="ngl-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="ngl-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="ngl-table"></table></div>
+      <p class="note">NGL's own price history starts 2010-12 (the latest-starting of the six products), so every cell here is genuinely warmed-up and trading -- no n/a cells remain now that reporting starts 2011. One residual caveat: Value's 630-day minimum lookback doesn't clear burn-in until 2012-02, so roughly the first 14 months of the R1 window (2011-01 to 2012-02) reflect a partially-flat Value signal gradually coming online as each product's own history matures, not a fully warmed-up read for that specific sub-period.</p>
+    </div>
+  </div>
+
+  <!-- ================= STATARB ================= -->
+  <div class="tab-panel" id="panel-statarb">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> StatArb: 8 cross-asset-class spreads (shared by Oil/Energy and NGL)</h2>
+      <p class="note">Eight cross-asset-class spreads, threshold-on-20-day-MA signal (10% deviation). Position PnL is each leg's own log return difference (position &times; (log-return of leg A &minus; log-return of leg B)), not a log of the spread level itself, since a spread can be zero or negative while each leg's own price cannot. Spread <em>levels</em> (used only for the signal, not the PnL) are unit-converted where the two legs are quoted differently: RBOB and Heating Oil from cents/gallon to dollars, further to $/barrel (&times;42) against the crude benchmarks; Ethane from $/gallon to $/MMBtu (~66,000 BTU/gallon) against Nat Gas.</p>
+      <p class="note">WTI's raw front-month price on 2020-04-20 (the famous brief negative settlement, -$37.63) is corrected at the source for the WTI-Brent and HeatingOil-WTI legs, imputed from Brent's own price that day minus the average WTI-Brent spread on the adjacent trading days. Momentum/Carry/Value are unaffected: their roll-adjusted continuous series had already switched to tracking the next contract five business days ahead of that expiry.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="statarb-window-select">Horizon: <select id="statarb-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="statarb-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="statarb-table"></table></div>
+      <p class="note">Benjamini-Hochberg FDR (q=0.10) across all 45 valid spread &times; window cells (8 spreads plus EW, full-sample and the four 2011-2026 regimes): zero cells survive at q=0.10 under this reporting window. This is a materially weaker result than the pre-2011 report, where the equal-weight combination's full-sample cell (p=0.0005) and one isolated regime cell survived -- that earlier significance was concentrated in the 2006-2010 period this window now excludes (see the Metals tab's note for why), and the sleeve does not clear a formal significance bar on the 2011-2026 sample alone. The directional IRs above are still informative (several spreads and the EW combination are consistently positive across regimes), but the paper should present this as a suggestive, not statistically confirmed, edge going forward. This asset pairing does have the strongest qualitative supporting precedent of any sleeve here: Bogorad's own NGL paper validates specific pairs such as Ethane-Ethylene versus Propane-Propylene, and three of the eight spreads (Ethane-NatGas, Propane-Ethane, Propane-Butane) are NGL-side legs.</p>
+    </div>
+
+    <div class="card">
+      <h2>Strategy definitions</h2>
+      <div class="strategy-grid">
+        <div class="strategy-card">
+          <h4>StatArb: 20-day MA threshold on a spread</h4>
+          <p>Same threshold-on-MA rule as Value, applied to a cross-asset-class spread instead of a single price: 20-day lookback, 10% deviation. Eight spreads, shared by Oil/Energy and NGL. Position PnL uses each leg's own log return, never the spread's own level, since a spread can be zero or negative.</p>
+        </div>
+        <div class="strategy-card strategy-card-key">
+          <h4>Regime key</h4>
+          <p class="note" style="margin:0 0 6px;">Column codes used in the regime table above.</p>
+          <div class="table-scroll"><table id="statarb-regime-key-table" class="text-table compact-table"></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="strategy-definitions-card">
     <h2>Strategy definitions</h2>
     <p class="note">Identical formulas and parameters across every asset class unless a tenor pair is noted otherwise.</p>
     <div class="strategy-grid">
@@ -149,238 +289,367 @@
         <h4>StatArb: 20-day MA threshold on a spread</h4>
         <p>Same threshold-on-MA rule as Value, applied to a cross-asset-class spread instead of a single price: 20-day lookback, 10% deviation. Eight spreads, shared by Oil/Energy and NGL. Position PnL uses each leg's own log return, never the spread's own level, since a spread can be zero or negative.</p>
       </div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>Regime key</h2>
-    <p class="note">Column codes used in every regime table below.</p>
-    <div class="table-scroll"><table id="regime-key-table" class="text-table"></table></div>
-  </div>
-
-  <div class="tabs" role="tablist">
-    <button class="tab-btn" role="tab" aria-selected="true" data-tab="metals">Metals</button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="energy">Oil / Energy</button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="pm">Precious Metals</button>
-    <button class="tab-btn" role="tab" aria-selected="false" data-tab="ngl">NGL</button>
-  </div>
-
-  <!-- ================= METALS ================= -->
-  <div class="tab-panel active" id="panel-metals">
-    <div class="card">
-      <h2><span class="badge badge-built">Built</span> Metals: Copper, Aluminium, Lead, Zinc (LME)</h2>
-      <p class="note">Source: <code>data/06-30/Metals_Futures_Curve_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all four products aligned on this common window.</p>
-
-      <p class="note">Carry tenors: F1-F3 (the volume peak for every product) and F1-F13 (the annual convention, weaker for Lead and Zinc but retained as a second, disclosed variant).</p>
-
-      <h3>Full sample</h3>
-      <div class="table-scroll"><table id="metals-full-table"></table></div>
-
-      <h3>Regime-conditional IR, by strategy</h3>
-      <div class="table-scroll"><table id="metals-table"></table></div>
-      <div class="legend-row">
-        <span><span class="legend-swatch" style="background:var(--pos-strong)"></span>strong positive</span>
-        <span><span class="legend-swatch" style="background:var(--pos-weak)"></span>weak positive</span>
-        <span><span class="legend-swatch" style="background:var(--neutral)"></span>near flat</span>
-        <span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative</span>
-        <span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative</span>
+      <div class="strategy-card strategy-card-key">
+        <h4>Regime key</h4>
+        <p class="note" style="margin:0 0 6px;">Column codes used in every regime table above.</p>
+        <div class="table-scroll"><table id="regime-key-table" class="text-table compact-table"></table></div>
       </div>
-      <p class="note">The GFC Crash regime spans roughly 125 trading days. The 2026 YTD column is a partial year (roughly five months) shown for reference alongside the full 2022-2026 regime it sits inside.</p>
-    </div>
-  </div>
-
-  <!-- ================= ENERGY ================= -->
-  <div class="tab-panel" id="panel-energy">
-    <div class="card">
-      <h2><span class="badge badge-built">Built</span> Oil / Energy: WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil</h2>
-      <p class="note">Source: <code>data/06-30/Energy_Futures_Updated.xlsx</code>, 2006-01-04 to 2026-06-30, all seven products aligned on this common window.</p>
-
-      <p class="note">Carry tenors: F1-F3 (solid for all seven products) and F1-F12 (weaker for Fuel Oil, which is only 48% quoted at F12 and has no F13 at all, but retained as a second, disclosed variant).</p>
-
-      <h3>Full sample</h3>
-      <div class="table-scroll"><table id="energy-full-table"></table></div>
-
-      <h3>Regime-conditional IR, by strategy</h3>
-      <div class="table-scroll"><table id="energy-table"></table></div>
-      <p class="note">The GFC Crash regime spans roughly 125 trading days. The 2026 YTD column is a partial year shown for reference alongside the full 2022-2026 regime it sits inside.</p>
-
-      <h3>StatArb sleeve (shared with NGL)</h3>
-      <p class="note">Eight cross-asset-class spreads, threshold-on-20-day-MA signal (10% deviation). Position PnL is each leg's own log return difference (position &times; (log-return of leg A &minus; log-return of leg B)), not a log of the spread level itself, since a spread can be zero or negative while each leg's own price cannot. Spread <em>levels</em> (used only for the signal, not the PnL) are unit-converted where the two legs are quoted differently: RBOB and Heating Oil from cents/gallon to dollars, further to $/barrel (&times;42) against the crude benchmarks; Ethane from $/gallon to $/MMBtu (~66,000 BTU/gallon) against Nat Gas.</p>
-      <p class="note">WTI's raw front-month price on 2020-04-20 (the famous brief negative settlement, -$37.63) is corrected at the source for the WTI-Brent and HeatingOil-WTI legs, imputed from Brent's own price that day minus the average WTI-Brent spread on the adjacent trading days. Momentum/Carry/Value are unaffected: their roll-adjusted continuous series had already switched to tracking the next contract five business days ahead of that expiry.</p>
-      <div class="table-scroll"><table id="energy-statarb-full-table"></table></div>
-      <div class="table-scroll"><table id="energy-statarb-table"></table></div>
-      <p class="note">Benjamini-Hochberg FDR (q=0.10) across all 64 valid spread &times; window cells (8 spreads plus EW, full-sample and 7 regimes; NGL-legged spreads have no data in R1/R2): only the equal-weight combination's full-sample result survives (p=0.0005), plus one isolated regime cell (Propane-Butane in R3). No single spread clears the bar on its own -- the sleeve's significance comes from combining eight largely uncorrelated spreads, not from any one spread being individually strong.</p>
-    </div>
-  </div>
-
-  <!-- ================= PRECIOUS METALS ================= -->
-  <div class="tab-panel" id="panel-pm">
-    <div class="card">
-      <h2><span class="badge badge-built">Built</span> Precious Metals: Gold, Silver, Copper (COMEX), Platinum, Palladium</h2>
-      <p class="note">Prices: <code>data/06-30/Precious_Metals_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30.</p>
-
-      <p class="note">F1 and F2 are the most liquid contracts across the product set, with liquidity dropping off from F3 onwards, most sharply for Platinum and Palladium. On a conservative basis, F1-F2 is used as the Carry tenor for all Precious Metals products.</p>
-
-      <h3>Full sample</h3>
-      <div class="table-scroll"><table id="pm-full-table"></table></div>
-
-      <h3>Regime-conditional IR, by strategy</h3>
-      <div class="table-scroll"><table id="pm-table"></table></div>
-      <p class="note">The GFC Crash regime spans roughly 125 trading days. The 2026 YTD column is a partial year shown for reference alongside the full 2022-2026 regime it sits inside.</p>
-    </div>
-  </div>
-
-  <!-- ================= NGL ================= -->
-  <div class="tab-panel" id="panel-ngl">
-    <div class="card">
-      <h2><span class="badge badge-built">Built</span> NGL: Ethane, Propane, Butane, Isobutane, Ethylene, Propylene</h2>
-      <p class="note">Source: <code>data/06-30/NGL_Futures_Updated.xlsx</code>, 2010-12-13 to 2026-06-30, all six products aligned on this common window (NGL's own history starts 2009-08, shorter than the other asset classes).</p>
-
-      <p class="note">Carry tenor: F4-F15, Bogorad's own convention (front-month prices are stale/index-settled for this asset class, unlike the other three).</p>
-
-      <h3>Full sample</h3>
-      <div class="table-scroll"><table id="ngl-full-table"></table></div>
-
-      <h3>Regime-conditional IR, by strategy</h3>
-      <div class="table-scroll"><table id="ngl-table"></table></div>
-      <p class="note">R1/R2 and most of R3 show n/a: NGL's data history does not reach back far enough for the Carry composite's 252-day rolling z-score to leave its burn-in window inside those regimes (the position is exactly flat throughout, a zero-variance series with no defined IR) &mdash; Carry-Momentum's much shorter 20-day horizon does not have this problem, which is why it shows a value in R3 while Carry does not.</p>
-
-      <h3>StatArb sleeve (shared with Energy)</h3>
-      <p class="note">Same 8-spread sleeve as the Oil/Energy tab. This asset class has the strongest supporting precedent of any: Bogorad's own NGL paper validates specific pairs such as Ethane-Ethylene versus Propane-Propylene, and three of the eight spreads here (Ethane-NatGas, Propane-Ethane, Propane-Butane) are NGL-side legs.</p>
-      <div class="table-scroll"><table id="ngl-statarb-full-table"></table></div>
-      <div class="table-scroll"><table id="ngl-statarb-table"></table></div>
-      <p class="note">Benjamini-Hochberg FDR (q=0.10) across all 64 valid spread &times; window cells: only the equal-weight combination's full-sample result survives (p=0.0005), plus one isolated regime cell (Propane-Butane in R3). No single spread clears the bar on its own -- the sleeve's significance comes from combining eight largely uncorrelated spreads, not from any one spread being individually strong.</p>
     </div>
   </div>
 
 </div>
 
 <script>
-const LAST_UPDATED = "2026-07-24 (Oil/Energy + NGL + StatArb sleeve added)";
+const LAST_UPDATED = "2026-07-24 (reporting window changed to 2011-2026 across all asset classes -- pre-2011 regimes dropped as burn-in-affected, moving-average warm-up still uses full history back to each asset's own data start)";
 
 const METALS_COLUMNS = [
-  {key:"full", label:"Full", years:"2006-2026"},
-  {key:"r1", label:"R1", years:"2006-2008"},
-  {key:"r2", label:"R2", years:"2008-2009"},
-  {key:"r3", label:"R3", years:"2009-2011"},
-  {key:"r4", label:"R4", years:"2011-2015"},
-  {key:"r5", label:"R5", years:"2016-2019"},
-  {key:"r6", label:"R6", years:"2020-2021"},
-  {key:"r7", label:"R7", years:"2022-2026"},
+  {key:"full", label:"Full", years:"2011-2026"},
+  {key:"r1", label:"R1", years:"2011-2015"},
+  {key:"r2", label:"R2", years:"2016-2019"},
+  {key:"r3", label:"R3", years:"2020-2021"},
+  {key:"r4", label:"R4", years:"2022-2026"},
   {key:"y26", label:"2026", years:"YTD"},
 ];
 
 const REGIME_KEY_ROWS = [
-  {code:"Full", name:"Full sample", years:"2006-2026"},
-  {code:"R1",   name:"Pre-GFC Bull Run", years:"2006-2008"},
-  {code:"R2",   name:"GFC Crash", years:"2008-2009"},
-  {code:"R3",   name:"Post-GFC QE Recovery", years:"2009-2011"},
-  {code:"R4",   name:"Supercycle Unwind", years:"2011-2015"},
-  {code:"R5",   name:"Recovery/Stabilization", years:"2016-2019"},
-  {code:"R6",   name:"COVID Shock", years:"2020-2021"},
-  {code:"R7",   name:"Post-COVID/Russia-Ukraine", years:"2022-2026"},
-  {code:"2026", name:"2026 year to date, partial year, sits inside R7", years:"2026"},
+  {code:"Full", name:"Full sample", years:"2011-2026"},
+  {code:"R1",   name:"Supercycle Unwind", years:"2011-2015"},
+  {code:"R2",   name:"Recovery/Stabilization", years:"2016-2019"},
+  {code:"R3",   name:"COVID Shock", years:"2020-2021"},
+  {code:"R4",   name:"Post-COVID/Russia-Ukraine", years:"2022-2026"},
+  {code:"2026", name:"2026 year to date, partial year, sits inside R4", years:"2026"},
 ];
 
-const METALS_ROWS = [
-  {name:"Momentum",         full:-0.076, r1:0.740, r2:1.530, r3:-0.213, r4:-0.450, r5:-0.624, r6:0.814,  r7:-0.631, y26:0.959},
-  {name:"Carry (F1-F3)",    full:0.082,  r1:0.355, r2:2.052, r3:0.059,  r4:0.527,  r5:-0.839, r6:-0.605, r7:-0.352, y26:-0.394},
-  {name:"Carry (F1-F13)",   full:0.112,  r1:0.542, r2:2.120, r3:-0.015, r4:0.183,  r5:-1.361, r6:-0.002, r7:-0.083, y26:-0.608},
-  {name:"CarryMom (F1-F3)", full:0.322,  r1:1.675, r2:1.010, r3:0.472,  r4:0.847,  r5:-0.738, r6:-0.307, r7:-0.550, y26:2.344},
-  {name:"CarryMom (F1-F13)",full:0.220,  r1:0.750, r2:2.088, r3:-0.016, r4:0.598,  r5:-0.649, r6:0.454,  r7:-0.458, y26:1.117},
-  {name:"Value",            full:0.396,  r1:1.205, r2:-1.478,r3:1.405,  r4:0.189,  r5:0.755,  r6:-0.543, r7:0.954,  y26:-0.396},
-  {name:"EW PORT",          full:0.300,  r1:1.430, r2:2.168, r3:0.431,  r4:0.494,  r5:-0.948, r6:0.035,  r7:-0.404, y26:1.027, bold:true},
-];
+// Per-window (full sample + R1-R4 + 2026 YTD) {ret, vol, mdd, ir} grids,
+// generated via `python research/run_regime_table.py <asset_class> --window-grid`
+// / `python research/statarb.py --window-grid` (2026-07-24) -- the same
+// underlying strategy_net_series the regime heatmap's IR-only rows below are
+// DERIVED from (see regimeRowsFromWindows), so the "Performance by horizon"
+// table and the heatmap can never drift apart.
+//
+// REPORTING WINDOW REVISED 2026-07-24 (user's decision): every asset class
+// now reports from 2011-01-01 onward, dropping the pre-2011 Pre-GFC Bull Run,
+// GFC Crash, and Post-GFC QE Recovery windows entirely. Reason: those windows
+// sit inside or overlap the burn-in period for the longest-lookback signals
+// -- Value's 1260-day/630-min-period moving average was empirically flat
+// (non-trading) for ~96% of the old first window on Metals (only going live
+// mid-2008), and Momentum/Carry lost roughly their first burn-in year too.
+// By 2011 every signal in every asset class has cleared its longest burn-in
+// window, so results reported here are on equal, fully-warmed-up footing.
+// See research/regimes.py for the full mechanics, including the fix to
+// research/run_regime_table.py::build_strategy_net_series() that now computes
+// each product's rolling signals on its OWN full available history (not
+// pre-truncated to the cross-product common-start date) before aligning to
+// the common reporting window -- this alone moved NGL's Value strategy's
+// live-trading start from mid-2013 to Feb-2012.
+//
+// RENUMBERED 2026-07-24 (same session, user's follow-up): the four surviving
+// regimes are labeled R1-R4 here (were R4-R7 immediately after the drop
+// above) since starting the visible sequence at R4 read as an orphaned label
+// with nothing before it. R1 below means Supercycle Unwind (2011-2015), not
+// the dropped Pre-GFC Bull Run window that used the same code previously.
+//
+// One side effect worth flagging: with the GFC-crash-era data now excluded,
+// Metals' full-sample IR is negative for every strategy except Value (the
+// old "Full 2006-2026" numbers were flattered by the one-off 2008-09 rally
+// that both Momentum and Carry captured strongly) -- this is a genuine
+// finding about the current regime, not a bug.
+function ewBold(rows) { rows.forEach(r => { if (r.name.startsWith("EW")) r.bold = true; }); return rows; }
 
-const METALS_FULL_ROWS = [
-  {name:"Momentum",         ret:-1.42, vol:18.59, ir:-0.076},
-  {name:"Carry (F1-F3)",    ret:1.16,  vol:14.20, ir:0.082},
-  {name:"Carry (F1-F13)",   ret:1.59,  vol:14.28, ir:0.112},
-  {name:"CarryMom (F1-F3)", ret:5.00,  vol:15.51, ir:0.322},
-  {name:"CarryMom (F1-F13)",ret:3.63,  vol:16.52, ir:0.220},
-  {name:"Value",            ret:5.42,  vol:13.69, ir:0.396},
-  {name:"EW PORT",          ret:2.56,  vol:8.53,  ir:0.300, bold:true},
-];
+const METALS_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:-6.74, vol:15.58, mdd:-123.68, ir:-0.433},
+    {name:"Carry (F1-F3)", ret:-1.21, vol:11.51, mdd:-85.86, ir:-0.105},
+    {name:"Carry (F1-F13)", ret:-0.46, vol:11.78, mdd:-60.80, ir:-0.039},
+    {name:"CarryMom (F1-F3)", ret:-1.46, vol:12.43, mdd:-107.78, ir:-0.117},
+    {name:"CarryMom (F1-F13)", ret:-0.69, vol:12.48, mdd:-70.47, ir:-0.056},
+    {name:"Value", ret:5.68, vol:10.99, mdd:-32.11, ir:0.517},
+    {name:"EW PORT", ret:-0.81, vol:6.95, mdd:-46.76, ir:-0.117},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:-10.74, vol:17.57, mdd:-74.42, ir:-0.611},
+    {name:"Carry (F1-F3)", ret:9.50, vol:12.62, mdd:-23.22, ir:0.753},
+    {name:"Carry (F1-F13)", ret:8.08, vol:14.15, mdd:-21.08, ir:0.571},
+    {name:"CarryMom (F1-F3)", ret:10.08, vol:13.12, mdd:-26.35, ir:0.769},
+    {name:"CarryMom (F1-F13)", ret:6.85, vol:12.88, mdd:-32.69, ir:0.532},
+    {name:"Value", ret:4.78, vol:10.61, mdd:-26.81, ir:0.450},
+    {name:"EW PORT", ret:4.76, vol:7.76, mdd:-15.12, ir:0.614},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:-8.47, vol:13.56, mdd:-40.18, ir:-0.624},
+    {name:"Carry (F1-F3)", ret:-8.76, vol:10.45, mdd:-49.47, ir:-0.839},
+    {name:"Carry (F1-F13)", ret:-10.77, vol:7.91, mdd:-44.69, ir:-1.361},
+    {name:"CarryMom (F1-F3)", ret:-8.74, vol:11.85, mdd:-53.34, ir:-0.738},
+    {name:"CarryMom (F1-F13)", ret:-7.74, vol:11.92, mdd:-43.59, ir:-0.649},
+    {name:"Value", ret:8.13, vol:10.77, mdd:-13.04, ir:0.755},
+    {name:"EW PORT", ret:-6.06, vol:6.39, mdd:-28.30, ir:-0.948},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:12.62, vol:15.50, mdd:-15.93, ir:0.814},
+    {name:"Carry (F1-F3)", ret:-6.50, vol:10.74, mdd:-28.55, ir:-0.605},
+    {name:"Carry (F1-F13)", ret:-0.03, vol:12.22, mdd:-25.45, ir:-0.002},
+    {name:"CarryMom (F1-F3)", ret:-3.59, vol:11.72, mdd:-18.83, ir:-0.307},
+    {name:"CarryMom (F1-F13)", ret:5.74, vol:12.64, mdd:-12.03, ir:0.454},
+    {name:"Value", ret:-7.00, vol:12.89, mdd:-23.41, ir:-0.543},
+    {name:"EW PORT", ret:0.21, vol:5.86, mdd:-10.34, ir:0.035},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:-9.41, vol:14.90, mdd:-76.69, ir:-0.631},
+    {name:"Carry (F1-F3)", ret:-4.02, vol:11.44, mdd:-41.76, ir:-0.352},
+    {name:"Carry (F1-F13)", ret:-0.96, vol:11.53, mdd:-29.53, ir:-0.083},
+    {name:"CarryMom (F1-F3)", ret:-6.85, vol:12.44, mdd:-48.50, ir:-0.550},
+    {name:"CarryMom (F1-F13)", ret:-5.69, vol:12.42, mdd:-54.30, ir:-0.458},
+    {name:"Value", ret:10.17, vol:10.66, mdd:-17.20, ir:0.954},
+    {name:"EW PORT", ret:-2.79, vol:6.91, mdd:-30.14, ir:-0.404},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:13.75, vol:14.33, mdd:-5.56, ir:0.959},
+    {name:"Carry (F1-F3)", ret:-4.49, vol:11.40, mdd:-7.52, ir:-0.394},
+    {name:"Carry (F1-F13)", ret:-6.26, vol:10.31, mdd:-7.06, ir:-0.608},
+    {name:"CarryMom (F1-F3)", ret:26.73, vol:11.40, mdd:-3.89, ir:2.344},
+    {name:"CarryMom (F1-F13)", ret:11.59, vol:10.37, mdd:-5.28, ir:1.117},
+    {name:"Value", ret:-5.39, vol:13.61, mdd:-10.27, ir:-0.396},
+    {name:"EW PORT", ret:5.99, vol:5.83, mdd:-3.21, ir:1.027},
+  ]),
+};
 
 const PM_COLUMNS = METALS_COLUMNS;
-const PM_ROWS = [
-  {name:"Momentum",        full:-0.120, r1:0.227, r2:1.119, r3:0.150,  r4:-0.105, r5:-0.207, r6:-0.764, r7:-0.363, y26:0.203},
-  {name:"Carry (F1-F2)",   full:0.038,  r1:-0.294,r2:1.613, r3:-0.204, r4:0.261,  r5:0.170,  r6:-0.555, r7:-0.082, y26:1.926},
-  {name:"CarryMom (F1-F2)",full:0.336,  r1:0.944, r2:2.659, r3:0.973,  r4:-0.155, r5:0.316,  r6:0.303,  r7:-0.341, y26:1.319},
-  {name:"Value",           full:0.135,  r1:1.308, r2:0.065, r3:-0.180, r4:-0.019, r5:0.906,  r6:-0.265, r7:0.194,  y26:1.146},
-  {name:"EW PORT",         full:0.157,  r1:0.689, r2:2.770, r3:0.412,  r4:-0.012, r5:0.376,  r6:-0.680, r7:-0.340, y26:2.301, bold:true},
-];
-
-const PM_FULL_ROWS = [
-  {name:"Momentum",        ret:-2.26, vol:18.84, ir:-0.120},
-  {name:"Carry (F1-F2)",   ret:0.48,  vol:12.71, ir:0.038},
-  {name:"CarryMom (F1-F2)",ret:4.80,  vol:14.27, ir:0.336},
-  {name:"Value",           ret:1.66,  vol:12.29, ir:0.135},
-  {name:"EW PORT",         ret:1.17,  vol:7.43,  ir:0.157, bold:true},
-];
+const PM_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:-7.02, vol:18.31, mdd:-150.10, ir:-0.383},
+    {name:"Carry (F1-F2)", ret:1.75, vol:13.10, mdd:-57.55, ir:0.134},
+    {name:"CarryMom (F1-F2)", ret:1.02, vol:13.84, mdd:-65.93, ir:0.074},
+    {name:"Value", ret:2.14, vol:13.09, mdd:-53.92, ir:0.163},
+    {name:"EW PORT", ret:-0.53, vol:7.45, mdd:-47.31, ir:-0.071},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:-5.77, vol:15.69, mdd:-48.99, ir:-0.367},
+    {name:"Carry (F1-F2)", ret:8.03, vol:12.15, mdd:-13.18, ir:0.661},
+    {name:"CarryMom (F1-F2)", ret:3.74, vol:10.92, mdd:-23.14, ir:0.342},
+    {name:"Value", ret:0.69, vol:11.03, mdd:-21.75, ir:0.063},
+    {name:"EW PORT", ret:1.67, vol:7.78, mdd:-10.69, ir:0.215},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:-2.34, vol:11.33, mdd:-37.87, ir:-0.207},
+    {name:"Carry (F1-F2)", ret:1.71, vol:10.03, mdd:-16.42, ir:0.170},
+    {name:"CarryMom (F1-F2)", ret:2.96, vol:9.37, mdd:-22.26, ir:0.316},
+    {name:"Value", ret:4.76, vol:5.26, mdd:-5.67, ir:0.906},
+    {name:"EW PORT", ret:1.77, vol:4.72, mdd:-7.82, ir:0.376},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:-15.58, vol:20.38, mdd:-42.56, ir:-0.764},
+    {name:"Carry (F1-F2)", ret:-6.90, vol:12.44, mdd:-22.07, ir:-0.555},
+    {name:"CarryMom (F1-F2)", ret:5.70, vol:18.78, mdd:-35.72, ir:0.303},
+    {name:"Value", ret:-3.06, vol:11.52, mdd:-19.18, ir:-0.265},
+    {name:"EW PORT", ret:-4.96, vol:7.29, mdd:-14.79, ir:-0.680},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:-8.76, vol:24.15, mdd:-85.48, ir:-0.363},
+    {name:"Carry (F1-F2)", ret:-1.34, vol:16.41, mdd:-55.40, ir:-0.082},
+    {name:"CarryMom (F1-F2)", ret:-5.83, vol:17.11, mdd:-65.93, ir:-0.341},
+    {name:"Value", ret:3.74, vol:19.30, mdd:-53.92, ir:0.194},
+    {name:"EW PORT", ret:-3.05, vol:8.96, mdd:-40.80, ir:-0.340},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:9.23, vol:45.46, mdd:-37.08, ir:0.203},
+    {name:"Carry (F1-F2)", ret:31.74, vol:16.48, mdd:-5.15, ir:1.926},
+    {name:"CarryMom (F1-F2)", ret:42.10, vol:31.91, mdd:-18.57, ir:1.319},
+    {name:"Value", ret:54.76, vol:47.80, mdd:-22.07, ir:1.146},
+    {name:"EW PORT", ret:34.46, vol:14.97, mdd:-5.47, ir:2.301},
+  ]),
+};
 
 const ENERGY_COLUMNS = METALS_COLUMNS;
-const ENERGY_ROWS = [
-  {name:"Momentum",          full:0.679,  r1:1.125, r2:2.736, r3:-0.172, r4:0.969,  r5:-0.077, r6:1.394, r7:0.424, y26:2.386},
-  {name:"Carry (F1-F3)",     full:0.429,  r1:1.438, r2:1.807, r3:-0.447, r4:1.046,  r5:-0.130, r6:0.563, r7:0.188, y26:1.401},
-  {name:"Carry (F1-F12)",    full:0.564,  r1:0.867, r2:2.637, r3:-0.250, r4:0.923,  r5:-0.083, r6:0.841, r7:0.333, y26:1.619},
-  {name:"CarryMom (F1-F3)",  full:0.537,  r1:0.609, r2:2.318, r3:0.987,  r4:0.294,  r5:0.285,  r6:0.202, r7:0.656, y26:2.581},
-  {name:"CarryMom (F1-F12)", full:0.643,  r1:0.828, r2:1.545, r3:-0.386, r4:1.299,  r5:-0.076, r6:1.733, r7:0.348, y26:1.152},
-  {name:"Value",             full:-0.063, r1:0.978, r2:-1.328,r3:0.350,  r4:-1.235, r5:0.769,  r6:-0.479,r7:0.445, y26:2.077},
-  {name:"EW PORT",           full:0.812,  r1:1.408, r2:2.615, r3:0.027,  r4:0.912,  r5:0.223,  r6:1.266, r7:0.662, y26:2.668, bold:true},
-];
-
-const ENERGY_FULL_ROWS = [
-  {name:"Momentum",          ret:16.26, vol:23.94, ir:0.679},
-  {name:"Carry (F1-F3)",     ret:7.96,  vol:18.56, ir:0.429},
-  {name:"Carry (F1-F12)",    ret:11.70, vol:20.73, ir:0.564},
-  {name:"CarryMom (F1-F3)",  ret:9.93,  vol:18.48, ir:0.537},
-  {name:"CarryMom (F1-F12)", ret:13.87, vol:21.57, ir:0.643},
-  {name:"Value",             ret:-1.39, vol:21.90, ir:-0.063},
-  {name:"EW PORT",           ret:9.72,  vol:11.98, ir:0.812, bold:true},
-];
+const ENERGY_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:14.20, vol:24.24, mdd:-55.20, ir:0.586},
+    {name:"Carry (F1-F3)", ret:5.03, vol:19.01, mdd:-51.16, ir:0.265},
+    {name:"Carry (F1-F12)", ret:8.78, vol:21.01, mdd:-48.46, ir:0.418},
+    {name:"CarryMom (F1-F3)", ret:6.47, vol:19.06, mdd:-42.21, ir:0.340},
+    {name:"CarryMom (F1-F12)", ret:13.28, vol:21.81, mdd:-36.22, ir:0.609},
+    {name:"Value", ret:-2.04, vol:22.91, mdd:-128.69, ir:-0.089},
+    {name:"EW PORT", ret:7.62, vol:12.13, mdd:-16.57, ir:0.628},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:13.81, vol:17.15, mdd:-35.48, ir:0.805},
+    {name:"Carry (F1-F3)", ret:6.93, vol:10.36, mdd:-21.78, ir:0.669},
+    {name:"Carry (F1-F12)", ret:9.90, vol:13.43, mdd:-21.70, ir:0.737},
+    {name:"CarryMom (F1-F3)", ret:2.50, vol:11.76, mdd:-34.54, ir:0.212},
+    {name:"CarryMom (F1-F12)", ret:10.52, vol:13.26, mdd:-20.59, ir:0.793},
+    {name:"Value", ret:-19.31, vol:17.48, mdd:-95.93, ir:-1.105},
+    {name:"EW PORT", ret:4.06, vol:7.13, mdd:-16.57, ir:0.569},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:-1.48, vol:19.22, mdd:-36.81, ir:-0.077},
+    {name:"Carry (F1-F3)", ret:-1.75, vol:13.43, mdd:-28.91, ir:-0.130},
+    {name:"Carry (F1-F12)", ret:-1.30, vol:15.61, mdd:-34.52, ir:-0.083},
+    {name:"CarryMom (F1-F3)", ret:3.70, vol:12.99, mdd:-22.85, ir:0.285},
+    {name:"CarryMom (F1-F12)", ret:-1.19, vol:15.77, mdd:-34.05, ir:-0.076},
+    {name:"Value", ret:13.73, vol:17.85, mdd:-20.99, ir:0.769},
+    {name:"EW PORT", ret:1.95, vol:8.76, mdd:-13.42, ir:0.223},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:52.17, vol:37.42, mdd:-23.15, ir:1.394},
+    {name:"Carry (F1-F3)", ret:15.78, vol:33.02, mdd:-39.18, ir:0.478},
+    {name:"Carry (F1-F12)", ret:28.30, vol:35.68, mdd:-48.46, ir:0.793},
+    {name:"CarryMom (F1-F3)", ret:4.61, vol:32.73, mdd:-42.21, ir:0.141},
+    {name:"CarryMom (F1-F12)", ret:58.30, vol:34.96, mdd:-22.31, ir:1.667},
+    {name:"Value", ret:-18.04, vol:37.68, mdd:-91.41, ir:-0.479},
+    {name:"EW PORT", ret:23.52, vol:19.84, mdd:-12.89, ir:1.185},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:11.58, vol:27.30, mdd:-55.20, ir:0.424},
+    {name:"Carry (F1-F3)", ret:4.12, vol:21.94, mdd:-46.43, ir:0.188},
+    {name:"Carry (F1-F12)", ret:7.72, vol:23.17, mdd:-42.81, ir:0.333},
+    {name:"CarryMom (F1-F3)", ret:14.26, vol:21.74, mdd:-31.04, ir:0.656},
+    {name:"CarryMom (F1-F12)", ret:9.06, vol:26.01, mdd:-36.22, ir:0.348},
+    {name:"Value", ret:10.44, vol:23.47, mdd:-51.27, ir:0.445},
+    {name:"EW PORT", ret:9.53, vol:14.39, mdd:-15.64, ir:0.662},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:110.73, vol:46.41, mdd:-16.47, ir:2.386},
+    {name:"Carry (F1-F3)", ret:57.65, vol:41.16, mdd:-16.47, ir:1.401},
+    {name:"Carry (F1-F12)", ret:71.42, vol:44.11, mdd:-22.08, ir:1.619},
+    {name:"CarryMom (F1-F3)", ret:91.29, vol:35.37, mdd:-10.95, ir:2.581},
+    {name:"CarryMom (F1-F12)", ret:52.29, vol:45.39, mdd:-17.89, ir:1.152},
+    {name:"Value", ret:53.88, vol:25.94, mdd:-11.09, ir:2.077},
+    {name:"EW PORT", ret:72.88, vol:27.32, mdd:-8.24, ir:2.668},
+  ]),
+};
 
 const NGL_COLUMNS = METALS_COLUMNS;
-const NGL_ROWS = [
-  {name:"Momentum",          full:1.289, r1:null, r2:null, r3:null,  r4:1.384,  r5:1.564, r6:2.031, r7:0.663,  y26:0.933},
-  {name:"Carry (F4-F15)",    full:0.387, r1:null, r2:null, r3:null,  r4:1.053,  r5:0.360, r6:1.575, r7:-0.968, y26:-1.474},
-  {name:"CarryMom (F4-F15)", full:0.875, r1:null, r2:null, r3:0.608, r4:1.005,  r5:0.607, r6:1.433, r7:0.752,  y26:2.126},
-  {name:"Value",             full:0.387, r1:null, r2:null, r3:null,  r4:-1.133, r5:1.026, r6:0.124, r7:1.304,  y26:3.130},
-  {name:"EW PORT",           full:1.304, r1:null, r2:null, r3:0.608, r4:1.173,  r5:1.530, r6:2.246, r7:0.763,  y26:1.518, bold:true},
-];
-
-const NGL_FULL_ROWS = [
-  {name:"Momentum",          ret:28.16, vol:21.85, ir:1.289},
-  {name:"Carry (F4-F15)",    ret:6.96,  vol:17.99, ir:0.387},
-  {name:"CarryMom (F4-F15)", ret:17.96, vol:20.51, ir:0.875},
-  {name:"Value",             ret:7.68,  vol:19.84, ir:0.387},
-  {name:"EW PORT",           ret:15.19, vol:11.65, ir:1.304, bold:true},
-];
-
-const STATARB_FULL_ROWS = [
-  {name:'Ethane-NatGas', ret:25.79, vol:57.73, ir:0.447},
-  {name:'Propane-Ethane', ret:4.25, vol:19.74, ir:0.215},
-  {name:'Propane-Butane', ret:2.64, vol:17.95, ir:0.147},
-  {name:'RBOB-Butane', ret:8.38, vol:29.53, ir:0.284},
-  {name:'RBOB-Brent', ret:9.73, vol:23.59, ir:0.413},
-  {name:'Brent-HeatingOil', ret:7.24, vol:16.89, ir:0.429},
-  {name:'HeatingOil-WTI', ret:8.91, vol:21.20, ir:0.420},
-  {name:'WTI-Brent', ret:4.53, vol:18.13, ir:0.250},
-  {name:'EW StatArb (8)', ret:8.02, vol:10.43, ir:0.769, bold:true},
-];
+const NGL_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:27.83, vol:22.19, mdd:-38.64, ir:1.254},
+    {name:"Carry (F4-F15)", ret:7.94, vol:18.31, mdd:-87.77, ir:0.434},
+    {name:"CarryMom (F4-F15)", ret:17.92, vol:20.56, mdd:-43.08, ir:0.872},
+    {name:"Value", ret:6.71, vol:20.31, mdd:-115.69, ir:0.330},
+    {name:"EW PORT", ret:15.10, vol:11.72, mdd:-19.42, ir:1.288},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:20.73, vol:18.47, mdd:-21.59, ir:1.122},
+    {name:"Carry (F4-F15)", ret:16.74, vol:15.28, mdd:-13.86, ir:1.096},
+    {name:"CarryMom (F4-F15)", ret:14.40, vol:15.43, mdd:-13.12, ir:0.933},
+    {name:"Value", ret:-17.52, vol:15.65, mdd:-103.37, ir:-1.120},
+    {name:"EW PORT", ret:8.59, vol:8.37, mdd:-8.99, ir:1.026},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:33.53, vol:21.44, mdd:-21.61, ir:1.564},
+    {name:"Carry (F4-F15)", ret:6.00, vol:16.65, mdd:-41.01, ir:0.360},
+    {name:"CarryMom (F4-F15)", ret:12.17, vol:20.05, mdd:-42.98, ir:0.607},
+    {name:"Value", ret:20.85, vol:20.33, mdd:-33.86, ir:1.026},
+    {name:"EW PORT", ret:18.14, vol:11.85, mdd:-16.57, ir:1.530},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:64.61, vol:31.82, mdd:-38.64, ir:2.031},
+    {name:"Carry (F4-F15)", ret:44.44, vol:28.22, mdd:-39.52, ir:1.575},
+    {name:"CarryMom (F4-F15)", ret:44.14, vol:30.81, mdd:-32.72, ir:1.433},
+    {name:"Value", ret:4.10, vol:33.06, mdd:-72.31, ir:0.124},
+    {name:"EW PORT", ret:39.32, vol:17.51, mdd:-18.04, ir:2.246},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:14.17, vol:21.35, mdd:-35.51, ir:0.663},
+    {name:"Carry (F4-F15)", ret:-16.49, vol:17.03, mdd:-84.36, ir:-0.968},
+    {name:"CarryMom (F4-F15)", ret:15.23, vol:20.26, mdd:-43.08, ir:0.752},
+    {name:"Value", ret:22.25, vol:17.06, mdd:-36.50, ir:1.304},
+    {name:"EW PORT", ret:8.79, vol:11.53, mdd:-19.42, ir:0.763},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:31.66, vol:33.92, mdd:-17.09, ir:0.933},
+    {name:"Carry (F4-F15)", ret:-50.15, vol:34.02, mdd:-30.38, ir:-1.474},
+    {name:"CarryMom (F4-F15)", ret:68.30, vol:32.13, mdd:-11.34, ir:2.126},
+    {name:"Value", ret:78.77, vol:25.16, mdd:-8.35, ir:3.130},
+    {name:"EW PORT", ret:32.14, vol:21.18, mdd:-7.62, ir:1.518},
+  ]),
+};
 
 const STATARB_COLUMNS = METALS_COLUMNS;
-const STATARB_ROWS = [
-  {name:'Ethane-NatGas', full:0.447, r1:null, r2:null, r3:-0.174, r4:0.164, r5:0.203, r6:1.04, r7:0.754, y26:0.908},
-  {name:'Propane-Ethane', full:0.215, r1:null, r2:null, r3:0.356, r4:-0.103, r5:0.06, r6:0.415, r7:0.424, y26:-1.023},
-  {name:'Propane-Butane', full:0.147, r1:null, r2:null, r3:2.107, r4:-0.948, r5:1.112, r6:-0.139, r7:-0.188, y26:-2.132},
-  {name:'RBOB-Butane', full:0.284, r1:null, r2:null, r3:0.27, r4:-0.225, r5:0.013, r6:0.827, r7:0.517, y26:0.668},
-  {name:'RBOB-Brent', full:0.413, r1:0.866, r2:1.709, r3:0.544, r4:0.291, r5:0.25, r6:0.39, r7:0.164, y26:-0.765},
-  {name:'Brent-HeatingOil', full:0.429, r1:1.123, r2:0.834, r3:0.417, r4:0.309, r5:0.482, r6:0.538, r7:0.341, y26:-0.225},
-  {name:'HeatingOil-WTI', full:0.420, r1:1.074, r2:2.513, r3:0.341, r4:0.151, r5:0.266, r6:0.328, r7:0.305, y26:0.859},
-  {name:'WTI-Brent', full:0.250, r1:0.981, r2:0.294, r3:-0.248, r4:0.492, r5:-0.111, r6:-0.367, r7:1.087, y26:2.135},
-  {name:'EW StatArb (8)', full:0.769, r1:1.656, r2:2.323, r3:0.542, r4:0.06, r5:0.538, r6:1.207, r7:0.976, y26:0.836, bold:true},
-];
+const STATARB_WINDOWS = {
+  full: ewBold([
+    {name:"Ethane-NatGas", ret:31.00, vol:57.74, mdd:-127.32, ir:0.537},
+    {name:"Propane-Ethane", ret:5.19, vol:20.35, mdd:-50.99, ir:0.255},
+    {name:"Propane-Butane", ret:0.04, vol:18.29, mdd:-70.70, ir:0.002},
+    {name:"RBOB-Butane", ret:8.47, vol:30.06, mdd:-79.62, ir:0.282},
+    {name:"RBOB-Brent", ret:6.82, vol:24.02, mdd:-54.78, ir:0.284},
+    {name:"Brent-HeatingOil", ret:6.32, vol:17.88, mdd:-30.78, ir:0.353},
+    {name:"HeatingOil-WTI", ret:5.02, vol:22.15, mdd:-72.86, ir:0.227},
+    {name:"WTI-Brent", ret:3.61, vol:17.06, mdd:-54.69, ir:0.211},
+    {name:"EW StatArb (8)", ret:8.30, vol:11.34, mdd:-24.39, ir:0.732},
+  ]),
+  r1: ewBold([
+    {name:"Ethane-NatGas", ret:11.53, vol:38.91, mdd:-87.94, ir:0.296},
+    {name:"Propane-Ethane", ret:1.93, vol:14.82, mdd:-32.10, ir:0.130},
+    {name:"Propane-Butane", ret:-11.48, vol:14.57, mdd:-70.70, ir:-0.788},
+    {name:"RBOB-Butane", ret:-3.09, vol:20.47, mdd:-46.05, ir:-0.151},
+    {name:"RBOB-Brent", ret:7.31, vol:18.05, mdd:-25.11, ir:0.405},
+    {name:"Brent-HeatingOil", ret:4.00, vol:11.16, mdd:-10.37, ir:0.359},
+    {name:"HeatingOil-WTI", ret:1.59, vol:15.66, mdd:-22.37, ir:0.102},
+    {name:"WTI-Brent", ret:4.32, vol:13.62, mdd:-19.58, ir:0.317},
+    {name:"EW StatArb (8)", ret:2.01, vol:7.51, mdd:-16.48, ir:0.268},
+  ]),
+  r2: ewBold([
+    {name:"Ethane-NatGas", ret:9.99, vol:49.17, mdd:-127.32, ir:0.203},
+    {name:"Propane-Ethane", ret:1.13, vol:18.82, mdd:-39.98, ir:0.060},
+    {name:"Propane-Butane", ret:20.24, vol:18.21, mdd:-18.97, ir:1.112},
+    {name:"RBOB-Butane", ret:0.39, vol:29.97, mdd:-48.38, ir:0.013},
+    {name:"RBOB-Brent", ret:4.78, vol:19.10, mdd:-32.54, ir:0.250},
+    {name:"Brent-HeatingOil", ret:2.93, vol:6.08, mdd:-9.40, ir:0.482},
+    {name:"HeatingOil-WTI", ret:2.12, vol:7.96, mdd:-13.89, ir:0.266},
+    {name:"WTI-Brent", ret:-1.25, vol:11.26, mdd:-22.53, ir:-0.111},
+    {name:"EW StatArb (8)", ret:5.03, vol:9.35, mdd:-23.14, ir:0.538},
+  ]),
+  r3: ewBold([
+    {name:"Ethane-NatGas", ret:56.08, vol:53.95, mdd:-80.16, ir:1.040},
+    {name:"Propane-Ethane", ret:12.24, vol:29.46, mdd:-49.68, ir:0.415},
+    {name:"Propane-Butane", ret:-3.37, vol:24.15, mdd:-49.39, ir:-0.139},
+    {name:"RBOB-Butane", ret:43.09, vol:52.12, mdd:-79.62, ir:0.827},
+    {name:"RBOB-Brent", ret:18.17, vol:46.58, mdd:-52.02, ir:0.390},
+    {name:"Brent-HeatingOil", ret:13.55, vol:25.19, mdd:-30.59, ir:0.538},
+    {name:"HeatingOil-WTI", ret:13.00, vol:39.63, mdd:-63.16, ir:0.328},
+    {name:"WTI-Brent", ret:-12.43, vol:33.82, mdd:-53.01, ir:-0.367},
+    {name:"EW StatArb (8)", ret:17.54, vol:14.54, mdd:-24.39, ir:1.207},
+  ]),
+  r4: ewBold([
+    {name:"Ethane-NatGas", ret:60.19, vol:79.82, mdd:-73.96, ir:0.754},
+    {name:"Propane-Ethane", ret:9.31, vol:21.96, mdd:-41.15, ir:0.424},
+    {name:"Propane-Butane", ret:-3.56, vol:18.99, mdd:-60.40, ir:-0.188},
+    {name:"RBOB-Butane", ret:13.05, vol:25.25, mdd:-26.98, ir:0.517},
+    {name:"RBOB-Brent", ret:3.01, vol:18.33, mdd:-19.80, ir:0.164},
+    {name:"Brent-HeatingOil", ret:8.69, vol:25.50, mdd:-28.28, ir:0.341},
+    {name:"HeatingOil-WTI", ret:7.84, vol:25.74, mdd:-26.00, ir:0.305},
+    {name:"WTI-Brent", ret:14.34, vol:13.20, mdd:-13.21, ir:1.087},
+    {name:"EW StatArb (8)", ret:14.10, vol:14.45, mdd:-10.61, ir:0.976},
+  ]),
+  y26: ewBold([
+    {name:"Ethane-NatGas", ret:111.27, vol:122.54, mdd:-37.27, ir:0.908},
+    {name:"Propane-Ethane", ret:-20.28, vol:19.82, mdd:-17.25, ir:-1.023},
+    {name:"Propane-Butane", ret:-30.81, vol:14.45, mdd:-18.76, ir:-2.132},
+    {name:"RBOB-Butane", ret:23.71, vol:35.48, mdd:-18.20, ir:0.668},
+    {name:"RBOB-Brent", ret:-19.77, vol:25.84, mdd:-19.50, ir:-0.765},
+    {name:"Brent-HeatingOil", ret:-8.87, vol:39.51, mdd:-15.26, ir:-0.225},
+    {name:"HeatingOil-WTI", ret:31.35, vol:36.48, mdd:-21.39, ir:0.859},
+    {name:"WTI-Brent", ret:61.69, vol:28.90, mdd:-6.29, ir:2.135},
+    {name:"EW StatArb (8)", ret:18.50, vol:22.13, mdd:-6.67, ir:0.836},
+  ]),
+};
+const WINDOW_GRIDS = {
+  metals: METALS_WINDOWS, pm: PM_WINDOWS, energy: ENERGY_WINDOWS,
+  ngl: NGL_WINDOWS, statarb: STATARB_WINDOWS,
+};
+
+// Regime heatmap rows (IR only, one column per window) DERIVED from the
+// window grids above, so the heatmap and the horizon dropdown are always
+// reading the same underlying numbers -- never hand-maintained separately.
+function regimeRowsFromWindows(windowGrid) {
+  return windowGrid.full.map(fr => {
+    const row = {name: fr.name, bold: !!fr.bold};
+    METALS_COLUMNS.forEach(c => {
+      const cell = windowGrid[c.key].find(r => r.name === fr.name);
+      row[c.key] = cell ? cell.ir : null;
+    });
+    return row;
+  });
+}
 
 function irColor(v) {
   if (v === null || v === undefined || isNaN(v)) return null;
@@ -418,13 +687,33 @@ function renderTable(tableEl, columns, rows) {
 }
 
 function renderFullTable(tableEl, rows) {
-  let thead = "<thead><tr><th>Strategy</th><th>Return (annualized)</th><th>Vol (annualized)</th><th>IR</th></tr></thead>";
+  let thead = "<thead><tr><th>Strategy</th><th>Return (annualized)</th><th>Vol (annualized)</th><th>Max Drawdown</th><th>IR</th></tr></thead>";
   let tbody = "<tbody>" + rows.map(row => {
-    const bg = irColor(row.ir), fg = irTextColor(row.ir);
-    return `<tr style="${row.bold ? 'font-weight:700' : ''}"><td>${row.name}</td><td>${row.ret.toFixed(2)}%</td><td>${row.vol.toFixed(2)}%</td>` +
-           `<td><span class="ir-cell" style="background:${bg};color:${fg}">${row.ir.toFixed(3)}</span></td></tr>`;
+    const hasData = row.ir !== null && row.ir !== undefined && !isNaN(row.ir);
+    const irCell = hasData
+      ? `<span class="ir-cell" style="background:${irColor(row.ir)};color:${irTextColor(row.ir)}">${row.ir.toFixed(3)}</span>`
+      : "n/a";
+    return `<tr style="${row.bold ? 'font-weight:700' : ''}"><td>${row.name}</td>` +
+           `<td>${hasData ? row.ret.toFixed(2) + "%" : "n/a"}</td>` +
+           `<td>${hasData ? row.vol.toFixed(2) + "%" : "n/a"}</td>` +
+           `<td>${hasData ? row.mdd.toFixed(2) + "%" : "n/a"}</td>` +
+           `<td>${irCell}</td></tr>`;
   }).join("") + "</tbody>";
   tableEl.innerHTML = thead + tbody;
+}
+
+function populateWindowSelect(selectEl) {
+  selectEl.innerHTML = METALS_COLUMNS.map(c => `<option value="${c.key}">${c.label} (${c.years})</option>`).join("");
+}
+
+function wireWindowSelect(selectId, tableId, gridKey) {
+  const selectEl = document.getElementById(selectId);
+  const tableEl = document.getElementById(tableId);
+  const grid = WINDOW_GRIDS[gridKey];
+  populateWindowSelect(selectEl);
+  const render = () => renderFullTable(tableEl, grid[selectEl.value]);
+  selectEl.addEventListener("change", render);
+  render();
 }
 
 function renderKeyTable(tableEl, rows) {
@@ -436,23 +725,22 @@ function renderKeyTable(tableEl, rows) {
 }
 
 renderKeyTable(document.getElementById("regime-key-table"), REGIME_KEY_ROWS);
+renderKeyTable(document.getElementById("statarb-regime-key-table"), REGIME_KEY_ROWS);
 
-renderTable(document.getElementById("metals-table"), METALS_COLUMNS, METALS_ROWS);
-renderFullTable(document.getElementById("metals-full-table"), METALS_FULL_ROWS);
+renderTable(document.getElementById("metals-table"), METALS_COLUMNS, regimeRowsFromWindows(METALS_WINDOWS));
+wireWindowSelect("metals-window-select", "metals-full-table", "metals");
 
-renderTable(document.getElementById("pm-table"), PM_COLUMNS, PM_ROWS);
-renderFullTable(document.getElementById("pm-full-table"), PM_FULL_ROWS);
+renderTable(document.getElementById("pm-table"), PM_COLUMNS, regimeRowsFromWindows(PM_WINDOWS));
+wireWindowSelect("pm-window-select", "pm-full-table", "pm");
 
-renderTable(document.getElementById("energy-table"), ENERGY_COLUMNS, ENERGY_ROWS);
-renderFullTable(document.getElementById("energy-full-table"), ENERGY_FULL_ROWS);
+renderTable(document.getElementById("energy-table"), ENERGY_COLUMNS, regimeRowsFromWindows(ENERGY_WINDOWS));
+wireWindowSelect("energy-window-select", "energy-full-table", "energy");
 
-renderTable(document.getElementById("ngl-table"), NGL_COLUMNS, NGL_ROWS);
-renderFullTable(document.getElementById("ngl-full-table"), NGL_FULL_ROWS);
+renderTable(document.getElementById("ngl-table"), NGL_COLUMNS, regimeRowsFromWindows(NGL_WINDOWS));
+wireWindowSelect("ngl-window-select", "ngl-full-table", "ngl");
 
-renderFullTable(document.getElementById("energy-statarb-full-table"), STATARB_FULL_ROWS);
-renderTable(document.getElementById("energy-statarb-table"), STATARB_COLUMNS, STATARB_ROWS);
-renderFullTable(document.getElementById("ngl-statarb-full-table"), STATARB_FULL_ROWS);
-renderTable(document.getElementById("ngl-statarb-table"), STATARB_COLUMNS, STATARB_ROWS);
+renderTable(document.getElementById("statarb-table"), STATARB_COLUMNS, regimeRowsFromWindows(STATARB_WINDOWS));
+wireWindowSelect("statarb-window-select", "statarb-full-table", "statarb");
 
 document.getElementById("last-updated").textContent = "Last updated " + LAST_UPDATED;
 

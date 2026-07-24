@@ -143,36 +143,35 @@ def statarb_position_and_pnl(label: str, lookback: int, threshold: float, shift_
 def metrics(net: pd.Series) -> dict:
     a = net.dropna()
     if len(a) < 20 or a.std(ddof=1) == 0:
-        return dict(ret=np.nan, vol=np.nan, ir=np.nan)
+        return dict(ret=np.nan, vol=np.nan, mdd=np.nan, ir=np.nan)
     ret = float(a.mean() * 252)
     vol = float(a.std(ddof=1) * np.sqrt(252))
-    return dict(ret=ret * 100, vol=vol * 100, ir=(ret / vol) if vol > 0 else np.nan)
+    # Max drawdown WITHIN this window (cumulative log-return reset to 0 at the
+    # window's own start) -- same per-window convention as run_regime_table.py.
+    cum = a.cumsum()
+    mdd = float((cum - cum.cummax()).min()) * 100
+    return dict(ret=ret * 100, vol=vol * 100, mdd=mdd, ir=(ret / vol) if vol > 0 else np.nan)
 
 
 def _regime_row(name: str, net: pd.Series) -> dict:
-    from regimes import REGIMES  # noqa: E402
-    row = {"name": name, "full": metrics(net)["ir"]}
+    from regimes import REGIMES, REPORT_START  # noqa: E402
+    row = {"name": name, "full": metrics(net.loc[REPORT_START:])["ir"]}
     for rname, start, end in REGIMES:
         row[rname] = metrics(net.loc[start:end])["ir"]
     row["y26"] = metrics(net.loc["2026-01-01":])["ir"]
     return row
 
 
-if __name__ == "__main__":
-    from regimes import REGIMES  # noqa: E402
+LOOKBACK, THRESHOLD, SHIFT_N = 20, 0.10, 2
 
-    LOOKBACK, THRESHOLD, SHIFT_N = 20, 0.10, 2
+
+def build_net_by_label() -> tuple[dict[str, pd.Series], pd.Series]:
+    """Per-spread net log-return PnL series plus the equal-weight combination
+    across all 8 (shared by the text-table CLI output and build_window_grid())."""
     net_by_label = {}
-    full_rows = []
-    regime_rows = []
-    print(f"{'Spread':<20}{'N days':>9}{'Return%':>10}{'Vol%':>9}{'IR':>8}")
     for label in SPREAD_LEGS:
         _, _, net = statarb_position_and_pnl(label, LOOKBACK, THRESHOLD, SHIFT_N)
         net_by_label[label] = net
-        m = metrics(net)
-        print(f"{label:<20}{len(net.dropna()):>9}{m['ret']:>10.2f}{m['vol']:>9.2f}{m['ir']:>8.3f}")
-        full_rows.append(dict(name=label, **m))
-        regime_rows.append(_regime_row(label, net))
 
     common_idx = None
     for s in net_by_label.values():
@@ -182,8 +181,63 @@ if __name__ == "__main__":
         s2 = s.reindex(common_idx).fillna(0.0)
         ew = s2 if ew is None else ew + s2
     ew = ew / len(net_by_label)
-    m = metrics(ew)
-    print(f"{'EW StatArb (8)':<20}{len(ew.dropna()):>9}{m['ret']:>10.2f}{m['vol']:>9.2f}{m['ir']:>8.3f}")
+    return net_by_label, ew
+
+
+def build_window_grid() -> dict[str, list[dict]]:
+    """Per-window (full + every regime + 2026 YTD) full {ret, vol, ir} rows for
+    every spread plus the EW combination -- ret/vol counterpart to
+    _regime_row()'s IR-only heatmap rows, same convention as
+    run_regime_table.build_window_grid()."""
+    from regimes import REGIMES, REPORT_START  # noqa: E402
+
+    net_by_label, ew = build_net_by_label()
+    series_by_label = dict(net_by_label)
+    series_by_label["EW StatArb (8)"] = ew
+    labels = list(SPREAD_LEGS) + ["EW StatArb (8)"]
+
+    grid: dict[str, list[dict]] = {}
+    grid["full"] = [dict(name=label, **metrics(series_by_label[label].loc[REPORT_START:])) for label in labels]
+    for rname, start, end in REGIMES:
+        key = rname.split("_")[0].lower()
+        grid[key] = [dict(name=label, **metrics(series_by_label[label].loc[start:end])) for label in labels]
+    grid["y26"] = [dict(name=label, **metrics(series_by_label[label].loc["2026-01-01":])) for label in labels]
+    return grid
+
+
+if __name__ == "__main__":
+    import sys as _sys  # noqa: E402
+    from regimes import REGIMES  # noqa: E402
+
+    if "--window-grid" in _sys.argv:
+        grid = build_window_grid()
+        window_order = ["full"] + [rname.split("_")[0].lower() for rname, _, _ in REGIMES] + ["y26"]
+        print("// statarb")
+        for key in window_order:
+            print(f"  {key}: [")
+            for r in grid[key]:
+                def fmt(v, nd):
+                    return "null" if pd.isna(v) else f"{v:.{nd}f}"
+                print(f"    {{name:{r['name']!r}, ret:{fmt(r['ret'],2)}, vol:{fmt(r['vol'],2)}, "
+                      f"mdd:{fmt(r['mdd'],2)}, ir:{fmt(r['ir'],3)}}},")
+            print("  ],")
+        raise SystemExit(0)
+
+    from regimes import REPORT_START  # noqa: E402
+
+    net_by_label, ew = build_net_by_label()
+    full_rows = []
+    regime_rows = []
+    print(f"{'Spread':<20}{'N days':>9}{'Return%':>10}{'Vol%':>9}{'IR':>8}")
+    for label in SPREAD_LEGS:
+        net = net_by_label[label]
+        m = metrics(net.loc[REPORT_START:])
+        print(f"{label:<20}{len(net.loc[REPORT_START:].dropna()):>9}{m['ret']:>10.2f}{m['vol']:>9.2f}{m['ir']:>8.3f}")
+        full_rows.append(dict(name=label, **m))
+        regime_rows.append(_regime_row(label, net))
+
+    m = metrics(ew.loc[REPORT_START:])
+    print(f"{'EW StatArb (8)':<20}{len(ew.loc[REPORT_START:].dropna()):>9}{m['ret']:>10.2f}{m['vol']:>9.2f}{m['ir']:>8.3f}")
     full_rows.append(dict(name="EW StatArb (8)", **m))
     regime_rows.append(_regime_row("EW StatArb (8)", ew))
 
@@ -191,11 +245,11 @@ if __name__ == "__main__":
     from scipy import stats as sstats  # noqa: E402
     from stats import bh_fdr  # noqa: E402
 
-    windows = [("Full", None, None)] + list(REGIMES)
+    windows = [("Full", REPORT_START, None)] + list(REGIMES)
     pvals = {}
     for label, net in list(net_by_label.items()) + [("EW StatArb (8)", ew)]:
         for wname, start, end in windows:
-            sub = net if start is None else net.loc[start:end]
+            sub = net.loc[start:end]
             a = sub.dropna()
             if len(a) < 20 or a.std(ddof=1) == 0:
                 continue

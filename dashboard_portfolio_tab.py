@@ -1,12 +1,20 @@
 """
 Reusable Portfolio tab for the asset-class dashboards.
 
-Groups strategies by family (Momentum, Carry, Carry-Momentum, Value), each
-with its own add/duplicate/remove controls and an explicit, editable leg
-list. Provides a year-range slider that reshapes performance metrics and
-the cumulative equity curve, a performance-metrics card section matching
-the style of the standalone Momentum/Carry/Value tabs, and an equal-weight
-portfolio builder over whichever strategy instances are selected.
+Two parts. Reference Strategies: the six locked, officially reported
+strategy configurations (Momentum, Carry F1-F3, Carry F1-F13, CarryMom
+F1-F3, CarryMom F1-F13, Value), shown read-only as a comparison baseline.
+Portfolio Construction: a single draft spanning all four strategy families
+(Momentum, Carry, Carry-Momentum, Value), each off by default. Toggling a
+family on reveals its own editable leg list; leaving a family off excludes
+it entirely. One Add Portfolio button combines whichever families are
+toggled on -- equal-weighted at the return level if more than one -- into
+a new, named, comparable entry, then resets the draft.
+
+A year-range slider, a performance-metrics card section styled like the
+standalone Momentum/Carry/Value tabs, and a cumulative equity chart draw
+from the combined pool of reference strategies, the reference EW Portfolio,
+and every custom portfolio the user has added.
 
 Built on research/engine.py's log-return methodology rather than
 common_engine.py's dollar-PnL convention, because portfolio construction
@@ -33,7 +41,6 @@ only equal weight today.
 
 from __future__ import annotations
 
-import copy
 import os
 import sys
 import uuid
@@ -98,7 +105,7 @@ def _load_products(_cfg, cfg_name: str):
     return data, common_start, common_end
 
 
-# Strategy instance and leg construction.
+# Leg construction, shared by the reference strategies and the draft sleeves.
 
 def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
     leg_id = uuid.uuid4().hex[:8]
@@ -114,34 +121,15 @@ def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
     raise ValueError(f"Unknown family {family!r}")
 
 
-def _new_instance(family: str, near: str = "F1", far: str = "F3") -> dict:
-    return {
-        "id": f"{family.lower()}_{uuid.uuid4().hex[:6]}", "family": family,
-        "label": f"{FAMILY_TITLE[family]} (new)",
-        "legs": [_new_leg(family, near, far)],
-        "shift_n": DEFAULT_SHIFT_N[family], "combine_method": "equal_weight",
-        "shared_tenor": True if family in ("Carry", "CarryMom") else None,
-    }
-
-
-def _duplicate_instance(instance: dict) -> dict:
-    clone = copy.deepcopy(instance)
-    clone["id"] = f"{instance['family'].lower()}_{uuid.uuid4().hex[:6]}"
-    clone["label"] = f"{instance['label']} copy"
-    for leg in clone["legs"]:
-        leg["leg_id"] = uuid.uuid4().hex[:8]
-    return clone
-
-
-def _build_default_instances(cfg) -> list[dict]:
-    """Seed the six strategy instances that match the locked ex-ante
-    parameter set exactly, so the tab opens showing today's official
-    numbers before any customization."""
+def _build_reference_strategies(cfg) -> list[dict]:
+    """The six locked, officially reported strategy configurations. Fixed
+    and read-only: not a starting point to edit in place, so the numbers
+    already reported elsewhere for this asset class always stay
+    reproducible on this tab."""
     instances = [{
         "id": "mom", "family": "Momentum", "label": "Momentum",
         "legs": [{"leg_id": uuid.uuid4().hex[:8], "fast": f, "slow": s} for f, s in cfg.MOMENTUM_PAIRS],
         "shift_n": cfg.MOMENTUM_SHIFT_N, "combine_method": "equal_weight",
-        "shared_tenor": None,
     }]
     for near, far in cfg.CARRY_TENOR_PAIRS:
         instances.append({
@@ -153,7 +141,6 @@ def _build_default_instances(cfg) -> list[dict]:
                  "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
             ],
             "shift_n": cfg.CARRY_SHIFT_N, "combine_method": "equal_weight",
-            "shared_tenor": True,
         })
     for near, far in cfg.CARRY_TENOR_PAIRS:
         instances.append({
@@ -161,16 +148,29 @@ def _build_default_instances(cfg) -> list[dict]:
             "legs": [{"leg_id": uuid.uuid4().hex[:8], "near": near, "far": far,
                       "horizon": cfg.CARRY_MOMENTUM_HORIZON}],
             "shift_n": cfg.CARRY_MOMENTUM_SHIFT_N, "combine_method": "equal_weight",
-            "shared_tenor": True,
         })
     instances.append({
         "id": "value", "family": "Value", "label": "Value",
         "legs": [{"leg_id": uuid.uuid4().hex[:8], "contract": cfg.VALUE_CONTRACT,
                   "lookback": cfg.VALUE_LOOKBACK_DAYS, "threshold": cfg.VALUE_THRESHOLD}],
         "shift_n": cfg.VALUE_SHIFT_N, "combine_method": "equal_weight",
-        "shared_tenor": None,
     })
     return instances
+
+
+def _default_sleeve(family: str) -> dict:
+    """A blank, disabled draft sleeve for one strategy family. `enabled`
+    starts False and `legs` starts empty -- a family contributes nothing to
+    the portfolio being built until the user explicitly switches it on."""
+    return {
+        "family": family, "enabled": False, "legs": [],
+        "shift_n": DEFAULT_SHIFT_N[family], "combine_method": "equal_weight",
+        "shared_tenor": True if family in ("Carry", "CarryMom") else None,
+    }
+
+
+def _blank_draft() -> dict:
+    return {family: _default_sleeve(family) for family in FAMILY_ORDER}
 
 
 def _safe_index(options: list, value, fallback: int = 0) -> int:
@@ -221,8 +221,8 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
 
 
 def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
-    """Gross and net daily log-return contribution of one strategy instance
-    on one product."""
+    """Gross and net daily log-return contribution of one strategy family
+    (a reference strategy or a draft sleeve) on one product."""
     empty = pd.Series(dtype=float)
     if not instance["legs"]:
         return empty, empty
@@ -236,8 +236,8 @@ def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -
 
 
 def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
-    """Gross and net asset-class-level return for one instance, equal-weighted
-    across every product in `data`."""
+    """Gross and net asset-class-level return for one strategy family,
+    equal-weighted across every product in `data`."""
     grosses, nets = [], []
     for product_data in data.values():
         g, n = _instance_product_returns(instance, product_data, tc_bps)
@@ -279,7 +279,37 @@ def _fmt(x, fmt_spec: str) -> str:
     return "N/A" if x is None or (isinstance(x, float) and np.isnan(x)) else fmt_spec.format(x)
 
 
-# Leg rendering.
+def _describe_leg(family: str, leg: dict) -> str:
+    """Plain-text summary of one leg's parameters, for the read-only
+    display of a reference strategy."""
+    if family == "Momentum":
+        return f"MA crossover, fast={leg.get('fast')}, slow={leg.get('slow')}"
+    if family == "Carry":
+        leg_type = leg.get("type", "V1 Level")
+        text = f"{leg_type} ({leg.get('near')}-{leg.get('far')})"
+        if leg_type == "V2 Z-score":
+            text += f", z-window={leg.get('zwindow')}"
+        elif leg_type == "V3 Carry-Momentum":
+            text += f", horizon={leg.get('horizon')}"
+        return text
+    if family == "CarryMom":
+        return f"Carry-Momentum ({leg.get('near')}-{leg.get('far')}), horizon={leg.get('horizon')}"
+    if family == "Value":
+        return (f"contract={leg.get('contract')}, lookback={leg.get('lookback')}d, "
+                f"threshold=+-{leg.get('threshold')}")
+    return str(leg)
+
+
+def _render_reference_strategy(instance: dict) -> None:
+    """Read-only card for one of the six locked reference strategies."""
+    with st.expander(instance["label"], expanded=False):
+        for leg in instance["legs"]:
+            st.markdown(f"- {_describe_leg(instance['family'], leg)}")
+        st.caption(f"Execution lag (shift_n): {instance['shift_n']}  |  Combine legs via: Equal Weight")
+
+
+# Leg rendering (shared by every editable leg list -- currently only the
+# Portfolio Construction draft's sleeves).
 
 def _render_leg(family: str, leg: dict, key_prefix: str,
                  shared_near: str | None, shared_far: str | None) -> bool:
@@ -385,31 +415,29 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
     raise ValueError(f"Unknown family {family!r}")
 
 
-def _render_instance(instance: dict, key_prefix: str) -> str | None:
-    """Render one strategy instance card. Returns "remove", "duplicate", or
-    None."""
-    family = instance["family"]
-    action = None
-    with st.expander(instance["label"], expanded=False):
-        c1, c2, c3 = st.columns([4, 1, 1])
-        with c1:
-            instance["label"] = st.text_input("Label", value=instance["label"],
-                                               key=f"{key_prefix}_label", label_visibility="collapsed")
-        with c2:
-            if st.button("Duplicate", key=f"{key_prefix}_dup", use_container_width=True):
-                action = "duplicate"
-        with c3:
-            if st.button("Remove", key=f"{key_prefix}_remove", use_container_width=True):
-                action = "remove"
+def _render_draft_sleeve(sleeve: dict, key_prefix: str) -> None:
+    """Render one family's slot in the Portfolio Construction draft: an
+    Include toggle, and -- once toggled on -- its editable leg list. A
+    family left off contributes nothing when Add Portfolio is clicked."""
+    family = sleeve["family"]
+    with st.container(border=True):
+        enabled = st.checkbox(f"Include {FAMILY_TITLE[family]}", value=sleeve["enabled"],
+                               key=f"{key_prefix}_enabled")
+        sleeve["enabled"] = enabled
+        if not enabled:
+            return
+
+        if not sleeve["legs"]:
+            sleeve["legs"] = [_new_leg(family)]
 
         shared_near = shared_far = None
         if family in ("Carry", "CarryMom"):
             shared = st.checkbox("Shared tenor pair across legs (uncheck to set near/far per leg)",
-                                  value=bool(instance.get("shared_tenor", True)), key=f"{key_prefix}_shared")
-            instance["shared_tenor"] = shared
+                                  value=bool(sleeve.get("shared_tenor", True)), key=f"{key_prefix}_shared")
+            sleeve["shared_tenor"] = shared
             if shared:
-                default_near = instance["legs"][0].get("near", "F1") if instance["legs"] else "F1"
-                default_far = instance["legs"][0].get("far", "F3") if instance["legs"] else "F3"
+                default_near = sleeve["legs"][0].get("near", "F1")
+                default_far = sleeve["legs"][0].get("far", "F3")
                 sc1, sc2 = st.columns(2)
                 with sc1:
                     shared_near = st.selectbox("Near", FAR_NEAR_OPTIONS,
@@ -420,33 +448,57 @@ def _render_instance(instance: dict, key_prefix: str) -> str | None:
                                                index=_safe_index(FAR_NEAR_OPTIONS, default_far, fallback=2),
                                                key=f"{key_prefix}_far")
 
-        st.caption("Each leg below is averaged into this strategy's composite signal.")
+        st.caption("Each leg below is averaged into this family's composite signal.")
         leg_to_remove = None
-        for leg in instance["legs"]:
+        for leg in sleeve["legs"]:
             if _render_leg(family, leg, key_prefix=f"{key_prefix}_leg_{leg['leg_id']}",
                             shared_near=shared_near, shared_far=shared_far):
                 leg_to_remove = leg["leg_id"]
         if leg_to_remove is not None:
-            instance["legs"] = [leg for leg in instance["legs"] if leg["leg_id"] != leg_to_remove]
+            sleeve["legs"] = [leg for leg in sleeve["legs"] if leg["leg_id"] != leg_to_remove]
             st.rerun()
 
         if st.button("Add leg", key=f"{key_prefix}_addleg"):
-            instance["legs"].append(_new_leg(family, shared_near or "F1", shared_far or "F3"))
+            sleeve["legs"].append(_new_leg(family, shared_near or "F1", shared_far or "F3"))
             st.rerun()
 
-        cshift, ccombine = st.columns(2)
-        with cshift:
-            instance["shift_n"] = st.number_input("Execution lag (shift_n)", min_value=0, max_value=5,
-                                                    value=int(instance["shift_n"]), step=1,
-                                                    key=f"{key_prefix}_shift")
-        with ccombine:
-            st.selectbox("Combine legs via", ["Equal Weight"], index=0, disabled=True,
-                          key=f"{key_prefix}_combine",
-                          help="Weighted, inverse-vol, and risk-parity combiners are planned next, "
-                               "once this tab has been reviewed and tested.")
-            instance["combine_method"] = "equal_weight"
+        sleeve["shift_n"] = st.number_input("Execution lag (shift_n)", min_value=0, max_value=5,
+                                             value=int(sleeve["shift_n"]), step=1, key=f"{key_prefix}_shift")
 
-    return action
+
+def _next_portfolio_number(key_prefix: str) -> int:
+    counter_key = f"{key_prefix}_portfolio_counter"
+    n = st.session_state.get(counter_key, 1)
+    st.session_state[counter_key] = n + 1
+    return n
+
+
+def _reset_sleeve_widget_state(family: str, key_prefix: str) -> None:
+    """Reset one family's FIXED widget keys (checkbox, shift, shared-tenor,
+    near/far) to their default values, so the draft's data reset is also
+    genuinely reflected on screen. Streamlit widgets keep their last value
+    by `key` regardless of the `value=`/`index=` argument passed on a later
+    rerun, so reassigning the sleeve dict alone would leave the checkbox
+    still showing checked.
+
+    Deliberately SETS these keys rather than deleting them (`st.session_
+    state[key] = default`, not `.pop(key)`) -- per-leg widget keys are left
+    alone entirely and are never reset here. Two reasons: (1) a fresh leg
+    always gets a brand-new random leg_id (see _new_leg), so its widget key
+    has never been seen before and naturally starts at its own default --
+    there is nothing stale to fix; (2) deleting a widget's session_state
+    entry in the same run that widget was previously rendered, immediately
+    followed by st.rerun(), was found to break Streamlit's own AppTest
+    harness (KeyError deep inside its widget-state bookkeeping, not in this
+    module) -- setting a value ahead of a widget's next instantiation is
+    the standard, safe pattern; deleting mid-lifecycle is not."""
+    fam_prefix = f"{key_prefix}_draft_{family}"
+    st.session_state[f"{fam_prefix}_enabled"] = False
+    st.session_state[f"{fam_prefix}_shift"] = DEFAULT_SHIFT_N[family]
+    if family in ("Carry", "CarryMom"):
+        st.session_state[f"{fam_prefix}_shared"] = True
+        st.session_state[f"{fam_prefix}_near"] = "F1"
+        st.session_state[f"{fam_prefix}_far"] = "F3"
 
 
 def render_portfolio_tab(cfg, key_prefix: str) -> None:
@@ -465,11 +517,6 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
         "exactly with those other tabs."
     )
 
-    state_key = f"{key_prefix}_pf_instances"
-    if state_key not in st.session_state:
-        st.session_state[state_key] = _build_default_instances(cfg)
-    instances: list[dict] = st.session_state[state_key]
-
     data, common_start, common_end = _load_products(cfg, cfg.ASSET_CLASS)
     st.caption(f"Common data window across all {len(data)} {cfg.ASSET_CLASS} products: "
                f"{common_start.date()} to {common_end.date()}.")
@@ -477,59 +524,108 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     tc_bps = st.number_input("Transaction cost (bps, round-trip)", min_value=0, max_value=50,
                               value=5, step=1, key=f"{key_prefix}_pf_tcbps")
 
-    section_header("Strategies")
-    pending_remove = pending_duplicate = None
+    section_header("Reference strategies")
+    st.caption("The officially reported parameter set for this asset class. Read-only -- "
+               "build a custom combination below instead of editing these.")
+    reference_strategies = _build_reference_strategies(cfg)
+    for instance in reference_strategies:
+        _render_reference_strategy(instance)
+
+    section_header("Portfolio construction")
+    st.caption("Switch on whichever strategy families belong in this portfolio and configure "
+               "their legs; leave the rest off. One family alone becomes a single-strategy "
+               "portfolio; several together are combined equal-weight. Add Portfolio saves the "
+               "current draft as a new, comparable entry and clears the draft for the next one.")
+
+    draft_key = f"{key_prefix}_pf_draft"
+    reset_pending_key = f"{key_prefix}_pf_draft_reset_pending"
+
+    # Apply any reset requested by a PREVIOUS run's Add Portfolio click here,
+    # before any draft widget below is instantiated this run. Clearing a
+    # widget's session_state entry in the very same run that widget was
+    # rendered (then immediately st.rerun()-ing) is not a safe sequence --
+    # deferring the actual clear to the top of the NEXT run, ahead of
+    # rendering, keeps every widget's state deleted before it is ever
+    # touched in that run rather than mid-lifecycle.
+    if st.session_state.get(reset_pending_key):
+        for family in FAMILY_ORDER:
+            _reset_sleeve_widget_state(family, key_prefix)
+        st.session_state[draft_key] = _blank_draft()
+        st.session_state[reset_pending_key] = False
+
+    if draft_key not in st.session_state:
+        st.session_state[draft_key] = _blank_draft()
+    draft: dict = st.session_state[draft_key]
+
     for family in FAMILY_ORDER:
-        st.markdown(f"**{FAMILY_TITLE[family]}**")
-        family_indices = [i for i, inst in enumerate(instances) if inst["family"] == family]
-        if not family_indices:
-            st.caption("No strategies in this family yet.")
-        for i in family_indices:
-            action = _render_instance(instances[i], key_prefix=f"{key_prefix}_inst_{instances[i]['id']}")
-            if action == "remove":
-                pending_remove = i
-            elif action == "duplicate":
-                pending_duplicate = i
-        default_near, default_far = (cfg.CARRY_TENOR_PAIRS[0] if getattr(cfg, "CARRY_TENOR_PAIRS", None)
-                                      else ("F1", "F3"))
-        if st.button(f"Add {FAMILY_TITLE[family]} strategy", key=f"{key_prefix}_add_{family}"):
-            instances.append(_new_instance(family, default_near, default_far))
+        _render_draft_sleeve(draft[family], key_prefix=f"{key_prefix}_draft_{family}")
+
+    portfolios_key = f"{key_prefix}_pf_portfolios"
+    st.session_state.setdefault(portfolios_key, [])
+
+    if st.button("Add Portfolio", key=f"{key_prefix}_add_portfolio", type="primary"):
+        enabled_sleeves = [draft[f] for f in FAMILY_ORDER if draft[f]["enabled"] and draft[f]["legs"]]
+        if not enabled_sleeves:
+            st.warning("Switch on at least one strategy family with at least one leg before adding a portfolio.")
+        else:
+            grosses, nets, sleeve_names = [], [], []
+            for sleeve in enabled_sleeves:
+                g, n = _instance_asset_returns(sleeve, data, tc_bps)
+                if not n.empty:
+                    grosses.append(g)
+                    nets.append(n)
+                    sleeve_names.append(FAMILY_TITLE[sleeve["family"]])
+            if not nets:
+                st.warning("No valid output from the selected families -- check leg parameters "
+                           "(a tenor pair or contract that does not exist in the curve data "
+                           "returns an empty series).")
+            else:
+                n = _next_portfolio_number(key_prefix)
+                st.session_state[portfolios_key].append({
+                    "label": f"Portfolio {n}", "sleeves": sleeve_names,
+                    "gross": combine_returns(grosses, "equal_weight"),
+                    "net": combine_returns(nets, "equal_weight"),
+                })
+                st.session_state[reset_pending_key] = True
+                st.rerun()
+
+    portfolios: list[dict] = st.session_state[portfolios_key]
+    if portfolios:
+        section_header("Your portfolios")
+        to_remove = None
+        for i, p in enumerate(portfolios):
+            c1, c2 = st.columns([5, 1])
+            with c1:
+                st.markdown(f"**{p['label']}** -- {' + '.join(p['sleeves'])}")
+            with c2:
+                if st.button("Remove", key=f"{key_prefix}_pfremove_{i}", use_container_width=True):
+                    to_remove = i
+        if to_remove is not None:
+            portfolios.pop(to_remove)
             st.rerun()
-        st.divider()
 
-    if pending_remove is not None:
-        instances.pop(pending_remove)
-        st.rerun()
-    if pending_duplicate is not None:
-        instances.insert(pending_duplicate + 1, _duplicate_instance(instances[pending_duplicate]))
-        st.rerun()
-
-    if not instances:
-        st.info("No strategies defined. Add one above.")
-        return
-
-    with st.spinner("Computing strategy returns..."):
+    with st.spinner("Computing reference strategy returns..."):
         instance_gross: dict[str, pd.Series] = {}
         instance_net: dict[str, pd.Series] = {}
-        for instance in instances:
+        for instance in reference_strategies:
             g, n = _instance_asset_returns(instance, data, tc_bps)
             if not n.empty:
                 instance_gross[instance["label"]] = g
                 instance_net[instance["label"]] = n
 
-    if not instance_net:
-        st.warning("No valid strategy output. Check leg parameters: a tenor pair or contract "
-                    "that does not exist in the curve data returns an empty series.")
-        return
+    if instance_net:
+        instance_gross["EW Portfolio (all reference strategies)"] = combine_returns(
+            list(instance_gross.values()), "equal_weight")
+        instance_net["EW Portfolio (all reference strategies)"] = combine_returns(
+            list(instance_net.values()), "equal_weight")
 
-    section_header("Portfolio")
-    included = st.multiselect("Include in equal-weight portfolio", list(instance_net.keys()),
-                               default=list(instance_net.keys()), key=f"{key_prefix}_pf_included")
-    if included:
-        instance_gross["EW Portfolio"] = combine_returns(
-            [instance_gross[k] for k in included], method="equal_weight")
-        instance_net["EW Portfolio"] = combine_returns(
-            [instance_net[k] for k in included], method="equal_weight")
+    for p in portfolios:
+        instance_gross[p["label"]] = p["gross"]
+        instance_net[p["label"]] = p["net"]
+
+    if not instance_net:
+        st.warning("No valid strategy output.")
+        return
 
     section_header("Year range")
     min_year, max_year = int(common_start.year), int(common_end.year)
@@ -538,7 +634,7 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
 
     section_header("Performance metrics")
     metric_labels = list(instance_net.keys())
-    metric_default = "EW Portfolio" if "EW Portfolio" in metric_labels else metric_labels[0]
+    metric_default = portfolios[-1]["label"] if portfolios else metric_labels[0]
     metric_strategy = st.selectbox("Strategy", metric_labels,
                                     index=metric_labels.index(metric_default),
                                     key=f"{key_prefix}_pf_metric_strategy")

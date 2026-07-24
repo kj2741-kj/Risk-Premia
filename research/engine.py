@@ -350,3 +350,121 @@ def statarb_spread_position(spread: pd.Series, lookback: int, threshold: float,
     sig = pd.Series(np.where(pct_dev.values < -threshold, 1.0, np.where(pct_dev.values > threshold, -1.0, 0.0)),
                      index=pct_dev.index)
     return exec_shift(sig, shift_n).fillna(0)
+
+
+# Portfolio-tab support: raw (pre-shift) leg signals and pluggable combiners.
+# Used by dashboard_portfolio_tab.py for the customizable Metals Portfolio
+# tab. These do not modify any function above; the locked composite
+# functions (momentum_composite_position, carry_v1v2_composite_position)
+# remain the source of truth for the definitive regime-table and tradebook
+# numbers. Each raw_signal_* function reproduces its corresponding locked
+# position function's formula one step earlier, in pre-shift, pre-fillna
+# space, so combine_positions() can average across an arbitrary,
+# user-editable leg list the same way the two locked composites already do
+# for their own fixed leg counts.
+
+def raw_signal_momentum(f1r: pd.Series, fast: int, slow: int) -> pd.Series:
+    """Raw, pre-shift MA-crossover sign. Same formula as ma_crossover_position."""
+    return np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
+
+
+def raw_signal_carry_v1(curve: pd.DataFrame, near: str = "F1", far: str = "F2") -> pd.Series:
+    """Raw, pre-shift V1 Level sign. Same formula as carry_v1_position."""
+    return np.sign(_carry_base(curve, near, far))
+
+
+def raw_signal_carry_v2(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
+                         window: int = 252) -> pd.Series:
+    """Raw, pre-shift V2 Z-score sign. Same formula as carry_v3_position."""
+    base = _carry_base(curve, near, far)
+    if base.empty:
+        return pd.Series(dtype=float)
+    z = (base - base.rolling(window).mean()) / base.rolling(window).std()
+    return np.sign(z.replace([np.inf, -np.inf], np.nan))
+
+
+def raw_signal_carrymom(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
+                         horizon: int = 20) -> pd.Series:
+    """Raw, pre-shift V3 Carry-Momentum sign. Same formula as carry_v4_position."""
+    base = _carry_base(curve, near, far)
+    if base.empty:
+        return pd.Series(dtype=float)
+    return np.sign(base - base.shift(horizon))
+
+
+def raw_signal_value(curve: pd.DataFrame, contract: str, lookback: int, threshold: float) -> pd.Series:
+    """Raw, pre-shift Value MA-reversion sign. Same formula as value_v1_position: NaN during
+    the moving average's own burn-in window, zero inside the threshold band, plus or minus one
+    outside it."""
+    if contract not in curve.columns:
+        return pd.Series(dtype=float)
+    fk = curve[contract].dropna()
+    if len(fk) < max(lookback // 2, 60):
+        return pd.Series(dtype=float)
+    ma = fk.rolling(lookback, min_periods=max(lookback // 2, min(lookback, 60))).mean()
+    dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
+    sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
+                     index=dev.index)
+    return sig.where(dev.notna())
+
+
+def combine_positions(raw_signals: list[pd.Series], method: str = "equal_weight",
+                       weights: list[float] | None = None) -> pd.Series:
+    """Combine several raw, pre-shift leg signs into one raw composite sign.
+
+    Generalizes momentum_composite_position and carry_v1v2_composite_position's own
+    "sum raw signs, divide, take the sign" pattern to an arbitrary leg count and a pluggable
+    combination method. The caller still applies exec_shift() and fillna(0) to the result.
+    This function deliberately stays in raw-signal space so a NaN burn-in period on any one leg
+    propagates correctly (skipna is disabled) rather than being silently treated as a flat vote,
+    matching the discipline of the two locked composite functions.
+    """
+    raw_signals = [s for s in raw_signals if not s.empty]
+    if not raw_signals:
+        return pd.Series(dtype=float)
+    idx = raw_signals[0].index
+    for s in raw_signals[1:]:
+        idx = idx.union(s.index)
+    aligned = pd.concat([s.reindex(idx) for s in raw_signals], axis=1)
+    if method == "equal_weight":
+        combo = aligned.mean(axis=1, skipna=False)
+    elif method == "weighted":
+        if weights is None or len(weights) != len(raw_signals):
+            raise ValueError("weighted combine requires exactly one weight per leg")
+        w = np.asarray(weights, dtype=float)
+        w = w / w.sum()
+        combo = (aligned * w).sum(axis=1, skipna=False)
+    else:
+        raise ValueError(f"Unknown combine method {method!r}. Only 'equal_weight' and 'weighted' "
+                          f"are implemented; inverse-vol and risk-parity are a planned follow-up.")
+    return np.sign(combo)
+
+
+def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
+                     weights: list[float] | None = None) -> pd.Series:
+    """Combine several already-computed daily net return series into one, via a weighted average.
+
+    Used both to aggregate per-product strategy returns into one asset-class line, and to
+    combine per-strategy asset-class lines into one portfolio. Missing days are filled with
+    zero (flat that day for that leg or product), matching run_regime_table.py's own
+    reindex-and-fillna convention for the canonical numbers. This is not the Excel tradebook
+    generator's stricter day-intersection convention, which is specific to that formula-audit
+    tool (see project_risk_premia_research_framework memory #21).
+    """
+    net_returns = [s for s in net_returns if not s.empty]
+    if not net_returns:
+        return pd.Series(dtype=float)
+    idx = net_returns[0].index
+    for s in net_returns[1:]:
+        idx = idx.union(s.index)
+    aligned = pd.concat([s.reindex(idx).fillna(0.0) for s in net_returns], axis=1)
+    if method == "equal_weight":
+        return aligned.mean(axis=1)
+    if method == "weighted":
+        if weights is None or len(weights) != len(net_returns):
+            raise ValueError("weighted combine requires exactly one weight per series")
+        w = np.asarray(weights, dtype=float)
+        w = w / w.sum()
+        return (aligned * w).sum(axis=1)
+    raise ValueError(f"Unknown combine method {method!r}. Only 'equal_weight' and 'weighted' "
+                      f"are implemented; inverse-vol and risk-parity are a planned follow-up.")

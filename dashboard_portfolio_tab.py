@@ -1,10 +1,12 @@
 """
 Reusable Portfolio tab for the asset-class dashboards.
 
-Provides per-strategy-family leg customization (add, remove, and tweak legs;
-choose how legs combine), a year-range slider that reshapes performance
-metrics and the cumulative equity curve, and an equal-weight portfolio
-builder over whichever strategy instances are selected.
+Groups strategies by family (Momentum, Carry, Carry-Momentum, Value), each
+with its own add/duplicate/remove controls and an explicit, editable leg
+list. Provides a year-range slider that reshapes performance metrics and
+the cumulative equity curve, a performance-metrics card section matching
+the style of the standalone Momentum/Carry/Value tabs, and an equal-weight
+portfolio builder over whichever strategy instances are selected.
 
 Built on research/engine.py's log-return methodology rather than
 common_engine.py's dollar-PnL convention, because portfolio construction
@@ -31,6 +33,7 @@ only equal weight today.
 
 from __future__ import annotations
 
+import copy
 import os
 import sys
 import uuid
@@ -47,27 +50,16 @@ for _p in (_REPO_ROOT, _RESEARCH_DIR, _RESEARCH_CONFIGS_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from common_shared import CHART_LAYOUT, section_header  # noqa: E402
+from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E402
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_value)
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
+CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
 
-FAMILY_LEG_COLUMNS = {
-    "Momentum": ["fast", "slow"],
-    "Carry": ["type", "near", "far", "zwindow"],
-    "CarryMom": ["near", "far", "horizon"],
-    "Value": ["contract", "lookback", "threshold"],
-}
-
-DEFAULT_LEG = {
-    "Momentum": {"fast": 5, "slow": 60},
-    "Carry": {"type": "V1 Level", "near": "F1", "far": "F3", "zwindow": 252},
-    "CarryMom": {"near": "F1", "far": "F3", "horizon": 20},
-    "Value": {"contract": "F8", "lookback": 1260, "threshold": 0.10},
-}
-
+FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value"]
+FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value"}
 DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 2}
 
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
@@ -106,88 +98,93 @@ def _load_products(_cfg, cfg_name: str):
     return data, common_start, common_end
 
 
+# Strategy instance and leg construction.
+
+def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
+    leg_id = uuid.uuid4().hex[:8]
+    if family == "Momentum":
+        return {"leg_id": leg_id, "fast": 5, "slow": 60}
+    if family == "Carry":
+        return {"leg_id": leg_id, "type": "V1 Level", "near": near, "far": far,
+                "zwindow": 252, "horizon": 20}
+    if family == "CarryMom":
+        return {"leg_id": leg_id, "near": near, "far": far, "horizon": 20}
+    if family == "Value":
+        return {"leg_id": leg_id, "contract": "F8", "lookback": 1260, "threshold": 0.10}
+    raise ValueError(f"Unknown family {family!r}")
+
+
+def _new_instance(family: str, near: str = "F1", far: str = "F3") -> dict:
+    return {
+        "id": f"{family.lower()}_{uuid.uuid4().hex[:6]}", "family": family,
+        "label": f"{FAMILY_TITLE[family]} (new)",
+        "legs": [_new_leg(family, near, far)],
+        "shift_n": DEFAULT_SHIFT_N[family], "combine_method": "equal_weight",
+        "shared_tenor": True if family in ("Carry", "CarryMom") else None,
+    }
+
+
+def _duplicate_instance(instance: dict) -> dict:
+    clone = copy.deepcopy(instance)
+    clone["id"] = f"{instance['family'].lower()}_{uuid.uuid4().hex[:6]}"
+    clone["label"] = f"{instance['label']} copy"
+    for leg in clone["legs"]:
+        leg["leg_id"] = uuid.uuid4().hex[:8]
+    return clone
+
+
 def _build_default_instances(cfg) -> list[dict]:
     """Seed the six strategy instances that match the locked ex-ante
     parameter set exactly, so the tab opens showing today's official
     numbers before any customization."""
     instances = [{
         "id": "mom", "family": "Momentum", "label": "Momentum",
-        "legs": [{"fast": f, "slow": s} for f, s in cfg.MOMENTUM_PAIRS],
+        "legs": [{"leg_id": uuid.uuid4().hex[:8], "fast": f, "slow": s} for f, s in cfg.MOMENTUM_PAIRS],
         "shift_n": cfg.MOMENTUM_SHIFT_N, "combine_method": "equal_weight",
         "shared_tenor": None,
     }]
     for near, far in cfg.CARRY_TENOR_PAIRS:
         instances.append({
             "id": f"carry_{near}{far}", "family": "Carry", "label": f"Carry ({near}-{far})",
-            "legs": [{"type": "V1 Level", "near": near, "far": far, "zwindow": cfg.CARRY_ZSCORE_WINDOW},
-                     {"type": "V2 Z-score", "near": near, "far": far, "zwindow": cfg.CARRY_ZSCORE_WINDOW}],
+            "legs": [
+                {"leg_id": uuid.uuid4().hex[:8], "type": "V1 Level", "near": near, "far": far,
+                 "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
+                {"leg_id": uuid.uuid4().hex[:8], "type": "V2 Z-score", "near": near, "far": far,
+                 "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
+            ],
             "shift_n": cfg.CARRY_SHIFT_N, "combine_method": "equal_weight",
             "shared_tenor": True,
         })
     for near, far in cfg.CARRY_TENOR_PAIRS:
         instances.append({
             "id": f"carrymom_{near}{far}", "family": "CarryMom", "label": f"CarryMom ({near}-{far})",
-            "legs": [{"near": near, "far": far, "horizon": cfg.CARRY_MOMENTUM_HORIZON}],
+            "legs": [{"leg_id": uuid.uuid4().hex[:8], "near": near, "far": far,
+                      "horizon": cfg.CARRY_MOMENTUM_HORIZON}],
             "shift_n": cfg.CARRY_MOMENTUM_SHIFT_N, "combine_method": "equal_weight",
             "shared_tenor": True,
         })
     instances.append({
         "id": "value", "family": "Value", "label": "Value",
-        "legs": [{"contract": cfg.VALUE_CONTRACT, "lookback": cfg.VALUE_LOOKBACK_DAYS,
-                  "threshold": cfg.VALUE_THRESHOLD}],
+        "legs": [{"leg_id": uuid.uuid4().hex[:8], "contract": cfg.VALUE_CONTRACT,
+                  "lookback": cfg.VALUE_LOOKBACK_DAYS, "threshold": cfg.VALUE_THRESHOLD}],
         "shift_n": cfg.VALUE_SHIFT_N, "combine_method": "equal_weight",
         "shared_tenor": None,
     })
     return instances
 
 
-# Leg and dataframe conversion (for st.data_editor), plus signal dispatch.
-
-def _legs_to_df(family: str, legs: list[dict]) -> pd.DataFrame:
-    cols = FAMILY_LEG_COLUMNS[family]
-    if not legs:
-        return pd.DataFrame(columns=cols)
-    return pd.DataFrame([{c: leg.get(c) for c in cols} for leg in legs])[cols]
-
-
-def _df_to_legs(family: str, df: pd.DataFrame) -> list[dict]:
-    cols = FAMILY_LEG_COLUMNS[family]
-    legs = []
-    for _, row in df.iterrows():
-        leg = {c: row[c] for c in cols if c in row.index and pd.notna(row[c])}
-        if leg:
-            legs.append(leg)
-    return legs
-
-
 def _safe_index(options: list, value, fallback: int = 0) -> int:
     return options.index(value) if value in options else fallback
 
 
-def _column_config(cols: list[str]) -> dict:
-    cfgmap = {
-        "fast": st.column_config.NumberColumn("Fast MA", min_value=1, max_value=500, step=1),
-        "slow": st.column_config.NumberColumn("Slow MA", min_value=2, max_value=500, step=1),
-        "type": st.column_config.SelectboxColumn("Type", options=["V1 Level", "V2 Z-score"]),
-        "near": st.column_config.SelectboxColumn("Near", options=FAR_NEAR_OPTIONS),
-        "far": st.column_config.SelectboxColumn("Far", options=FAR_NEAR_OPTIONS),
-        "zwindow": st.column_config.NumberColumn("Z-Window (V2 only)", min_value=20, max_value=756, step=1),
-        "horizon": st.column_config.NumberColumn("Horizon", min_value=1, max_value=252, step=1),
-        "contract": st.column_config.SelectboxColumn("Contract", options=FAR_NEAR_OPTIONS),
-        "lookback": st.column_config.NumberColumn("Lookback (days)", min_value=20, max_value=2520, step=1),
-        "threshold": st.column_config.NumberColumn("Threshold", min_value=0.0, max_value=1.0,
-                                                     step=0.01, format="%.2f"),
-    }
-    return {c: cfgmap[c] for c in cols if c in cfgmap}
-
+# Signal dispatch.
 
 def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
     """Dispatch one leg to its raw-signal formula.
 
-    A leg with a required field still unset (the row st.data_editor inserts
-    the instant a user clicks its add-row control, before any cell is
-    filled in) is skipped rather than raised on, so a partially entered row
-    never crashes the app; it simply contributes nothing until completed.
+    A leg with a required field still unset is skipped rather than raised
+    on, so an incompletely configured leg never crashes the app; it simply
+    contributes nothing until completed.
     """
     curve, f1r = product_data["curve"], product_data["f1r"]
     if family == "Momentum":
@@ -199,9 +196,17 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
         near, far = leg.get("near"), leg.get("far")
         if near is None or far is None:
             return pd.Series(dtype=float)
-        if leg.get("type", "V1 Level") == "V1 Level":
+        leg_type = leg.get("type", "V1 Level")
+        if leg_type == "V1 Level":
             return raw_signal_carry_v1(curve, near, far)
-        return raw_signal_carry_v2(curve, near, far, int(leg.get("zwindow") or 252))
+        if leg_type == "V2 Z-score":
+            return raw_signal_carry_v2(curve, near, far, int(leg.get("zwindow") or 252))
+        if leg_type == "V3 Carry-Momentum":
+            horizon = leg.get("horizon")
+            if horizon is None:
+                return pd.Series(dtype=float)
+            return raw_signal_carrymom(curve, near, far, int(horizon))
+        return pd.Series(dtype=float)
     if family == "CarryMom":
         near, far, horizon = leg.get("near"), leg.get("far"), leg.get("horizon")
         if near is None or far is None or horizon is None:
@@ -215,38 +220,189 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
     raise ValueError(f"Unknown family {family!r}")
 
 
-def _instance_product_net_return(instance: dict, product_data: dict, tc_bps: int) -> pd.Series:
+def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+    """Gross and net daily log-return contribution of one strategy instance
+    on one product."""
+    empty = pd.Series(dtype=float)
     if not instance["legs"]:
-        return pd.Series(dtype=float)
+        return empty, empty
     raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
     raws = [r for r in raws if not r.empty]
     if not raws:
-        return pd.Series(dtype=float)
+        return empty, empty
     combo = raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
     pos = exec_shift(combo, int(instance["shift_n"])).fillna(0)
-    _, net = log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
-    return net
+    return log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
 
 
-def _instance_asset_return(instance: dict, data: dict, tc_bps: int) -> pd.Series:
-    nets = [_instance_product_net_return(instance, d, tc_bps) for d in data.values()]
-    return combine_returns(nets, method="equal_weight")
+def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+    """Gross and net asset-class-level return for one instance, equal-weighted
+    across every product in `data`."""
+    grosses, nets = [], []
+    for product_data in data.values():
+        g, n = _instance_product_returns(instance, product_data, tc_bps)
+        if not n.empty:
+            grosses.append(g)
+            nets.append(n)
+    empty = pd.Series(dtype=float)
+    gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
+    net_agg = combine_returns(nets, "equal_weight") if nets else empty
+    return gross_agg, net_agg
 
 
-def _render_instance(instance: dict, key_prefix: str) -> bool:
-    """Render one strategy instance's expander. Returns True if the user
-    clicked Remove, in which case the caller pops it from the list and
-    reruns."""
-    family = instance["family"]
-    with st.expander(f"{instance['label']} ({family})", expanded=False):
-        c1, c2 = st.columns([4, 1])
+def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int) -> dict:
+    """Sharpe, annualized return, vol, and max drawdown over [yr_start, yr_end],
+    in the same shape as common_engine.py's pos_metrics_generic() so the
+    metric cards read the same way as the standalone tabs. Once returns are
+    equal-weighted across products, "active day" is no longer a single
+    well-defined concept (a day can be active for one product and flat for
+    another), so vol takes the place of the standalone tabs' "% Flat" card.
+    """
+    def _slice(s):
+        return s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
+
+    def _sharpe(s):
+        return float(s.mean() / s.std(ddof=1) * np.sqrt(252)) if len(s) > 20 and s.std(ddof=1) > 0 else np.nan
+
+    g, n = _slice(gross), _slice(net)
+    if len(n) > 20 and n.std(ddof=1) > 0:
+        ann = float(n.mean() * 252 * 100)
+        vol = float(n.std(ddof=1) * np.sqrt(252) * 100)
+    else:
+        ann = vol = np.nan
+    cum = n.cumsum()
+    mdd = float((cum - cum.cummax()).min() * 100) if len(cum) else np.nan
+    return dict(gross=_sharpe(g), net=_sharpe(n), ann=ann, vol=vol, mdd=mdd)
+
+
+def _fmt(x, fmt_spec: str) -> str:
+    return "N/A" if x is None or (isinstance(x, float) and np.isnan(x)) else fmt_spec.format(x)
+
+
+# Leg rendering.
+
+def _render_leg(family: str, leg: dict, key_prefix: str,
+                 shared_near: str | None, shared_far: str | None) -> bool:
+    """Render one leg's parameter widgets inline. Returns True if its
+    Remove button was clicked."""
+    uses_shared = shared_near is not None
+
+    if family == "Momentum":
+        c1, c2, c3 = st.columns([2, 2, 1])
         with c1:
-            instance["label"] = st.text_input("Label", value=instance["label"], key=f"{key_prefix}_label")
+            leg["fast"] = st.number_input("Fast MA", min_value=1, max_value=500,
+                                           value=int(leg.get("fast", 5)), step=1, key=f"{key_prefix}_fast")
         with c2:
+            leg["slow"] = st.number_input("Slow MA", min_value=2, max_value=500,
+                                           value=int(leg.get("slow", 60)), step=1, key=f"{key_prefix}_slow")
+        with c3:
             st.write("")
-            remove = st.button("Remove", key=f"{key_prefix}_remove", use_container_width=True)
+            return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
 
-        shared_cols: list[str] = []
+    if family == "Carry":
+        widths = [2, 1.6, 1] if uses_shared else [2, 1.3, 1.3, 1.6, 1]
+        cols = st.columns(widths)
+        i = 0
+        with cols[i]:
+            leg_type = st.selectbox("Type", CARRY_TYPES,
+                                     index=_safe_index(CARRY_TYPES, leg.get("type", "V1 Level")),
+                                     key=f"{key_prefix}_type")
+            leg["type"] = leg_type
+        i += 1
+        if uses_shared:
+            leg["near"], leg["far"] = shared_near, shared_far
+        else:
+            with cols[i]:
+                leg["near"] = st.selectbox("Near", FAR_NEAR_OPTIONS,
+                                            index=_safe_index(FAR_NEAR_OPTIONS, leg.get("near", "F1")),
+                                            key=f"{key_prefix}_near")
+            i += 1
+            with cols[i]:
+                leg["far"] = st.selectbox("Far", FAR_NEAR_OPTIONS,
+                                           index=_safe_index(FAR_NEAR_OPTIONS, leg.get("far", "F3"), fallback=2),
+                                           key=f"{key_prefix}_far")
+            i += 1
+        with cols[i]:
+            if leg_type == "V2 Z-score":
+                leg["zwindow"] = st.number_input("Z-Window", min_value=20, max_value=756,
+                                                  value=int(leg.get("zwindow") or 252), step=1,
+                                                  key=f"{key_prefix}_zwindow")
+            elif leg_type == "V3 Carry-Momentum":
+                leg["horizon"] = st.number_input("Horizon", min_value=1, max_value=252,
+                                                  value=int(leg.get("horizon") or 20), step=1,
+                                                  key=f"{key_prefix}_horizon")
+            else:
+                st.caption("No additional parameter for V1 Level.")
+        i += 1
+        with cols[i]:
+            st.write("")
+            return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
+
+    if family == "CarryMom":
+        widths = [2.5, 1] if uses_shared else [1.6, 1.6, 1.6, 1]
+        cols = st.columns(widths)
+        i = 0
+        if uses_shared:
+            leg["near"], leg["far"] = shared_near, shared_far
+        else:
+            with cols[i]:
+                leg["near"] = st.selectbox("Near", FAR_NEAR_OPTIONS,
+                                            index=_safe_index(FAR_NEAR_OPTIONS, leg.get("near", "F1")),
+                                            key=f"{key_prefix}_near")
+            i += 1
+            with cols[i]:
+                leg["far"] = st.selectbox("Far", FAR_NEAR_OPTIONS,
+                                           index=_safe_index(FAR_NEAR_OPTIONS, leg.get("far", "F3"), fallback=2),
+                                           key=f"{key_prefix}_far")
+            i += 1
+        with cols[i]:
+            leg["horizon"] = st.number_input("Horizon", min_value=1, max_value=252,
+                                              value=int(leg.get("horizon", 20)), step=1,
+                                              key=f"{key_prefix}_horizon")
+        i += 1
+        with cols[i]:
+            st.write("")
+            return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
+
+    if family == "Value":
+        c1, c2, c3, c4 = st.columns([1.4, 1.6, 1.6, 1])
+        with c1:
+            leg["contract"] = st.selectbox("Contract", FAR_NEAR_OPTIONS,
+                                            index=_safe_index(FAR_NEAR_OPTIONS, leg.get("contract", "F8"), fallback=7),
+                                            key=f"{key_prefix}_contract")
+        with c2:
+            leg["lookback"] = st.number_input("Lookback (days)", min_value=20, max_value=2520,
+                                               value=int(leg.get("lookback", 1260)), step=1,
+                                               key=f"{key_prefix}_lookback")
+        with c3:
+            leg["threshold"] = st.number_input("Threshold", min_value=0.0, max_value=1.0,
+                                                value=float(leg.get("threshold", 0.10)), step=0.01,
+                                                format="%.2f", key=f"{key_prefix}_threshold")
+        with c4:
+            st.write("")
+            return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
+
+    raise ValueError(f"Unknown family {family!r}")
+
+
+def _render_instance(instance: dict, key_prefix: str) -> str | None:
+    """Render one strategy instance card. Returns "remove", "duplicate", or
+    None."""
+    family = instance["family"]
+    action = None
+    with st.expander(instance["label"], expanded=False):
+        c1, c2, c3 = st.columns([4, 1, 1])
+        with c1:
+            instance["label"] = st.text_input("Label", value=instance["label"],
+                                               key=f"{key_prefix}_label", label_visibility="collapsed")
+        with c2:
+            if st.button("Duplicate", key=f"{key_prefix}_dup", use_container_width=True):
+                action = "duplicate"
+        with c3:
+            if st.button("Remove", key=f"{key_prefix}_remove", use_container_width=True):
+                action = "remove"
+
+        shared_near = shared_far = None
         if family in ("Carry", "CarryMom"):
             shared = st.checkbox("Shared tenor pair across legs (uncheck to set near/far per leg)",
                                   value=bool(instance.get("shared_tenor", True)), key=f"{key_prefix}_shared")
@@ -263,23 +419,20 @@ def _render_instance(instance: dict, key_prefix: str) -> bool:
                     shared_far = st.selectbox("Far", FAR_NEAR_OPTIONS,
                                                index=_safe_index(FAR_NEAR_OPTIONS, default_far, fallback=2),
                                                key=f"{key_prefix}_far")
-                instance["_shared_near"], instance["_shared_far"] = shared_near, shared_far
-                shared_cols = ["near", "far"]
 
-        edit_cols = [c for c in FAMILY_LEG_COLUMNS[family] if c not in shared_cols]
-        legs_df = _legs_to_df(family, instance["legs"])
-        legs_df = legs_df[edit_cols] if not legs_df.empty else pd.DataFrame(columns=edit_cols)
+        st.caption("Each leg below is averaged into this strategy's composite signal.")
+        leg_to_remove = None
+        for leg in instance["legs"]:
+            if _render_leg(family, leg, key_prefix=f"{key_prefix}_leg_{leg['leg_id']}",
+                            shared_near=shared_near, shared_far=shared_far):
+                leg_to_remove = leg["leg_id"]
+        if leg_to_remove is not None:
+            instance["legs"] = [leg for leg in instance["legs"] if leg["leg_id"] != leg_to_remove]
+            st.rerun()
 
-        st.caption("Add or remove legs with the table's own row controls. Each row is averaged "
-                    "into this strategy's composite signal.")
-        edited = st.data_editor(legs_df, num_rows="dynamic", use_container_width=True,
-                                 column_config=_column_config(edit_cols), key=f"{key_prefix}_legs")
-
-        legs = _df_to_legs(family, edited)
-        if shared_cols:
-            for leg in legs:
-                leg["near"], leg["far"] = instance["_shared_near"], instance["_shared_far"]
-        instance["legs"] = legs
+        if st.button("Add leg", key=f"{key_prefix}_addleg"):
+            instance["legs"].append(_new_leg(family, shared_near or "F1", shared_far or "F3"))
+            st.rerun()
 
         cshift, ccombine = st.columns(2)
         with cshift:
@@ -293,7 +446,7 @@ def _render_instance(instance: dict, key_prefix: str) -> bool:
                                "once this tab has been reviewed and tested.")
             instance["combine_method"] = "equal_weight"
 
-    return remove
+    return action
 
 
 def render_portfolio_tab(cfg, key_prefix: str) -> None:
@@ -325,61 +478,94 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
                               value=5, step=1, key=f"{key_prefix}_pf_tcbps")
 
     section_header("Strategies")
-    to_remove = None
-    for i, instance in enumerate(instances):
-        if _render_instance(instance, key_prefix=f"{key_prefix}_inst_{instance['id']}"):
-            to_remove = i
-    if to_remove is not None:
-        instances.pop(to_remove)
-        st.rerun()
+    pending_remove = pending_duplicate = None
+    for family in FAMILY_ORDER:
+        st.markdown(f"**{FAMILY_TITLE[family]}**")
+        family_indices = [i for i, inst in enumerate(instances) if inst["family"] == family]
+        if not family_indices:
+            st.caption("No strategies in this family yet.")
+        for i in family_indices:
+            action = _render_instance(instances[i], key_prefix=f"{key_prefix}_inst_{instances[i]['id']}")
+            if action == "remove":
+                pending_remove = i
+            elif action == "duplicate":
+                pending_duplicate = i
+        default_near, default_far = (cfg.CARRY_TENOR_PAIRS[0] if getattr(cfg, "CARRY_TENOR_PAIRS", None)
+                                      else ("F1", "F3"))
+        if st.button(f"Add {FAMILY_TITLE[family]} strategy", key=f"{key_prefix}_add_{family}"):
+            instances.append(_new_instance(family, default_near, default_far))
+            st.rerun()
+        st.divider()
 
-    add_cols = st.columns(4)
-    for col, fam in zip(add_cols, ["Momentum", "Carry", "CarryMom", "Value"]):
-        with col:
-            if st.button(f"Add {fam}", key=f"{key_prefix}_add_{fam}", use_container_width=True):
-                instances.append({
-                    "id": f"{fam.lower()}_{uuid.uuid4().hex[:6]}", "family": fam, "label": f"{fam} (new)",
-                    "legs": [dict(DEFAULT_LEG[fam])], "shift_n": DEFAULT_SHIFT_N[fam],
-                    "combine_method": "equal_weight",
-                    "shared_tenor": True if fam in ("Carry", "CarryMom") else None,
-                })
-                st.rerun()
+    if pending_remove is not None:
+        instances.pop(pending_remove)
+        st.rerun()
+    if pending_duplicate is not None:
+        instances.insert(pending_duplicate + 1, _duplicate_instance(instances[pending_duplicate]))
+        st.rerun()
 
     if not instances:
         st.info("No strategies defined. Add one above.")
         return
 
     with st.spinner("Computing strategy returns..."):
-        instance_returns: dict[str, pd.Series] = {}
+        instance_gross: dict[str, pd.Series] = {}
+        instance_net: dict[str, pd.Series] = {}
         for instance in instances:
-            r = _instance_asset_return(instance, data, tc_bps)
-            if not r.empty:
-                instance_returns[instance["label"]] = r
+            g, n = _instance_asset_returns(instance, data, tc_bps)
+            if not n.empty:
+                instance_gross[instance["label"]] = g
+                instance_net[instance["label"]] = n
 
-    if not instance_returns:
+    if not instance_net:
         st.warning("No valid strategy output. Check leg parameters: a tenor pair or contract "
                     "that does not exist in the curve data returns an empty series.")
         return
 
     section_header("Portfolio")
-    included = st.multiselect("Include in equal-weight portfolio", list(instance_returns.keys()),
-                               default=list(instance_returns.keys()), key=f"{key_prefix}_pf_included")
+    included = st.multiselect("Include in equal-weight portfolio", list(instance_net.keys()),
+                               default=list(instance_net.keys()), key=f"{key_prefix}_pf_included")
     if included:
-        instance_returns["EW Portfolio"] = combine_returns(
-            [instance_returns[k] for k in included], method="equal_weight")
+        instance_gross["EW Portfolio"] = combine_returns(
+            [instance_gross[k] for k in included], method="equal_weight")
+        instance_net["EW Portfolio"] = combine_returns(
+            [instance_net[k] for k in included], method="equal_weight")
 
-    section_header("Year range, cumulative equity, and metrics")
+    section_header("Year range")
     min_year, max_year = int(common_start.year), int(common_end.year)
     yr_start, yr_end = st.slider("Year range", min_value=min_year, max_value=max_year,
                                   value=(min_year, max_year), step=1, key=f"{key_prefix}_pf_years")
 
-    shown = st.multiselect("Strategies shown", list(instance_returns.keys()),
-                            default=list(instance_returns.keys()), key=f"{key_prefix}_pf_shown")
+    section_header("Performance metrics")
+    metric_labels = list(instance_net.keys())
+    metric_default = "EW Portfolio" if "EW Portfolio" in metric_labels else metric_labels[0]
+    metric_strategy = st.selectbox("Strategy", metric_labels,
+                                    index=metric_labels.index(metric_default),
+                                    key=f"{key_prefix}_pf_metric_strategy")
+    m = _window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end)
+    mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+    with mc1:
+        metric_card("Gross Sharpe", _fmt(m["gross"], "{:+.2f}"))
+    with mc2:
+        metric_card("Net Sharpe", _fmt(m["net"], "{:+.2f}"))
+    with mc3:
+        metric_card("Ann Return (Net)", _fmt(m["ann"], "{:+.2f}"), unit="%")
+    with mc4:
+        metric_card("Ann Vol", _fmt(m["vol"], "{:.2f}"), unit="%")
+    with mc5:
+        metric_card("Max DD (Net)", _fmt(m["mdd"], "{:+.2f}"), unit="%")
+    st.caption("Vol replaces the standalone tabs' \"% Flat\" card here: once returns are "
+               "equal-weighted across products, a single day can be active for one product "
+               "and flat for another, so \"active day\" no longer has one well-defined meaning.")
+
+    section_header("Cumulative equity")
+    shown = st.multiselect("Strategies shown", list(instance_net.keys()),
+                            default=list(instance_net.keys()), key=f"{key_prefix}_pf_shown")
 
     fig = go.Figure()
     rows = []
     for i, label in enumerate(shown):
-        s = instance_returns[label]
+        s = instance_net[label]
         window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
         if window.empty:
             continue

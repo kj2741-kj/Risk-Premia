@@ -61,6 +61,9 @@ from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E40
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_value)
+from risk_parity import rolling_erc_combine  # noqa: E402
+
+COMBINE_METHODS = ["Equal Weight", "Risk Parity (ERC, rolling)"]
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
 CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
@@ -514,6 +517,19 @@ def _next_portfolio_number(key_prefix: str) -> int:
     return n
 
 
+def _apply_weight_schedule(returns_by_name: dict[str, pd.Series], weights_over_time: pd.DataFrame) -> pd.Series:
+    """Apply an already-solved weight schedule (from rolling_erc_combine's
+    second return value) to a second dict of return series sharing the
+    same names -- used so gross returns are weighted by the SAME
+    risk-parity schedule decided from net returns, rather than solving ERC
+    a second time on gross (risk allocation should be decided on the
+    tradeable, cost-inclusive series; gross is only for reporting)."""
+    names = list(weights_over_time.columns)
+    aligned = pd.concat([returns_by_name[k].reindex(weights_over_time.index).fillna(0.0)
+                          for k in names], axis=1, keys=names)
+    return pd.Series((aligned.values * weights_over_time.values).sum(axis=1), index=weights_over_time.index)
+
+
 def _reset_sleeve_widget_state(family: str, key_prefix: str) -> None:
     """Reset one family's FIXED widget keys (checkbox, shift, shared-tenor,
     near/far) to their default values, so the draft's data reset is also
@@ -607,28 +623,41 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     portfolios_key = f"{key_prefix}_pf_portfolios"
     st.session_state.setdefault(portfolios_key, [])
 
+    combine_method = st.selectbox(
+        "Combine sleeves via", COMBINE_METHODS, index=0, key=f"{key_prefix}_pf_combine_method",
+        help="Equal Weight: fixed equal capital split. Risk Parity (ERC): each sleeve "
+             "contributes equal RISK, using a covariance matrix rolled forward every ~21 "
+             "trading days from the trailing 252 days -- only matters with 2+ families enabled; "
+             "with a single family it is identical to Equal Weight.")
+
     if st.button("Add Portfolio", key=f"{key_prefix}_add_portfolio", type="primary"):
         enabled_sleeves = [draft[f] for f in FAMILY_ORDER if draft[f]["enabled"] and draft[f]["legs"]]
         if not enabled_sleeves:
             st.warning("Switch on at least one strategy family with at least one leg before adding a portfolio.")
         else:
-            grosses, nets, sleeve_names = [], [], []
+            gross_by_name, net_by_name, sleeve_names = {}, {}, []
             for sleeve in enabled_sleeves:
                 g, n = _instance_asset_returns(sleeve, data, tc_bps)
                 if not n.empty:
-                    grosses.append(g)
-                    nets.append(n)
-                    sleeve_names.append(FAMILY_TITLE[sleeve["family"]])
-            if not nets:
+                    label = FAMILY_TITLE[sleeve["family"]]
+                    gross_by_name[label] = g
+                    net_by_name[label] = n
+                    sleeve_names.append(label)
+            if not net_by_name:
                 st.warning("No valid output from the selected families -- check leg parameters "
                            "(a tenor pair or contract that does not exist in the curve data "
                            "returns an empty series).")
             else:
+                if combine_method == "Risk Parity (ERC, rolling)" and len(net_by_name) >= 2:
+                    net_combined, weights_over_time = rolling_erc_combine(net_by_name)
+                    gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
+                else:
+                    gross_combined = combine_returns(list(gross_by_name.values()), "equal_weight")
+                    net_combined = combine_returns(list(net_by_name.values()), "equal_weight")
                 n = _next_portfolio_number(key_prefix)
                 st.session_state[portfolios_key].append({
-                    "label": f"Portfolio {n}", "sleeves": sleeve_names,
-                    "gross": combine_returns(grosses, "equal_weight"),
-                    "net": combine_returns(nets, "equal_weight"),
+                    "label": f"Portfolio {n}", "sleeves": sleeve_names, "combine_method": combine_method,
+                    "gross": gross_combined, "net": net_combined,
                 })
                 st.session_state[reset_pending_key] = True
                 st.rerun()
@@ -640,7 +669,10 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
         for i, p in enumerate(portfolios):
             c1, c2 = st.columns([5, 1])
             with c1:
-                st.markdown(f"**{p['label']}** -- {' + '.join(p['sleeves'])}")
+                method_note = p.get("combine_method", "Equal Weight")
+                st.markdown(f"**{p['label']}** -- {' + '.join(p['sleeves'])}  \n"
+                            f"<span style='color:#7A7068;font-size:0.82rem'>{method_note}</span>",
+                            unsafe_allow_html=True)
             with c2:
                 if st.button("Remove", key=f"{key_prefix}_pfremove_{i}", use_container_width=True):
                     to_remove = i

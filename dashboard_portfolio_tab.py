@@ -32,11 +32,14 @@ MOMENTUM_*, CARRY_*, and VALUE_* constants) plus a key_prefix for Streamlit
 widget keys. Nothing here is Metals-specific, so the remaining three
 dashboards can add the same tab later by importing their own config.
 
-Combine-method roadmap: ship equal weight only for now; add inverse-vol and
-risk-parity combiners once this tab has been reviewed and tested.
-combine_returns() and combine_positions() in research/engine.py already
-accept a method and weights argument for that purpose, but the UI exposes
-only equal weight today.
+Combine-method roadmap: Equal Weight and Inverse Vol (rolling, trailing-
+vol-window reweighting -- see combine_returns() in research/engine.py) are
+both exposed for portfolio-level combination -- the reference-strategy
+aggregate and any custom Portfolio Construction entry. Risk-parity is a
+possible future addition. Leg-level combination within one strategy family
+(combine_positions()) stays equal-weight only; inverse-vol weighting of
+raw position signs, rather than realized returns, is a different and
+not-yet-implemented question.
 """
 
 from __future__ import annotations
@@ -565,6 +568,21 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     tc_bps = st.number_input("Transaction cost (bps, round-trip)", min_value=0, max_value=50,
                               value=5, step=1, key=f"{key_prefix}_pf_tcbps")
 
+    combine_label = st.selectbox(
+        "Combine strategies via", ["Equal Weight", "Inverse Vol"],
+        key=f"{key_prefix}_pf_combine_method",
+        help="Applies to both the reference-strategy aggregate below and any portfolio you "
+             "build in Portfolio Construction. Equal Weight splits evenly across strategies. "
+             "Inverse Vol reweights every day using each strategy's own trailing realized vol "
+             "(lower-vol strategies get more weight) -- a rolling, look-ahead-free scheme that "
+             "needs a burn-in window before it produces its first value.")
+    combine_method = "equal_weight" if combine_label == "Equal Weight" else "inverse_vol"
+    vol_window = 63
+    if combine_method == "inverse_vol":
+        vol_window = st.number_input(
+            "Inverse-vol lookback (trading days)", min_value=5, max_value=252,
+            value=63, step=1, key=f"{key_prefix}_pf_vol_window")
+
     section_header("Reference strategies")
     st.caption("The officially reported parameter set for this asset class, shown here for "
                "comparison. Read-only -- use Portfolio Construction below to combine them: "
@@ -577,8 +595,8 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
                "pre-fills with its reference parameters above -- leave it as-is to add that "
                "reference strategy directly, or edit its legs to customize. One family alone "
-               "becomes a single-strategy portfolio; several together are combined equal-weight. "
-               "Add Portfolio saves the "
+               f"becomes a single-strategy portfolio; several together are combined via "
+               f"{combine_label} (set above). Add Portfolio saves the "
                "current draft as a new, comparable entry and clears the draft for the next one.")
 
     draft_key = f"{key_prefix}_pf_draft"
@@ -627,8 +645,9 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
                 n = _next_portfolio_number(key_prefix)
                 st.session_state[portfolios_key].append({
                     "label": f"Portfolio {n}", "sleeves": sleeve_names,
-                    "gross": combine_returns(grosses, "equal_weight"),
-                    "net": combine_returns(nets, "equal_weight"),
+                    "combine_label": combine_label,
+                    "gross": combine_returns(grosses, combine_method, vol_window=vol_window),
+                    "net": combine_returns(nets, combine_method, vol_window=vol_window),
                 })
                 st.session_state[reset_pending_key] = True
                 st.rerun()
@@ -640,7 +659,8 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
         for i, p in enumerate(portfolios):
             c1, c2 = st.columns([5, 1])
             with c1:
-                st.markdown(f"**{p['label']}** -- {' + '.join(p['sleeves'])}")
+                st.markdown(f"**{p['label']}** -- {' + '.join(p['sleeves'])} "
+                            f"({p.get('combine_label', 'Equal Weight')})")
             with c2:
                 if st.button("Remove", key=f"{key_prefix}_pfremove_{i}", use_container_width=True):
                     to_remove = i
@@ -658,10 +678,11 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
                 instance_net[instance["label"]] = n
 
     if instance_net:
-        instance_gross["EW Portfolio (all reference strategies)"] = combine_returns(
-            list(instance_gross.values()), "equal_weight")
-        instance_net["EW Portfolio (all reference strategies)"] = combine_returns(
-            list(instance_net.values()), "equal_weight")
+        agg_label = f"{combine_label} Portfolio (all reference strategies)"
+        instance_gross[agg_label] = combine_returns(
+            list(instance_gross.values()), combine_method, vol_window=vol_window)
+        instance_net[agg_label] = combine_returns(
+            list(instance_net.values()), combine_method, vol_window=vol_window)
 
     for p in portfolios:
         instance_gross[p["label"]] = p["gross"]

@@ -441,11 +441,20 @@ def combine_positions(raw_signals: list[pd.Series], method: str = "equal_weight"
 
 
 def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
-                     weights: list[float] | None = None) -> pd.Series:
+                     weights: list[float] | None = None, vol_window: int = 63) -> pd.Series:
     """Combine several already-computed daily net return series into one, via a weighted average.
 
     Used both to aggregate per-product strategy returns into one asset-class line, and to
     combine per-strategy asset-class lines into one portfolio.
+
+    'inverse_vol' reweights daily: each series' weight is 1 / its own trailing `vol_window`-day
+    realized vol (rolling std of ITS OWN return history, recomputed every day), normalized so
+    the weights sum to 1 across series on that day. This is a rolling, look-ahead-free scheme --
+    day t's weights use only returns strictly before t via pandas rolling's own window semantics
+    -- as opposed to fixing weights once from full-sample vol, which would leak future
+    information into the weights applied to the past. The tradeoff is a `vol_window`-day burn-in
+    before any weight (and therefore the combined series) is defined, on top of each leg's own
+    burn-in.
 
     Plain pandas addition (no reindex, no fillna) across the series, matching
     run_regime_table.py's own build_table() exactly: each per-product `net` series is already
@@ -483,5 +492,16 @@ def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
         for s, wi in zip(net_returns[1:], w[1:]):
             combined = combined + s * wi
         return combined
-    raise ValueError(f"Unknown combine method {method!r}. Only 'equal_weight' and 'weighted' "
-                      f"are implemented; inverse-vol and risk-parity are a planned follow-up.")
+    if method == "inverse_vol":
+        if len(net_returns) == 1:
+            return net_returns[0]
+        idx = net_returns[0].index
+        for s in net_returns[1:]:
+            idx = idx.union(s.index)
+        rets = pd.concat([s.reindex(idx) for s in net_returns], axis=1)
+        vol = rets.rolling(vol_window, min_periods=vol_window).std(ddof=1)
+        inv_vol = 1.0 / vol.replace(0.0, np.nan)
+        w = inv_vol.div(inv_vol.sum(axis=1, skipna=False), axis=0)
+        return (w * rets).sum(axis=1, skipna=False)
+    raise ValueError(f"Unknown combine method {method!r}. Only 'equal_weight', 'weighted', and "
+                      f"'inverse_vol' are implemented; risk-parity is a planned follow-up.")

@@ -288,6 +288,29 @@ def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd
     return gross_agg, net_agg
 
 
+@st.cache_data(show_spinner="Computing reference strategy returns...")
+def _compute_reference_returns(_cfg, cfg_name: str, tc_bps: int) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
+    """Gross/net return series for all six locked reference strategies.
+
+    These never change for a given tc_bps (the six configurations are
+    fixed, read-only), so recomputing them on every rerun -- including
+    reruns triggered by something unrelated, like ticking a checkbox in
+    the draft below -- was pure waste. `cfg_name`/`tc_bps` are the cache
+    key; `_cfg`'s leading underscore tells Streamlit to skip hashing the
+    module object itself, same convention as _load_products().
+    """
+    reference_strategies = _build_reference_strategies(_cfg)
+    data, _, _ = _load_products(_cfg, cfg_name)
+    gross: dict[str, pd.Series] = {}
+    net: dict[str, pd.Series] = {}
+    for instance in reference_strategies:
+        g, n = _instance_asset_returns(instance, data, tc_bps)
+        if not n.empty:
+            gross[instance["label"]] = g
+            net[instance["label"]] = n
+    return gross, net
+
+
 def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int) -> dict:
     """Sharpe, annualized return, vol, and max drawdown over [yr_start, yr_end],
     in the same shape as common_engine.py's pos_metrics_generic() so the
@@ -630,6 +653,20 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
              "trading days from the trailing 252 days -- only matters with 2+ families enabled; "
              "with a single family it is identical to Equal Weight.")
 
+    return_tilt = 0.0
+    if combine_method == "Risk Parity (ERC, rolling)":
+        return_tilt = st.slider(
+            "Return tilt", min_value=0.0, max_value=1.0, value=0.0, step=0.05,
+            key=f"{key_prefix}_pf_return_tilt",
+            help="0 = pure Equal Risk Contribution (risk only, no return awareness). Sliding "
+                 "up blends in a risk budget proportional to each sleeve's own trailing Sharpe "
+                 "(same rolling window as the covariance, never looking ahead) -- a weak or "
+                 "negative-Sharpe sleeve still keeps a small floor of risk budget rather than "
+                 "being fully excluded, so even tilt=1 stays diversified, not concentrated in "
+                 "a single sleeve. Trailing Sharpe over any one rolling window is a genuinely "
+                 "noisy estimate -- this does not guarantee a higher return, it only tilts risk "
+                 "toward whichever sleeve looked stronger recently.")
+
     if st.button("Add Portfolio", key=f"{key_prefix}_add_portfolio", type="primary"):
         enabled_sleeves = [draft[f] for f in FAMILY_ORDER if draft[f]["enabled"] and draft[f]["legs"]]
         if not enabled_sleeves:
@@ -649,14 +686,17 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
                            "returns an empty series).")
             else:
                 if combine_method == "Risk Parity (ERC, rolling)" and len(net_by_name) >= 2:
-                    net_combined, weights_over_time = rolling_erc_combine(net_by_name)
+                    net_combined, weights_over_time = rolling_erc_combine(net_by_name, tilt=return_tilt)
                     gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
+                    method_note = (f"{combine_method}, tilt={return_tilt:.2f}"
+                                   if return_tilt > 0 else combine_method)
                 else:
                     gross_combined = combine_returns(list(gross_by_name.values()), "equal_weight")
                     net_combined = combine_returns(list(net_by_name.values()), "equal_weight")
+                    method_note = combine_method
                 n = _next_portfolio_number(key_prefix)
                 st.session_state[portfolios_key].append({
-                    "label": f"Portfolio {n}", "sleeves": sleeve_names, "combine_method": combine_method,
+                    "label": f"Portfolio {n}", "sleeves": sleeve_names, "combine_method": method_note,
                     "gross": gross_combined, "net": net_combined,
                 })
                 st.session_state[reset_pending_key] = True
@@ -680,14 +720,7 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
             portfolios.pop(to_remove)
             st.rerun()
 
-    with st.spinner("Computing reference strategy returns..."):
-        instance_gross: dict[str, pd.Series] = {}
-        instance_net: dict[str, pd.Series] = {}
-        for instance in reference_strategies:
-            g, n = _instance_asset_returns(instance, data, tc_bps)
-            if not n.empty:
-                instance_gross[instance["label"]] = g
-                instance_net[instance["label"]] = n
+    instance_gross, instance_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps)
 
     if instance_net:
         instance_gross["EW Portfolio (all reference strategies)"] = combine_returns(
@@ -703,17 +736,55 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
         st.warning("No valid strategy output.")
         return
 
-    section_header("Year range")
     min_year, max_year = int(common_start.year), int(common_end.year)
-    yr_start, yr_end = st.slider("Year range", min_value=min_year, max_value=max_year,
-                                  value=(min_year, max_year), step=1, key=f"{key_prefix}_pf_years")
-
-    section_header("Performance metrics")
     metric_labels = list(instance_net.keys())
     metric_default = portfolios[-1]["label"] if portfolios else metric_labels[0]
-    metric_strategy = st.selectbox("Strategy", metric_labels,
-                                    index=metric_labels.index(metric_default),
-                                    key=f"{key_prefix}_pf_metric_strategy")
+
+    # Everything below reads from `applied`, a snapshot only updated when
+    # Refresh Results is clicked -- not from the form's live widget values --
+    # so editing a leg or toggling a family elsewhere on the page (which
+    # reruns the script, as every Streamlit interaction does) redraws this
+    # section with UNCHANGED content instead of recomputing it against
+    # whatever the slider/dropdown/multiselect happen to be sitting at
+    # mid-adjustment. st.form() is what actually suppresses the rerun for
+    # the widgets inside it; `applied` is what the drawing code below reads.
+    applied_key = f"{key_prefix}_pf_applied"
+    if applied_key not in st.session_state:
+        st.session_state[applied_key] = {
+            "yr_start": min_year, "yr_end": max_year,
+            "metric_strategy": metric_default, "shown": list(metric_labels),
+        }
+    applied = st.session_state[applied_key]
+
+    section_header("Year range, performance metrics, and cumulative equity")
+    st.caption("Adjust the controls below, then click Refresh Results to redraw the chart, "
+               "table, and metric cards with the new choices -- nothing recomputes until you do.")
+    with st.form(key=f"{key_prefix}_pf_results_form"):
+        yr_start_input, yr_end_input = st.slider(
+            "Year range", min_value=min_year, max_value=max_year,
+            value=(applied["yr_start"], applied["yr_end"]), step=1, key=f"{key_prefix}_pf_years")
+
+        default_metric = applied["metric_strategy"] if applied["metric_strategy"] in metric_labels else metric_labels[0]
+        metric_strategy_input = st.selectbox(
+            "Strategy (for the metric cards below)", metric_labels,
+            index=metric_labels.index(default_metric), key=f"{key_prefix}_pf_metric_strategy")
+
+        shown_default = [s for s in applied["shown"] if s in metric_labels] or metric_labels
+        shown_input = st.multiselect("Strategies shown (in the chart and table below)", metric_labels,
+                                      default=shown_default, key=f"{key_prefix}_pf_shown")
+
+        if st.form_submit_button("Refresh Results", type="primary"):
+            st.session_state[applied_key] = {
+                "yr_start": yr_start_input, "yr_end": yr_end_input,
+                "metric_strategy": metric_strategy_input, "shown": shown_input,
+            }
+            applied = st.session_state[applied_key]
+
+    yr_start, yr_end = applied["yr_start"], applied["yr_end"]
+    metric_strategy = applied["metric_strategy"] if applied["metric_strategy"] in metric_labels else metric_labels[0]
+    shown = [s for s in applied["shown"] if s in metric_labels] or metric_labels
+
+    section_header("Performance metrics")
     m = _window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end)
     mc1, mc2, mc3, mc4, mc5 = st.columns(5)
     with mc1:
@@ -731,8 +802,6 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
                "and flat for another, so \"active day\" no longer has one well-defined meaning.")
 
     section_header("Cumulative equity")
-    shown = st.multiselect("Strategies shown", list(instance_net.keys()),
-                            default=list(instance_net.keys()), key=f"{key_prefix}_pf_shown")
 
     fig = go.Figure()
     rows = []

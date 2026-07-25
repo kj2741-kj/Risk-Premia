@@ -445,26 +445,43 @@ def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
     """Combine several already-computed daily net return series into one, via a weighted average.
 
     Used both to aggregate per-product strategy returns into one asset-class line, and to
-    combine per-strategy asset-class lines into one portfolio. Missing days are filled with
-    zero (flat that day for that leg or product), matching run_regime_table.py's own
-    reindex-and-fillna convention for the canonical numbers. This is not the Excel tradebook
-    generator's stricter day-intersection convention, which is specific to that formula-audit
-    tool (see project_risk_premia_research_framework memory #21).
+    combine per-strategy asset-class lines into one portfolio.
+
+    Plain pandas addition (no reindex, no fillna) across the series, matching
+    run_regime_table.py's own build_table() exactly: each per-product `net` series is already
+    reindexed to ITS OWN calendar upstream (log_return_daily reindexes to log_price's index),
+    fixing internal burn-in gaps only -- the cross-series combine step here is a bare `+`, whose
+    ordinary pandas union-alignment semantics leave a date NaN whenever any one contributor
+    lacks it, later dropped by whatever computes the metrics. This matters in practice, not just
+    in principle: Energy mixes NYMEX (WTI/RBOB/HeatingOil/NatGas), ICE (Brent/SingaporeGasoil),
+    and Argus-style (FuelOil) calendars, which genuinely differ on which days they trade -- an
+    earlier version of this function reindexed onto the UNION of dates and filled gaps with
+    zero, silently treating "product X's exchange was closed" as "product X was flat that day",
+    which measurably changed several Energy reference-strategy numbers (confirmed against a
+    fresh run_regime_table.py run; Metals/Precious Metals were unaffected since every product in
+    those two asset classes shares one exchange calendar, so the two conventions coincide there).
+    This is also NOT the Excel tradebook generator's stricter day-INTERSECTION convention, which
+    is specific to that formula-audit tool (see project_risk_premia_research_framework memory
+    #21) -- three different, each-correct-for-its-own-purpose conventions exist in this project;
+    this function must stay matched to run_regime_table.py's, since that is the one whose output
+    is the officially reported number.
     """
     net_returns = [s for s in net_returns if not s.empty]
     if not net_returns:
         return pd.Series(dtype=float)
-    idx = net_returns[0].index
-    for s in net_returns[1:]:
-        idx = idx.union(s.index)
-    aligned = pd.concat([s.reindex(idx).fillna(0.0) for s in net_returns], axis=1)
     if method == "equal_weight":
-        return aligned.mean(axis=1)
+        combined = net_returns[0]
+        for s in net_returns[1:]:
+            combined = combined + s
+        return combined / len(net_returns)
     if method == "weighted":
         if weights is None or len(weights) != len(net_returns):
             raise ValueError("weighted combine requires exactly one weight per series")
         w = np.asarray(weights, dtype=float)
         w = w / w.sum()
-        return (aligned * w).sum(axis=1)
+        combined = net_returns[0] * w[0]
+        for s, wi in zip(net_returns[1:], w[1:]):
+            combined = combined + s * wi
+        return combined
     raise ValueError(f"Unknown combine method {method!r}. Only 'equal_weight' and 'weighted' "
                       f"are implemented; inverse-vol and risk-parity are a planned follow-up.")

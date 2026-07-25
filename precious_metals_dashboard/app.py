@@ -19,6 +19,8 @@ import streamlit as st
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
 
 from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
@@ -26,6 +28,8 @@ from common_engine import render_momentum_tab, render_carry_tab, render_value_ta
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
                                  PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
+from dashboard_portfolio_tab import render_portfolio_tab
+import precious as precious_research_cfg
 
 st.set_page_config(
     page_title="Precious Metals Risk Premia - Stage 2",
@@ -86,7 +90,8 @@ st.markdown(f'<p class="main-title">✨ Precious Metals Risk Premia — {cfg["na
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
-tab_mom, tab_carry, tab_val, tab_compare = st.tabs(["⚡ Momentum", "📐 Carry", "📏 Value", "🔀 Comparison"])
+tab_mom, tab_carry, tab_val, tab_compare, tab_portfolio = st.tabs(
+    ["⚡ Momentum", "📐 Carry", "📏 Value", "🔀 Comparison", "🧮 Portfolio"])
 
 key_prefix = f"precious_{product_code}"
 
@@ -105,3 +110,12 @@ with tab_compare:
     render_comparison_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,
                            strategy_groups={"Momentum": mom_positions, "Carry": carry_positions,
                                             "Value": value_positions})
+
+with tab_portfolio:
+    st.caption("Combines all 5 Precious Metals products (Gold, Silver, Copper-COMEX, Platinum, "
+               "Palladium) into one asset-class-level portfolio -- independent of the sidebar's "
+               "Product selection above, which only affects the Momentum/Carry/Value/Comparison "
+               "tabs. No StatArb sleeve for this asset class: tested rigorously across all 10 "
+               "pairs (including Gold-Silver and Platinum-Palladium) and found to be a genuine "
+               "null, so it was never built here.")
+    render_portfolio_tab(precious_research_cfg, key_prefix="precious_portfolio")

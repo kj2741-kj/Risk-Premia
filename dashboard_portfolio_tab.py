@@ -32,11 +32,15 @@ MOMENTUM_*, CARRY_*, and VALUE_* constants) plus a key_prefix for Streamlit
 widget keys. Nothing here is Metals-specific, so the remaining three
 dashboards can add the same tab later by importing their own config.
 
-Combine-method roadmap: ship equal weight only for now; add inverse-vol and
-risk-parity combiners once this tab has been reviewed and tested.
-combine_returns() and combine_positions() in research/engine.py already
-accept a method and weights argument for that purpose, but the UI exposes
-only equal weight today.
+Combine-method roadmap: Equal Weight, Inverse Vol (rolling, trailing-
+vol-window reweighting -- see combine_returns() in research/engine.py), and
+Risk Parity (rolling Equal Risk Contribution over the full covariance
+matrix -- see research/risk_parity.py) are all exposed for portfolio-level
+combination -- the reference-strategy aggregate and any custom Portfolio
+Construction entry, via one shared selector (_combine_sleeves() below).
+Leg-level combination within one strategy family (combine_positions())
+stays equal-weight only; reweighting raw position signs, rather than
+realized returns, is a different and not-yet-implemented question.
 """
 
 from __future__ import annotations
@@ -63,7 +67,7 @@ from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E40
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_value)
 from risk_parity import rolling_erc_combine  # noqa: E402
 
-COMBINE_METHODS = ["Equal Weight", "Risk Parity (ERC, rolling)"]
+COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)"]
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
 CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
@@ -553,6 +557,34 @@ def _apply_weight_schedule(returns_by_name: dict[str, pd.Series], weights_over_t
     return pd.Series((aligned.values * weights_over_time.values).sum(axis=1), index=weights_over_time.index)
 
 
+def _combine_sleeves(gross_by_name: dict[str, pd.Series], net_by_name: dict[str, pd.Series],
+                      combine_method: str, vol_window: int = 63,
+                      tilt: float = 0.0) -> tuple[pd.Series, pd.Series]:
+    """Combine several strategies' gross/net return series under the selected UI method.
+
+    Risk Parity solves weights on the tradeable NET series only, then applies that exact
+    schedule to gross via _apply_weight_schedule -- risk allocation should be decided on the
+    cost-inclusive series, not a second, independent solve on gross. Equal Weight is also the
+    fallback with fewer than two series, since none of the weighting schemes have anything to
+    weight in that case (matches each method's own single-series pass-through/fallback).
+
+    `tilt` only applies to Risk Parity (0 = pure ERC, the default; see
+    risk_parity.sharpe_tilted_budget for what higher values do) and is ignored by the other
+    two methods."""
+    if len(net_by_name) < 2:
+        return (combine_returns(list(gross_by_name.values()), "equal_weight"),
+                combine_returns(list(net_by_name.values()), "equal_weight"))
+    if combine_method == "Inverse Vol":
+        return (combine_returns(list(gross_by_name.values()), "inverse_vol", vol_window=vol_window),
+                combine_returns(list(net_by_name.values()), "inverse_vol", vol_window=vol_window))
+    if combine_method == "Risk Parity (ERC, rolling)":
+        net_combined, weights_over_time = rolling_erc_combine(net_by_name, tilt=tilt)
+        gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
+        return gross_combined, net_combined
+    return (combine_returns(list(gross_by_name.values()), "equal_weight"),
+            combine_returns(list(net_by_name.values()), "equal_weight"))
+
+
 def _reset_sleeve_widget_state(family: str, key_prefix: str) -> None:
     """Reset one family's FIXED widget keys (checkbox, shift, shared-tenor,
     near/far) to their default values, so the draft's data reset is also
@@ -604,6 +636,35 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     tc_bps = st.number_input("Transaction cost (bps, round-trip)", min_value=0, max_value=50,
                               value=5, step=1, key=f"{key_prefix}_pf_tcbps")
 
+    combine_method = st.selectbox(
+        "Combine strategies via", COMBINE_METHODS, index=0, key=f"{key_prefix}_pf_combine_method",
+        help="Applies to both the reference-strategy aggregate below and any portfolio you "
+             "build in Portfolio Construction. Equal Weight: fixed equal capital split. "
+             "Inverse Vol: reweights every day using each strategy's own trailing realized vol "
+             "(lower-vol strategies get more weight), ignoring correlation. Risk Parity (ERC): "
+             "each strategy contributes equal RISK, solved from the full rolling covariance "
+             "matrix and rebalanced every ~21 trading days from the trailing 252 days. All three "
+             "are identical with only one strategy enabled.")
+    vol_window = 63
+    if combine_method == "Inverse Vol":
+        vol_window = st.number_input(
+            "Inverse-vol lookback (trading days)", min_value=5, max_value=252,
+            value=63, step=1, key=f"{key_prefix}_pf_vol_window")
+
+    return_tilt = 0.0
+    if combine_method == "Risk Parity (ERC, rolling)":
+        return_tilt = st.slider(
+            "Return tilt", min_value=0.0, max_value=1.0, value=0.0, step=0.05,
+            key=f"{key_prefix}_pf_return_tilt",
+            help="0 = pure Equal Risk Contribution (risk only, no return awareness). Sliding "
+                 "up blends in a risk budget proportional to each sleeve's own trailing Sharpe "
+                 "(same rolling window as the covariance, never looking ahead) -- a weak or "
+                 "negative-Sharpe sleeve still keeps a small floor of risk budget rather than "
+                 "being fully excluded, so even tilt=1 stays diversified, not concentrated in "
+                 "a single sleeve. Trailing Sharpe over any one rolling window is a genuinely "
+                 "noisy estimate -- this does not guarantee a higher return, it only tilts risk "
+                 "toward whichever sleeve looked stronger recently.")
+
     section_header("Reference strategies")
     st.caption("The officially reported parameter set for this asset class, shown here for "
                "comparison. Read-only -- use Portfolio Construction below to combine them: "
@@ -616,8 +677,8 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
                "pre-fills with its reference parameters above -- leave it as-is to add that "
                "reference strategy directly, or edit its legs to customize. One family alone "
-               "becomes a single-strategy portfolio; several together are combined equal-weight. "
-               "Add Portfolio saves the "
+               f"becomes a single-strategy portfolio; several together are combined via "
+               f"{combine_method} (set above). Add Portfolio saves the "
                "current draft as a new, comparable entry and clears the draft for the next one.")
 
     draft_key = f"{key_prefix}_pf_draft"
@@ -646,27 +707,6 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     portfolios_key = f"{key_prefix}_pf_portfolios"
     st.session_state.setdefault(portfolios_key, [])
 
-    combine_method = st.selectbox(
-        "Combine sleeves via", COMBINE_METHODS, index=0, key=f"{key_prefix}_pf_combine_method",
-        help="Equal Weight: fixed equal capital split. Risk Parity (ERC): each sleeve "
-             "contributes equal RISK, using a covariance matrix rolled forward every ~21 "
-             "trading days from the trailing 252 days -- only matters with 2+ families enabled; "
-             "with a single family it is identical to Equal Weight.")
-
-    return_tilt = 0.0
-    if combine_method == "Risk Parity (ERC, rolling)":
-        return_tilt = st.slider(
-            "Return tilt", min_value=0.0, max_value=1.0, value=0.0, step=0.05,
-            key=f"{key_prefix}_pf_return_tilt",
-            help="0 = pure Equal Risk Contribution (risk only, no return awareness). Sliding "
-                 "up blends in a risk budget proportional to each sleeve's own trailing Sharpe "
-                 "(same rolling window as the covariance, never looking ahead) -- a weak or "
-                 "negative-Sharpe sleeve still keeps a small floor of risk budget rather than "
-                 "being fully excluded, so even tilt=1 stays diversified, not concentrated in "
-                 "a single sleeve. Trailing Sharpe over any one rolling window is a genuinely "
-                 "noisy estimate -- this does not guarantee a higher return, it only tilts risk "
-                 "toward whichever sleeve looked stronger recently.")
-
     if st.button("Add Portfolio", key=f"{key_prefix}_add_portfolio", type="primary"):
         enabled_sleeves = [draft[f] for f in FAMILY_ORDER if draft[f]["enabled"] and draft[f]["legs"]]
         if not enabled_sleeves:
@@ -685,15 +725,11 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
                            "(a tenor pair or contract that does not exist in the curve data "
                            "returns an empty series).")
             else:
-                if combine_method == "Risk Parity (ERC, rolling)" and len(net_by_name) >= 2:
-                    net_combined, weights_over_time = rolling_erc_combine(net_by_name, tilt=return_tilt)
-                    gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
-                    method_note = (f"{combine_method}, tilt={return_tilt:.2f}"
-                                   if return_tilt > 0 else combine_method)
-                else:
-                    gross_combined = combine_returns(list(gross_by_name.values()), "equal_weight")
-                    net_combined = combine_returns(list(net_by_name.values()), "equal_weight")
-                    method_note = combine_method
+                gross_combined, net_combined = _combine_sleeves(
+                    gross_by_name, net_by_name, combine_method, vol_window, tilt=return_tilt)
+                method_note = (f"{combine_method}, tilt={return_tilt:.2f}"
+                               if combine_method == "Risk Parity (ERC, rolling)" and return_tilt > 0
+                               else combine_method)
                 n = _next_portfolio_number(key_prefix)
                 st.session_state[portfolios_key].append({
                     "label": f"Portfolio {n}", "sleeves": sleeve_names, "combine_method": method_note,
@@ -723,10 +759,11 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     instance_gross, instance_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps)
 
     if instance_net:
-        instance_gross["EW Portfolio (all reference strategies)"] = combine_returns(
-            list(instance_gross.values()), "equal_weight")
-        instance_net["EW Portfolio (all reference strategies)"] = combine_returns(
-            list(instance_net.values()), "equal_weight")
+        agg_label = f"{combine_method} Portfolio (all reference strategies)"
+        agg_gross, agg_net = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
+                                               tilt=return_tilt)
+        instance_gross[agg_label] = agg_gross
+        instance_net[agg_label] = agg_net
 
     for p in portfolios:
         instance_gross[p["label"]] = p["gross"]

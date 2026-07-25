@@ -32,6 +32,8 @@ import streamlit as st
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
 
 from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
@@ -39,6 +41,8 @@ from common_engine import render_momentum_tab, render_carry_tab, render_value_ta
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
                                  NGL_CONFIG, NGL_FUTURES_FILE, NGL_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
+from dashboard_portfolio_tab import render_portfolio_tab
+import ngl as ngl_research_cfg
 
 st.set_page_config(
     page_title="NGL Risk Premia - Stage 2",
@@ -139,7 +143,8 @@ st.markdown(f'<p class="main-title">🧪 NGL Risk Premia — {cfg["name"]}</p>',
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
-tab_mom, tab_carry, tab_val, tab_compare = st.tabs(["⚡ Momentum", "📐 Carry", "📏 Value", "🔀 Comparison"])
+tab_mom, tab_carry, tab_val, tab_compare, tab_portfolio = st.tabs(
+    ["⚡ Momentum", "📐 Carry", "📏 Value", "🔀 Comparison", "🧮 Portfolio"])
 
 key_prefix = f"ngl_{product_code}"
 
@@ -164,3 +169,13 @@ with tab_compare:
     render_comparison_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,
                            strategy_groups={"Momentum": mom_positions, "Carry": carry_positions,
                                             "Value": value_positions})
+
+with tab_portfolio:
+    st.caption("Combines all 6 NGL products (Ethane, Propane, Butane, Isobutane, Ethylene, "
+               "Propylene) into one asset-class-level portfolio -- independent of the sidebar's "
+               "Product selection above, which only affects the Momentum/Carry/Value/Comparison "
+               "tabs. Carry and Carry-Momentum use NGL's single F4-F15 tenor pair (Bogorad's own "
+               "convention), not the Metals-style two-tier structure. Does not include the "
+               "StatArb sleeve (Bogorad's 8-spread cross-asset book, shared with Energy) -- this "
+               "tab covers Momentum, Carry, Carry-Momentum, and Value only.")
+    render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio")

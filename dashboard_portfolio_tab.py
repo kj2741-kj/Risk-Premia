@@ -169,6 +169,41 @@ def _default_sleeve(family: str) -> dict:
     }
 
 
+def _reference_leg_seed(cfg, family: str) -> list[dict]:
+    """The official reference leg configuration for one family, used to
+    pre-fill a draft sleeve the moment it is switched on -- so toggling a
+    family on and clicking Add Portfolio with no further edits reproduces
+    that family's own reference strategy exactly, directly answering "can I
+    just add from the reference strategies". Carry and Carry-Momentum use
+    the FIRST locked tenor pair (matching "Carry (F1-F3)"/"CarryMom
+    (F1-F3)"); a second tenor variant, where the asset class has one, stays
+    available as its own reference row for comparison, not as a second
+    slot within one portfolio -- a portfolio has at most one Carry sleeve
+    and one Carry-Momentum sleeve at a time, by design."""
+    if family == "Momentum":
+        return [{"leg_id": uuid.uuid4().hex[:8], "fast": f, "slow": s} for f, s in cfg.MOMENTUM_PAIRS]
+    near, far = cfg.CARRY_TENOR_PAIRS[0] if getattr(cfg, "CARRY_TENOR_PAIRS", None) else ("F1", "F3")
+    if family == "Carry":
+        return [
+            {"leg_id": uuid.uuid4().hex[:8], "type": "V1 Level", "near": near, "far": far,
+             "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
+            {"leg_id": uuid.uuid4().hex[:8], "type": "V2 Z-score", "near": near, "far": far,
+             "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
+        ]
+    if family == "CarryMom":
+        return [{"leg_id": uuid.uuid4().hex[:8], "near": near, "far": far,
+                 "horizon": cfg.CARRY_MOMENTUM_HORIZON}]
+    if family == "Value":
+        return [{"leg_id": uuid.uuid4().hex[:8], "contract": cfg.VALUE_CONTRACT,
+                 "lookback": cfg.VALUE_LOOKBACK_DAYS, "threshold": cfg.VALUE_THRESHOLD}]
+    raise ValueError(f"Unknown family {family!r}")
+
+
+def _reference_shift_n(cfg, family: str) -> int:
+    return {"Momentum": cfg.MOMENTUM_SHIFT_N, "Carry": cfg.CARRY_SHIFT_N,
+            "CarryMom": cfg.CARRY_MOMENTUM_SHIFT_N, "Value": cfg.VALUE_SHIFT_N}[family]
+
+
 def _blank_draft() -> dict:
     return {family: _default_sleeve(family) for family in FAMILY_ORDER}
 
@@ -415,10 +450,12 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
     raise ValueError(f"Unknown family {family!r}")
 
 
-def _render_draft_sleeve(sleeve: dict, key_prefix: str) -> None:
+def _render_draft_sleeve(sleeve: dict, cfg, key_prefix: str) -> None:
     """Render one family's slot in the Portfolio Construction draft: an
-    Include toggle, and -- once toggled on -- its editable leg list. A
-    family left off contributes nothing when Add Portfolio is clicked."""
+    Include toggle, and -- once toggled on -- its editable leg list,
+    pre-filled with that family's reference configuration so the family can
+    be added exactly as reported with no further edits. A family left off
+    contributes nothing when Add Portfolio is clicked."""
     family = sleeve["family"]
     with st.container(border=True):
         enabled = st.checkbox(f"Include {FAMILY_TITLE[family]}", value=sleeve["enabled"],
@@ -428,7 +465,11 @@ def _render_draft_sleeve(sleeve: dict, key_prefix: str) -> None:
             return
 
         if not sleeve["legs"]:
-            sleeve["legs"] = [_new_leg(family)]
+            sleeve["legs"] = _reference_leg_seed(cfg, family)
+            sleeve["shift_n"] = _reference_shift_n(cfg, family)
+
+        st.caption("Pre-filled with the reference parameters for this family -- edit below to "
+                   "customize, or leave as-is to use it exactly as reported.")
 
         shared_near = shared_far = None
         if family in ("Carry", "CarryMom"):
@@ -525,16 +566,19 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
                               value=5, step=1, key=f"{key_prefix}_pf_tcbps")
 
     section_header("Reference strategies")
-    st.caption("The officially reported parameter set for this asset class. Read-only -- "
-               "build a custom combination below instead of editing these.")
+    st.caption("The officially reported parameter set for this asset class, shown here for "
+               "comparison. Read-only -- use Portfolio Construction below to combine them: "
+               "switching a family on there pre-fills it with these exact same parameters.")
     reference_strategies = _build_reference_strategies(cfg)
     for instance in reference_strategies:
         _render_reference_strategy(instance)
 
     section_header("Portfolio construction")
-    st.caption("Switch on whichever strategy families belong in this portfolio and configure "
-               "their legs; leave the rest off. One family alone becomes a single-strategy "
-               "portfolio; several together are combined equal-weight. Add Portfolio saves the "
+    st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
+               "pre-fills with its reference parameters above -- leave it as-is to add that "
+               "reference strategy directly, or edit its legs to customize. One family alone "
+               "becomes a single-strategy portfolio; several together are combined equal-weight. "
+               "Add Portfolio saves the "
                "current draft as a new, comparable entry and clears the draft for the next one.")
 
     draft_key = f"{key_prefix}_pf_draft"
@@ -558,7 +602,7 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
     draft: dict = st.session_state[draft_key]
 
     for family in FAMILY_ORDER:
-        _render_draft_sleeve(draft[family], key_prefix=f"{key_prefix}_draft_{family}")
+        _render_draft_sleeve(draft[family], cfg, key_prefix=f"{key_prefix}_draft_{family}")
 
     portfolios_key = f"{key_prefix}_pf_portfolios"
     st.session_state.setdefault(portfolios_key, [])

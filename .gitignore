@@ -11,6 +11,11 @@ Thumbs.db
 tradebooks/
 tradebooks_logret*/
 outputs/
+
+# webapp (React frontend + FastAPI backend)
+webapp/frontend/node_modules/
+webapp/frontend/dist/
+webapp/frontend/.vite/
 Gorton_Hayashi_Rouwenhorst_2013_The Fundamentals of Commodity Futures Returns.pdf
 docs/
 scratch/

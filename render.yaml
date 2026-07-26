@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: risk-premia-api
+    runtime: python
+    plan: free
+    rootDir: webapp/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: FRONTEND_ORIGINS
+        value: ""
+      - key: PYTHON_VERSION
+        value: 3.13.0

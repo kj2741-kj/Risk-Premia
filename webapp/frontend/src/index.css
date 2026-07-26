@@ -1,0 +1,187 @@
+/* Dark theme reusing the same hex values as common_shared.py's DASHBOARD_CSS
+   (Streamlit dashboards), so the new React UI reads as visually continuous
+   with the Plotly charts served by the backend. This app is dark-only for
+   now (matching the source dashboards) rather than theme-aware. */
+
+:root {
+  --bg: #0e0e0e;
+  --panel-bg: #161616;
+  --panel-border: #2a2a2a;
+  --text: #d4cfc8;
+  --text-muted: #7a7068;
+  --text-faint: #5a5248;
+  --accent: #b87333;
+  --accent-2: #c9a84c;
+  --green: #5bad72;
+  --red: #b85450;
+
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; background: var(--bg); }
+
+h1 {
+  font-weight: 600;
+  font-size: 1.6rem;
+  letter-spacing: 0.02em;
+  margin: 0 0 4px;
+}
+
+.app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+.top-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: #111111;
+  border-bottom: 1px solid var(--panel-border);
+}
+.brand { font-weight: 600; color: var(--text); letter-spacing: 0.04em; }
+.nav-links { display: flex; gap: 4px; flex-wrap: wrap; }
+.nav-link {
+  color: var(--text-muted);
+  text-decoration: none;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  letter-spacing: 0.03em;
+  border-bottom: 2px solid transparent;
+}
+.nav-link.active { color: var(--accent); border-bottom-color: var(--accent); }
+.nav-link.disabled { color: var(--text-faint); cursor: default; }
+
+.content { padding: 24px 32px 64px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+.page .tab-caption, .tab-caption {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 4px 0 16px;
+}
+
+.section-header {
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  border-bottom: 1px solid var(--accent);
+  padding-bottom: 6px;
+  margin: 24px 0 14px;
+}
+
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+.control-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.control-row input, .control-row select {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  min-width: 100px;
+}
+.control-row button {
+  background: var(--panel-bg);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 7px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  height: fit-content;
+}
+.control-row button:hover { background: rgba(184, 115, 51, 0.12); }
+
+.pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.pill {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 4px 6px 4px 10px;
+  font-size: 0.85rem;
+  font-family: "IBM Plex Mono", monospace;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--panel-border); margin: 16px 0; }
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: 10px 22px;
+  font-weight: 500;
+  font-size: 0.88rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.metric-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.metric-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 14px 18px;
+  flex: 1 1 160px;
+}
+.metric-card h4 {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+}
+.metric-card .value {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.3rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.chart-empty, .chart-loading {
+  color: var(--text-muted);
+  padding: 40px;
+  text-align: center;
+  background: var(--panel-bg);
+  border: 1px dashed var(--panel-border);
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.caption { color: var(--text-muted); font-size: 0.85rem; }
+.error { color: var(--red); }

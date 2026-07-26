@@ -39,18 +39,18 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/metals" element={
-            <AssetClassPage assetClass="metals" label="Metals" products={["Copper", "Aluminium", "Lead", "Zinc"]} />
+            <AssetClassPage key="metals" assetClass="metals" label="Metals" products={["Copper", "Aluminium", "Lead", "Zinc"]} />
           } />
           <Route path="/energy" element={
-            <AssetClassPage assetClass="energy" label="Energy"
+            <AssetClassPage key="energy" assetClass="energy" label="Energy"
               products={["WTI Crude", "Brent Crude", "RBOB Gasoline", "Heating Oil", "Nat Gas", "Singapore Gasoil", "Fuel Oil"]} />
           } />
           <Route path="/precious" element={
-            <AssetClassPage assetClass="precious" label="Precious Metals"
+            <AssetClassPage key="precious" assetClass="precious" label="Precious Metals"
               products={["Gold", "Silver", "Copper (CME)", "Platinum", "Palladium"]} />
           } />
           <Route path="/ngl" element={
-            <AssetClassPage assetClass="ngl" label="NGL / Refined"
+            <AssetClassPage key="ngl" assetClass="ngl" label="NGL / Refined"
               products={["Ethane", "Propane", "Butane", "Isobutane", "Ethylene", "Propylene"]} />
           } />
           <Route path="/fundamental-analysis" element={<FundamentalAnalysisPage />} />

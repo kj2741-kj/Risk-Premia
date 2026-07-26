@@ -22,8 +22,7 @@ def _parse_pairs(pairs: str | None) -> list[tuple[int, int]] | None:
 
 
 def _skip_front_contract(asset_class: str, product: str) -> bool:
-    ac = get_asset_config(asset_class)
-    return bool(ac["defaults"].get(product, {}).get("skip_front_contract", False))
+    return bool(get_asset_config(asset_class)["skip_front_contract"])
 
 
 # ── Momentum ────────────────────────────────────────────────────────────────

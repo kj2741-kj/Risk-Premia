@@ -27,11 +27,11 @@ interface CarryTabProps {
 export default function CarryTab({ assetClass, product, onPositionsChange }: CarryTabProps) {
   const [tcBps, setTcBps] = useState(5);
   const [shiftN, setShiftN] = useState(1);
-  const [variants, setVariants] = useState<CarryVariant[]>([
-    { type: "V1", near: "F1", far: "F2" },
-    { type: "V2", window: 252 },
-    { type: "V3", horizon: 20 },
-  ]);
+  // Starts empty rather than hardcoded F1-F2 -- the correct default V1 pair
+  // is asset-specific (e.g. NGL uses F4-F15), so we let the first server
+  // response (which already resolves this via config_registry) tell us
+  // what to seed, instead of guessing and always overriding the server.
+  const [variants, setVariants] = useState<CarryVariant[]>([]);
 
   const [addType, setAddType] = useState<"V1" | "V2" | "V3">("V1");
   const [addNear, setAddNear] = useState("F1");
@@ -41,11 +41,19 @@ export default function CarryTab({ assetClass, product, onPositionsChange }: Car
 
   const [metricsYearStart, setMetricsYearStart] = useState<number>();
   const [metricsYearEnd, setMetricsYearEnd] = useState<number>();
-  const [featureLabel, setFeatureLabel] = useState<string>("V1 (F1-F2)");
+  const [featureLabel, setFeatureLabel] = useState<string>("");
   const [equityYearStart, setEquityYearStart] = useState<number>();
   const [equityYearEnd, setEquityYearEnd] = useState<number>();
-  const [focusLabel, setFocusLabel] = useState<string>("V1 (F1-F2)");
+  const [focusLabel, setFocusLabel] = useState<string>("");
   const [rsBasis, setRsBasis] = useState<"net" | "gross">("net");
+  const [seeded, setSeeded] = useState(false);
+
+  useEffect(() => {
+    setSeeded(false);
+    setVariants([]);
+    setFeatureLabel("");
+    setFocusLabel("");
+  }, [assetClass, product]);
 
   const params = useMemo(
     () => ({
@@ -67,6 +75,19 @@ export default function CarryTab({ assetClass, product, onPositionsChange }: Car
 
   useEffect(() => {
     if (data?.positions) onPositionsChange?.(data.positions);
+    if (data && !seeded) {
+      const seed: CarryVariant[] = [
+        { type: "V1", near: data.near_default, far: data.far_default },
+        { type: "V2", window: 252 },
+        { type: "V3", horizon: 20 },
+      ];
+      setVariants(seed);
+      setFeatureLabel(data.feature_label ?? variantLabel(seed[0]));
+      setFocusLabel(data.focus_label ?? variantLabel(seed[0]));
+      setAddNear(data.near_default);
+      setAddFar(data.far_default);
+      setSeeded(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 

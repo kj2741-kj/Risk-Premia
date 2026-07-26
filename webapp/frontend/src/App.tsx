@@ -35,9 +35,18 @@ export default function App() {
           <Route path="/metals" element={
             <AssetClassPage assetClass="metals" label="Metals" products={["Copper", "Aluminium", "Lead", "Zinc"]} />
           } />
-          <Route path="/energy" element={<ComingSoonPage title="Energy" note="Backend + UI added in Phase 4." />} />
-          <Route path="/precious" element={<ComingSoonPage title="Precious Metals" note="Backend + UI added in Phase 4." />} />
-          <Route path="/ngl" element={<ComingSoonPage title="NGL / Refined" note="Backend + UI added in Phase 4." />} />
+          <Route path="/energy" element={
+            <AssetClassPage assetClass="energy" label="Energy"
+              products={["WTI Crude", "Brent Crude", "RBOB Gasoline", "Heating Oil", "Nat Gas", "Singapore Gasoil", "Fuel Oil"]} />
+          } />
+          <Route path="/precious" element={
+            <AssetClassPage assetClass="precious" label="Precious Metals"
+              products={["Gold", "Silver", "Copper (CME)", "Platinum", "Palladium"]} />
+          } />
+          <Route path="/ngl" element={
+            <AssetClassPage assetClass="ngl" label="NGL / Refined"
+              products={["Ethane", "Propane", "Butane", "Isobutane", "Ethylene", "Propylene"]} />
+          } />
           <Route path="/fundamental-analysis" element={
             <ComingSoonPage title="Fundamental Analysis" note="GHR inventory-vs-basis spline tab, added in Phase 6." />
           } />

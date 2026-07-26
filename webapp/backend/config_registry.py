@@ -5,9 +5,6 @@ Hoists the same per-file dict of defaults each Streamlit dashboard's app.py
 already passes as kwargs (see metals_dashboard/app.py vs ngl_dashboard/app.py)
 into one shared structure, so one generic router can serve all four asset
 classes instead of duplicating route code per asset class.
-
-Only Metals is registered for now (Phase 1 vertical slice) -- Energy,
-Precious, NGL are added the same way in a later phase.
 """
 
 import rolling_continuous as rc
@@ -24,15 +21,99 @@ METALS = {
         "Lead": {"code": "LL", "unit": "/MT"},
         "Zinc": {"code": "LX", "unit": "/MT"},
     },
-    # Per-product overrides passed to render_momentum_tab/render_carry_tab/
-    # render_value_tab (default_feature_pair, default_active_variants,
-    # default_feature_variant, default_active_combo, skip_front_contract) --
-    # none for Metals. NGL will populate this heavily (see ngl_dashboard/app.py).
-    "defaults": {},
+    "skip_front_contract": False,
+    "momentum_default_feature": {},
+    "carry_default_near": None,
+    "carry_default_far": None,
+    "carry_default_feature_label": None,
+    "value_default_combo": None,
+}
+
+ENERGY = {
+    "asset_class": "energy",
+    "label": "Energy",
+    "rolling_config": rc.ENERGY_CONFIG,
+    "futures_file": rc.ENERGY_FUTURES_FILE,
+    "calendar_file": rc.ENERGY_CALENDAR_FILE,
+    "products": {
+        "WTI Crude": {"code": "CL", "unit": "/bbl"},
+        "Brent Crude": {"code": "CO", "unit": "/bbl"},
+        "RBOB Gasoline": {"code": "XB", "unit": "/gal"},
+        "Heating Oil": {"code": "HO", "unit": "/gal"},
+        "Nat Gas": {"code": "NG", "unit": "/MMBtu"},
+        "Singapore Gasoil": {"code": "QS", "unit": "/mt"},
+        "Fuel Oil": {"code": "FO", "unit": "/mt"},
+    },
+    "skip_front_contract": False,
+    "momentum_default_feature": {},
+    "carry_default_near": None,
+    "carry_default_far": None,
+    "carry_default_feature_label": None,
+    "value_default_combo": None,
+}
+
+PRECIOUS = {
+    "asset_class": "precious",
+    "label": "Precious Metals",
+    "rolling_config": rc.PRECIOUS_CONFIG,
+    "futures_file": rc.PRECIOUS_FUTURES_FILE,
+    "calendar_file": rc.PRECIOUS_CALENDAR_FILE,
+    "products": {
+        "Gold": {"code": "GC", "unit": "/oz"},
+        "Silver": {"code": "SI", "unit": "/oz"},
+        "Copper (CME)": {"code": "HG", "unit": "/lb"},
+        "Platinum": {"code": "PL", "unit": "/oz"},
+        "Palladium": {"code": "PA", "unit": "/oz"},
+    },
+    "skip_front_contract": False,
+    "momentum_default_feature": {},
+    "carry_default_near": None,
+    "carry_default_far": None,
+    "carry_default_feature_label": None,
+    "value_default_combo": None,
+}
+
+# NGL swaps are monthly-averaging instruments where the nominal F1 can be a
+# stale/partial-month price, so the whole asset class treats F2 as the
+# effective front contract (skip_front_contract=True, matching Bogorad's
+# NGL_SKIP_FRONT convention and ngl_dashboard/app.py exactly). Carry/Value
+# defaults also shift to far-tenor / different anchors because near-tenor
+# carry here is dominated by heating-season seasonality, not genuine term
+# structure -- see ngl_dashboard/app.py's CARRY_DEFAULT_ACTIVE/VALUE_DEFAULT_ACTIVE.
+NGL = {
+    "asset_class": "ngl",
+    "label": "NGL / Refined",
+    "rolling_config": rc.NGL_CONFIG,
+    "futures_file": rc.NGL_FUTURES_FILE,
+    "calendar_file": rc.NGL_CALENDAR_FILE,
+    "products": {
+        "Ethane": {"code": "CAP", "unit": "/gal"},
+        "Propane": {"code": "BAP", "unit": "/gal"},
+        "Butane": {"code": "DAE", "unit": "/gal"},
+        "Isobutane": {"code": "IBD", "unit": "/gal"},
+        "Ethylene": {"code": "PCW", "unit": "/lb"},
+        "Propylene": {"code": "PGP", "unit": "/lb"},
+    },
+    "skip_front_contract": True,
+    # Per-product override of which of the 3 default MA pairs is initially
+    # featured in the Momentum tab's Performance Metrics card (all 6 values
+    # are already members of the standard default active-pair set, so this
+    # never needs to add a new pair -- only changes which one is highlighted).
+    "momentum_default_feature": {
+        "CAP": (1, 20), "BAP": (20, 250), "DAE": (5, 60),
+        "IBD": (20, 250), "PCW": (1, 20), "PGP": (1, 20),
+    },
+    "carry_default_near": "F4",
+    "carry_default_far": "F15",
+    "carry_default_feature_label": "V1 (F4-F15)",
+    "value_default_combo": {"contract": "F12", "lookback": "10yr", "threshold": 0.10},
 }
 
 REGISTRY: dict[str, dict] = {
     "metals": METALS,
+    "energy": ENERGY,
+    "precious": PRECIOUS,
+    "ngl": NGL,
 }
 
 

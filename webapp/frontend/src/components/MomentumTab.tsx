@@ -39,13 +39,23 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
   const [focusPair, setFocusPair] = useState<[number, number]>([1, 20]);
   const [rsBasis, setRsBasis] = useState<"net" | "gross">("net");
 
+  // Which pair is initially "featured" is asset/product-specific (e.g. NGL's
+  // per-product momentum_default_feature) -- don't send a hardcoded guess
+  // until we've seen the server's resolved default at least once for this
+  // product, otherwise the client's guess always wins and the server-side
+  // default never has a chance to apply.
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    setSeeded(false);
+  }, [assetClass, product]);
+
   const params = useMemo(
     () => ({
       tcBps, shiftN, pairs: activePairs,
-      metricsYearStart, metricsYearEnd, featurePair,
-      equityYearStart, equityYearEnd, focusPair, rsBasis,
+      metricsYearStart, metricsYearEnd, featurePair: seeded ? featurePair : undefined,
+      equityYearStart, equityYearEnd, focusPair: seeded ? focusPair : undefined, rsBasis,
     }),
-    [tcBps, shiftN, activePairs, metricsYearStart, metricsYearEnd, featurePair,
+    [tcBps, shiftN, activePairs, metricsYearStart, metricsYearEnd, featurePair, seeded,
      equityYearStart, equityYearEnd, focusPair, rsBasis],
   );
   const debouncedParams = useDebouncedValue(params, 400);
@@ -58,6 +68,11 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
 
   useEffect(() => {
     if (data?.positions) onPositionsChange?.(data.positions);
+    if (data && !seeded) {
+      setFeaturePair(data.feature_pair);
+      setFocusPair(data.focus_pair);
+      setSeeded(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 

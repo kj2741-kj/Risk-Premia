@@ -68,7 +68,11 @@ def get_value(
     equity_year_end = equity_year_end or yr1
 
     default_contract = contracts[min(7, len(contracts) - 1)]
-    combos = combos or [{"contract": default_contract, "lookback": "5yr", "threshold": 0.10}]
+    # Asset-level override of the default (contract, lookback, threshold)
+    # combo -- e.g. NGL uses F12/10yr/10% instead of the generic 8th-contract/
+    # 5yr/10% (see ngl_dashboard/app.py's VALUE_DEFAULT_ACTIVE).
+    default_combo = ac.get("value_default_combo") or {"contract": default_contract, "lookback": "5yr", "threshold": 0.10}
+    combos = combos or [default_combo]
 
     positions = {
         _combo_label(c): value_v1_position(curve, c["contract"], _resolve_lookback_days(c["lookback"]),
@@ -80,12 +84,12 @@ def get_value(
     if not positions:
         return {
             "year_range": {"min": yr0, "max": yr1}, "unit_label": unit_label, "contracts": contracts,
-            "lookback_options": list(LOOKBACK_MAP.keys()),
+            "lookback_options": list(LOOKBACK_MAP.keys()), "default_combo": default_combo,
             "metrics": None, "equity_curve_fig": None, "rolling_sharpe_fig": None, "signal_position_fig": None,
             "positions": {},
         }
 
-    default_label = _combo_label({"contract": default_contract, "lookback": "5yr", "threshold": 0.10})
+    default_label = _combo_label(default_combo)
     feature_label = _combo_label(feature_combo) if feature_combo else default_label
     if feature_label not in positions:
         feature_label = default_label if default_label in positions else next(iter(positions))
@@ -144,6 +148,7 @@ def get_value(
         "unit_label": unit_label,
         "contracts": contracts,
         "lookback_options": list(LOOKBACK_MAP.keys()),
+        "default_combo": default_combo,
         "feature_label": feature_label,
         "focus_label": focus_label,
         "metrics": metrics,

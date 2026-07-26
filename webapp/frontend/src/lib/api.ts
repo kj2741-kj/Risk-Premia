@@ -110,8 +110,8 @@ export interface CarryResponse {
   contracts: string[];
   near_default: string;
   far_default: string;
-  feature_label: string;
-  focus_label: string;
+  feature_label: string | null;
+  focus_label: string | null;
   metrics: Metrics | null;
   equity_curve_fig: PlotlyFigure | null;
   rolling_sharpe_fig: PlotlyFigure | null;
@@ -187,6 +187,7 @@ export interface ValueResponse {
   unit_label: string;
   contracts: string[];
   lookback_options: string[];
+  default_combo: ValueCombo;
   feature_label: string;
   focus_label: string;
   metrics: Metrics | null;

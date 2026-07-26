@@ -26,7 +26,10 @@ interface ValueTabProps {
 export default function ValueTab({ assetClass, product, onPositionsChange }: ValueTabProps) {
   const [tcBps, setTcBps] = useState(5);
   const [shiftN, setShiftN] = useState(2);
-  const [combos, setCombos] = useState<ValueCombo[]>([{ contract: "F8", lookback: "5yr", threshold: 0.10 }]);
+  // Starts empty rather than hardcoded F8/5yr/10% -- the correct default
+  // combo is asset-specific (e.g. NGL uses F12/10yr/10%), seeded from the
+  // first server response instead of guessed client-side.
+  const [combos, setCombos] = useState<ValueCombo[]>([]);
 
   const [addContract, setAddContract] = useState("F8");
   const [addLookback, setAddLookback] = useState("5yr");
@@ -34,11 +37,19 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
 
   const [metricsYearStart, setMetricsYearStart] = useState<number>();
   const [metricsYearEnd, setMetricsYearEnd] = useState<number>();
-  const [featureLabel, setFeatureLabel] = useState<string>(comboLabel(combos[0]));
+  const [featureLabel, setFeatureLabel] = useState<string>("");
   const [equityYearStart, setEquityYearStart] = useState<number>();
   const [equityYearEnd, setEquityYearEnd] = useState<number>();
-  const [focusLabel, setFocusLabel] = useState<string>(comboLabel(combos[0]));
+  const [focusLabel, setFocusLabel] = useState<string>("");
   const [rsBasis, setRsBasis] = useState<"net" | "gross">("net");
+  const [seeded, setSeeded] = useState(false);
+
+  useEffect(() => {
+    setSeeded(false);
+    setCombos([]);
+    setFeatureLabel("");
+    setFocusLabel("");
+  }, [assetClass, product]);
 
   const params = useMemo(
     () => ({
@@ -60,6 +71,15 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
 
   useEffect(() => {
     if (data?.positions) onPositionsChange?.(data.positions);
+    if (data && !seeded) {
+      setCombos([data.default_combo]);
+      setFeatureLabel(comboLabel(data.default_combo));
+      setFocusLabel(comboLabel(data.default_combo));
+      setAddContract(data.default_combo.contract);
+      setAddLookback(data.default_combo.lookback);
+      setAddThreshold(data.default_combo.threshold);
+      setSeeded(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 

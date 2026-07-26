@@ -81,8 +81,21 @@ def get_momentum(
     metrics_year_end = metrics_year_end or yr1
     equity_year_start = equity_year_start or yr0
     equity_year_end = equity_year_end or yr1
-    feature_pair = feature_pair if feature_pair in pairs else ((1, 20) if (1, 20) in pairs else pairs[0])
-    focus_pair = focus_pair if focus_pair in pairs else pairs[0]
+
+    # Per-product override of which default pair is initially featured (e.g.
+    # NGL's momentum_default_feature) -- never adds a new pair, only changes
+    # which already-active one is pre-selected, mirroring
+    # render_momentum_tab's default_feature_pair kwarg exactly.
+    code = get_product_code(asset_class, product)
+    config_default_feature = ac.get("momentum_default_feature", {}).get(code)
+    if feature_pair not in pairs:
+        if config_default_feature and tuple(config_default_feature) in pairs:
+            feature_pair = tuple(config_default_feature)
+        elif (1, 20) in pairs:
+            feature_pair = (1, 20)
+        else:
+            feature_pair = pairs[0]
+    focus_pair = focus_pair if focus_pair in pairs else feature_pair
 
     # ── Performance Metrics: one featured pair, year-scoped (mirrors the
     # "Year range for performance metrics / heatmap" slider in the Streamlit tab). ──

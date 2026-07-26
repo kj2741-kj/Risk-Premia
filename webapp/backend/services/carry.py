@@ -69,6 +69,12 @@ def get_carry(
     ac = get_asset_config(asset_class)
     unit_label = ac["products"][product]["unit"]
     near_default, far_default = ("F2", "F3") if skip_front_contract else ("F1", "F2")
+    # Asset-level override of V1's default (near, far) pair -- e.g. NGL uses
+    # F4-F15 (far-tenor) since near-tenor carry there is dominated by
+    # heating-season seasonality, not genuine term structure (see
+    # ngl_dashboard/app.py's CARRY_DEFAULT_ACTIVE).
+    if ac.get("carry_default_near") and ac.get("carry_default_far"):
+        near_default, far_default = ac["carry_default_near"], ac["carry_default_far"]
 
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
     metrics_year_start = metrics_year_start or yr0
@@ -89,11 +95,13 @@ def get_carry(
     if not positions:
         return {
             "year_range": {"min": yr0, "max": yr1}, "unit_label": unit_label, "contracts": all_contracts,
+            "near_default": near_default, "far_default": far_default,
+            "feature_label": None, "focus_label": None,
             "metrics": None, "equity_curve_fig": None, "rolling_sharpe_fig": None, "signal_position_fig": None,
             "positions": {},
         }
 
-    default_v1_label = f"V1 ({near_default}-{far_default})"
+    default_v1_label = ac.get("carry_default_feature_label") or f"V1 ({near_default}-{far_default})"
     feature_label = _variant_label(feature_variant) if feature_variant else default_v1_label
     if feature_label not in positions:
         feature_label = default_v1_label if default_v1_label in positions else next(iter(positions))

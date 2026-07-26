@@ -287,3 +287,84 @@ export async function fetchMomentumHeatmap(
 
   return getJson(`${API_BASE}/api/${assetClass}/${product}/momentum/heatmap?${q.toString()}`);
 }
+
+// ── Portfolio (asset-class level, not per-product) ─────────────────────────
+
+export interface PortfolioLeg {
+  fast?: number;
+  slow?: number;
+  type?: "V1 Level" | "V2 Z-score" | "V3 Carry-Momentum";
+  near?: string;
+  far?: string;
+  zwindow?: number;
+  horizon?: number;
+  contract?: string;
+  lookback?: number;
+  threshold?: number;
+}
+
+export interface PortfolioSleeve {
+  family: "Momentum" | "Carry" | "CarryMom" | "Value";
+  legs: PortfolioLeg[];
+  shift_n: number;
+  combine_method: string;
+}
+
+export interface ReferenceStrategy {
+  id: string;
+  label: string;
+  family: "Momentum" | "Carry" | "CarryMom" | "Value";
+  shift_n: number;
+  legs: PortfolioLeg[];
+  legs_desc: string[];
+}
+
+export interface CustomPortfolioDef {
+  label: string;
+  sleeves: PortfolioSleeve[];
+}
+
+export interface PortfolioMetrics {
+  gross: number | null;
+  net: number | null;
+  ann: number | null;
+  vol: number | null;
+  mdd: number | null;
+}
+
+export interface PortfolioResultsResponse {
+  common_start: string;
+  common_end: string;
+  min_year: number;
+  max_year: number;
+  metric_labels: string[];
+  metrics: PortfolioMetrics | null;
+  equity_fig: PlotlyFigure | null;
+  table_rows: { strategy: string; return: number | null; vol: number | null; ir: number | null }[];
+}
+
+export async function fetchPortfolioReference(assetClass: string): Promise<{ strategies: ReferenceStrategy[] }> {
+  return getJson(`${API_BASE}/api/${assetClass}/portfolio/reference`);
+}
+
+export interface PortfolioResultsParams {
+  tcBps?: number;
+  combineMethod?: string;
+  volWindow?: number;
+  returnTilt?: number;
+  customPortfolios?: CustomPortfolioDef[];
+  yrStart?: number;
+  yrEnd?: number;
+  metricStrategy?: string;
+  shown?: string[];
+}
+
+export async function fetchPortfolioResults(
+  assetClass: string, p: PortfolioResultsParams = {},
+): Promise<PortfolioResultsResponse> {
+  return postJson(`${API_BASE}/api/${assetClass}/portfolio/results`, {
+    tc_bps: p.tcBps, combine_method: p.combineMethod, vol_window: p.volWindow, return_tilt: p.returnTilt,
+    custom_portfolios: p.customPortfolios,
+    yr_start: p.yrStart, yr_end: p.yrEnd, metric_strategy: p.metricStrategy, shown: p.shown,
+  });
+}

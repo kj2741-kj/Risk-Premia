@@ -5,6 +5,7 @@ from config_registry import get_asset_config
 from services import comparison as comparison_service
 from services import carry as carry_service
 from services import momentum as momentum_service
+from services import portfolio as portfolio_service
 from services import value as value_service
 
 router = APIRouter(prefix="/api")
@@ -240,6 +241,84 @@ def comparison(asset_class: str, product: str, body: ComparisonRequest):
             tc_bps=body.tc_bps, vol_window_label=body.vol_window_label, chosen=body.chosen,
             equity_year_start=body.equity_year_start, equity_year_end=body.equity_year_end,
             rs_basis=body.rs_basis, show_vol_overlay=body.show_vol_overlay,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# ── Portfolio ───────────────────────────────────────────────────────────────
+# Asset-class level (not per-product) -- combines across every product in
+# that asset class's research/configs/*.py module. Uses log-return
+# methodology, a genuinely separate engine from Momentum/Carry/Value/
+# Comparison above (see services/portfolio.py's module docstring).
+
+@router.get("/{asset_class}/portfolio/reference")
+def portfolio_reference(asset_class: str):
+    try:
+        return portfolio_service.get_reference_strategies(asset_class)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+class PortfolioLeg(BaseModel):
+    fast: int | None = None
+    slow: int | None = None
+    type: str | None = None
+    near: str | None = None
+    far: str | None = None
+    zwindow: int | None = None
+    horizon: int | None = None
+    contract: str | None = None
+    lookback: int | None = None
+    threshold: float | None = None
+
+
+class PortfolioSleeve(BaseModel):
+    family: str
+    legs: list[PortfolioLeg]
+    shift_n: int
+    combine_method: str = "equal_weight"
+
+
+class CustomPortfolio(BaseModel):
+    label: str
+    sleeves: list[PortfolioSleeve]
+
+
+class PortfolioResultsRequest(BaseModel):
+    tc_bps: int = 5
+    combine_method: str = "Equal Weight"
+    vol_window: int = 63
+    return_tilt: float = 0.0
+    custom_portfolios: list[CustomPortfolio] = []
+    yr_start: int | None = None
+    yr_end: int | None = None
+    metric_strategy: str | None = None
+    shown: list[str] | None = None
+
+
+@router.post("/{asset_class}/portfolio/results")
+def portfolio_results(asset_class: str, body: PortfolioResultsRequest):
+    try:
+        return portfolio_service.get_results(
+            asset_class,
+            tc_bps=body.tc_bps, combine_method=body.combine_method,
+            vol_window=body.vol_window, return_tilt=body.return_tilt,
+            custom_portfolios=[
+                {
+                    "label": p.label,
+                    "sleeves": [
+                        {
+                            "family": s.family, "shift_n": s.shift_n, "combine_method": s.combine_method,
+                            "legs": [leg.model_dump(exclude_none=True) for leg in s.legs],
+                        }
+                        for s in p.sleeves
+                    ],
+                }
+                for p in body.custom_portfolios
+            ],
+            yr_start=body.yr_start, yr_end=body.yr_end,
+            metric_strategy=body.metric_strategy, shown=body.shown,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

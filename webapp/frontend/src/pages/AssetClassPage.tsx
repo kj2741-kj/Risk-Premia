@@ -3,6 +3,7 @@ import MomentumTab from "../components/MomentumTab";
 import CarryTab from "../components/CarryTab";
 import ValueTab from "../components/ValueTab";
 import ComparisonTab from "../components/ComparisonTab";
+import PortfolioTab from "../components/PortfolioTab";
 import type { SeriesJson } from "../lib/api";
 
 const TABS = ["Momentum", "Carry", "Value", "Comparison", "Portfolio"] as const;
@@ -63,11 +64,9 @@ export default function AssetClassPage({ assetClass, label, products }: AssetCla
       <div style={{ display: tab === "Comparison" ? "block" : "none" }}>
         <ComparisonTab assetClass={assetClass} product={product} groups={groups} />
       </div>
-      {tab === "Portfolio" && (
-        <div className="tab-panel">
-          <p className="tab-caption">Portfolio tab — coming in Phase 5 (project plan Checkpoint 2).</p>
-        </div>
-      )}
+      <div style={{ display: tab === "Portfolio" ? "block" : "none" }}>
+        <PortfolioTab assetClass={assetClass} />
+      </div>
     </div>
   );
 }

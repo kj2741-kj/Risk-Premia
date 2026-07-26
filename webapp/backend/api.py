@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from config_registry import get_asset_config
 from services import comparison as comparison_service
 from services import carry as carry_service
+from services import fundamental as fundamental_service
 from services import momentum as momentum_service
 from services import portfolio as portfolio_service
 from services import value as value_service
@@ -321,4 +322,35 @@ def portfolio_results(asset_class: str, body: PortfolioResultsRequest):
             metric_strategy=body.metric_strategy, shown=body.shown,
         )
     except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# ── Fundamental Analysis (GHR inventory-vs-basis spline) ────────────────────
+# Copper and WTI only -- genuinely separate from every asset-class dashboard,
+# shares only theming.
+
+@router.get("/fundamental/{commodity}/bounds")
+def fundamental_bounds(commodity: str, basis_source: str = Query("f1f2", pattern="^(f1f2|cash3m)$")):
+    try:
+        return fundamental_service.get_data_bounds(commodity, basis_source)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/fundamental/{commodity}")
+def fundamental(
+    commodity: str,
+    basis_source: str = Query("f1f2", pattern="^(f1f2|cash3m)$"),
+    start: str | None = None,
+    end: str | None = None,
+    trailing_weeks: int = Query(52, ge=4, le=156),
+    nw_bandwidth: int = Query(52, ge=4, le=156),
+    fixed_scale: bool = Query(True),
+):
+    try:
+        return fundamental_service.get_ghr(
+            commodity, basis_source=basis_source, start=start, end=end,
+            trailing_weeks=trailing_weeks, nw_bandwidth=nw_bandwidth, fixed_scale=fixed_scale,
+        )
+    except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

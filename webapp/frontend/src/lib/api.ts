@@ -368,3 +368,49 @@ export async function fetchPortfolioResults(
     yr_start: p.yrStart, yr_end: p.yrEnd, metric_strategy: p.metricStrategy, shown: p.shown,
   });
 }
+
+// ── Fundamental Analysis (GHR inventory-vs-basis spline) ───────────────────
+
+export interface GhrSlopes {
+  slope_at_1: number | null;
+  t_at_1: number | null;
+  "slope_at_0.75": number | null;
+  "t_at_0.75": number | null;
+  diff: number | null;
+  t_diff: number | null;
+}
+
+export interface GhrResponse {
+  fig: PlotlyFigure;
+  slopes: GhrSlopes;
+  r2: number | null;
+  period_start: string;
+  period_end: string;
+  n_obs: number;
+}
+
+export async function fetchFundamentalBounds(
+  commodity: string, basisSource = "f1f2",
+): Promise<{ data_min: string; data_max: string }> {
+  return getJson(`${API_BASE}/api/fundamental/${commodity}/bounds?basis_source=${basisSource}`);
+}
+
+export interface FundamentalParams {
+  basisSource?: "f1f2" | "cash3m";
+  start?: string;
+  end?: string;
+  trailingWeeks?: number;
+  nwBandwidth?: number;
+  fixedScale?: boolean;
+}
+
+export async function fetchFundamental(commodity: string, p: FundamentalParams = {}): Promise<GhrResponse> {
+  const q = new URLSearchParams();
+  if (p.basisSource) q.set("basis_source", p.basisSource);
+  if (p.start) q.set("start", p.start);
+  if (p.end) q.set("end", p.end);
+  if (p.trailingWeeks) q.set("trailing_weeks", String(p.trailingWeeks));
+  if (p.nwBandwidth) q.set("nw_bandwidth", String(p.nwBandwidth));
+  if (p.fixedScale !== undefined) q.set("fixed_scale", String(p.fixedScale));
+  return getJson(`${API_BASE}/api/fundamental/${commodity}?${q.toString()}`);
+}

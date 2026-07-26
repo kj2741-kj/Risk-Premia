@@ -1,7 +1,7 @@
 import { NavLink, Route, Routes } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import AssetClassPage from "./pages/AssetClassPage";
-import ComingSoonPage from "./pages/ComingSoonPage";
+import FundamentalAnalysisPage from "./pages/FundamentalAnalysisPage";
 
 const NAV = [
   { to: "/", label: "Overview", end: true },
@@ -47,9 +47,7 @@ export default function App() {
             <AssetClassPage assetClass="ngl" label="NGL / Refined"
               products={["Ethane", "Propane", "Butane", "Isobutane", "Ethylene", "Propylene"]} />
           } />
-          <Route path="/fundamental-analysis" element={
-            <ComingSoonPage title="Fundamental Analysis" note="GHR inventory-vs-basis spline tab, added in Phase 6." />
-          } />
+          <Route path="/fundamental-analysis" element={<FundamentalAnalysisPage />} />
         </Routes>
       </main>
     </div>

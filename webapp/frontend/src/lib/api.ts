@@ -1,5 +1,12 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+// Fire-and-forget: hits the backend the instant the app loads, so a
+// sleeping free-tier instance starts waking up while the user is still
+// reading the Overview page, before they've picked an asset class.
+export function warmBackend(): void {
+  fetch(`${API_BASE}/api/health`).catch(() => {});
+}
+
 export interface PlotlyFigure {
   data: unknown[];
   layout: Record<string, unknown>;

@@ -1,7 +1,9 @@
+import { useEffect } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import AssetClassPage from "./pages/AssetClassPage";
 import FundamentalAnalysisPage from "./pages/FundamentalAnalysisPage";
+import { warmBackend } from "./lib/api";
 
 const NAV = [
   { to: "/", label: "Overview", end: true },
@@ -13,6 +15,10 @@ const NAV = [
 ];
 
 export default function App() {
+  useEffect(() => {
+    warmBackend();
+  }, []);
+
   return (
     <div className="app-shell">
       <nav className="top-nav">

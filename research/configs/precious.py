@@ -11,7 +11,8 @@ Signal form and parameter CONVENTIONS are identical to Metals (per user's
 explicit "ex-ante is same as discussed" instruction) EXCEPT the Carry tenor,
 which was re-derived from real data, not assumed:
   - Momentum: 3-way MA-crossover composite, same (1,20)/(5,60)/(20,250) pairs.
-  - Carry: V1(Level)+V2(Z-score) composite, tenor pair F1-F2 ONLY (see below).
+  - Carry: V1(Level)+V2(Z-score) composite, tenor pair F1-F3 ONLY (changed
+    from F1-F2 2026-08-03, see below).
   - Carry-Momentum: same horizon=20, kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes) / 5yr lookback / +-10% threshold.
@@ -36,10 +37,18 @@ updated data/06-30 file via CURVE_FILE below). Findings:
     Palladium: Gold 17.8%, Silver 11.1%, Copper-COMEX 1.3% days traded --
     decisively not viable anywhere in this asset class, unlike the
     quote-availability read which made it look merely "weak."
-User's decision, given this: **F1-F2 as the single universal Carry tenor
-pair, F1-F13 dropped entirely for Precious Metals** -- the only pair with
+Original decision, given this: F1-F2 as the single universal Carry tenor
+pair, F1-F13 dropped entirely for Precious Metals -- the only pair with
 genuine real-volume support across all 5 products, rather than forcing a
 longer tenor nothing here actually trades.
+
+CHANGED 2026-08-03: tenor pair replaced with F1-F3 (user's explicit decision,
+for consistency with Metals/Energy's F1-F3 near leg), despite the real-volume
+finding above showing Platinum F3 at 87.0% and Palladium F3 at 68.5% days
+traded -- both below the >=90% bar the rest of this asset class clears.
+Flagged to the user before this change; they confirmed proceeding anyway.
+Not re-verified since; treat Platinum/Palladium's Carry (F1-F3) contribution
+as resting on weaker liquidity than Gold/Silver/Copper-COMEX's.
 """
 
 from __future__ import annotations
@@ -84,7 +93,7 @@ ANALYSIS_START = "2006-01-01"
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 

@@ -67,10 +67,11 @@ def get_value(
     equity_year_start = equity_year_start or yr0
     equity_year_end = equity_year_end or yr1
 
-    default_contract = contracts[min(7, len(contracts) - 1)]
+    default_contract = "F3" if "F3" in contracts else contracts[min(7, len(contracts) - 1)]
     # Asset-level override of the default (contract, lookback, threshold)
-    # combo -- e.g. NGL uses F12/10yr/10% instead of the generic 8th-contract/
-    # 5yr/10% (see ngl_dashboard/app.py's VALUE_DEFAULT_ACTIVE).
+    # combo -- as of 2026-08-03 no asset class overrides this (NGL's former
+    # F12/10yr override was removed the same day), so every asset class falls
+    # back to F3/5yr/10% here, matching research/configs/*.py's VALUE_CONTRACT.
     default_combo = ac.get("value_default_combo") or {"contract": default_contract, "lookback": "5yr", "threshold": 0.10}
     combos = combos or [default_combo]
 

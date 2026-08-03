@@ -41,9 +41,11 @@ ENERGY = {
         "RBOB Gasoline": {"code": "XB", "unit": "/gal"},
         "Heating Oil": {"code": "HO", "unit": "/gal"},
         "Nat Gas": {"code": "NG", "unit": "/MMBtu"},
-        "Singapore Gasoil": {"code": "QS", "unit": "/mt"},
-        "Fuel Oil": {"code": "FO", "unit": "/mt"},
     },
+    # Singapore Gasoil and Fuel Oil removed 2026-08-03 (matching the Streamlit
+    # energy_dashboard's own exclusion, same day) -- both remain in
+    # research/configs/energy.py's own PRODUCTS list for the portfolio route,
+    # excluded there via portfolio.EXCLUDED_PRODUCTS instead of here.
     "skip_front_contract": False,
     "momentum_default_feature": {},
     "carry_default_near": None,
@@ -106,7 +108,12 @@ NGL = {
     "carry_default_near": "F4",
     "carry_default_far": "F15",
     "carry_default_feature_label": "V1 (F4-F15)",
-    "value_default_combo": {"contract": "F12", "lookback": "10yr", "threshold": 0.10},
+    # No NGL-specific override as of 2026-08-03 -- falls back to services/
+    # value.py's own generic default (F3 / 5yr / 10%), matching the Streamlit
+    # ngl_dashboard's same-day change (see that file's history: previously
+    # F12/10yr, empirically tuned, superseded by the user's decision to force
+    # F3 uniformly across all four asset classes, not by new evidence).
+    "value_default_combo": None,
 }
 
 REGISTRY: dict[str, dict] = {

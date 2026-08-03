@@ -38,6 +38,15 @@ FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Mom
 
 _CONFIG_MODULES = {"metals": "metals", "energy": "energy", "precious": "precious", "ngl": "ngl"}
 
+# Dashboard-display-only product exclusions, mirroring energy_dashboard/app.py's
+# ENERGY_PORTFOLIO_EXCLUDED (2026-08-03) -- research/configs/energy.py's own
+# PRODUCTS list is untouched, this only filters what the Portfolio route
+# computes/returns. Names match cfg.PRODUCTS' own strings (no space), not
+# config_registry.py's display-label keys.
+EXCLUDED_PRODUCTS: dict[str, tuple[str, ...]] = {
+    "energy": ("SingaporeGasoil", "FuelOil"),
+}
+
 
 def get_cfg(asset_class: str):
     if asset_class not in _CONFIG_MODULES:
@@ -47,13 +56,17 @@ def get_cfg(asset_class: str):
 
 @functools.lru_cache(maxsize=8)
 def _load_products(asset_class: str):
-    """Curve + log-return F1 series for every product in cfg.PRODUCTS,
-    truncated to the common date window across products. Cached on the
-    primitive asset_class string only -- the expensive step (Excel parsing +
-    roll-adjustment for every product)."""
+    """Curve + log-return F1 series for every product in cfg.PRODUCTS (minus
+    EXCLUDED_PRODUCTS.get(asset_class, ())), truncated to the common date
+    window across the remaining products. Cached on the primitive asset_class
+    string only -- the expensive step (Excel parsing + roll-adjustment for
+    every product)."""
     cfg = get_cfg(asset_class)
+    excluded = EXCLUDED_PRODUCTS.get(asset_class, ())
     data = {}
     for product in cfg.PRODUCTS:
+        if product in excluded:
+            continue
         f1 = cfg.load_f1_series_logret(product)
         curve = cfg.load_curve(product)
         data[product] = {"f1r": f1["F1_raw"], "log_price": f1["log_price"],

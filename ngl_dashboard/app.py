@@ -2,11 +2,20 @@
 NGL / Refined Products Dashboard - Stage 2
 ============================================
 Standalone Streamlit app, its own separate deployment. Ethane, Propane,
-Butane, Isobutane (Mt Belvieu NGL swaps) plus Ethylene, Propylene
-(Mt Belvieu / Polymer Grade petrochemicals). Momentum / Carry / Value
+Butane, Isobutane (Mt Belvieu NGL swaps). Momentum / Carry / Value
 only, same format as the Metals and Energy Stage 2 rebuilds -- reuses
 the identical shared engine (common_engine.py) so all three dashboards
 behave identically.
+
+Ethylene and Propylene (the two Mt Belvieu / Polymer Grade petrochemicals)
+removed from this dashboard 2026-08-03 (user's explicit decision), across
+the product selector, every standalone tab, and the Portfolio tab -- same
+pattern as Singapore Gasoil/Fuel Oil's removal from the Energy dashboard
+the same day. Both remain in research/configs/ngl.py's own PRODUCTS list
+for the research pipeline; this is a dashboard-display-only exclusion, not
+an engine change. Neither product appears in any StatArb pair (research/
+configs/energy.py's STATARB_PAIRS, shared with NGL) either, so there is
+nothing to change there -- checked before this removal.
 
 Ticker note: CAP/BAP/DAE/PCW's price-sheet names in NGL_Futures_Updated.xlsx
 were originally mislabeled (cyclically swapped commodities); corrected
@@ -54,11 +63,13 @@ inject_css()
 
 # unit_label: the product's natural pricing unit, used only for the
 # TC-per-flip $ display in the sidebar -- has no effect on the Sharpe/PnL math.
+# Ethylene (PCW) and Propylene (PGP) removed 2026-08-03 -- see module
+# docstring. Both remain in research/configs/ngl.py's own PRODUCTS list.
 PRODUCT_UNITS = {
     "CAP": "/gal", "BAP": "/gal", "DAE": "/gal", "IBD": "/gal",
-    "PCW": "/lb", "PGP": "/lb",
 }
-PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD", "PCW", "PGP"]
+PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD"]
+NGL_PORTFOLIO_EXCLUDED = ("Ethylene", "Propylene")
 
 # ── Defaults tuned for NGL/petrochemical products (2026-07-10, re-checked
 # after switching to F2-as-front on the same date -- see note below) ────────
@@ -66,8 +77,7 @@ PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD", "PCW", "PGP"]
 # history, Lag-1, 5bps) -- the benchmark set itself is untouched, this only
 # picks which one is pre-featured in Performance Metrics.
 MOMENTUM_DEFAULT_FEATURE = {
-    "CAP": (1, 20), "BAP": (20, 250), "DAE": (5, 60),
-    "IBD": (20, 250), "PCW": (1, 20), "PGP": (1, 20),
+    "CAP": (1, 20), "BAP": (20, 250), "DAE": (5, 60), "IBD": (20, 250),
 }
 # Carry: (F1-F2)/F1 near-tenor roll yield is dominated by front-of-curve
 # heating-season seasonality for NGLs, not genuine term structure -- it is
@@ -109,9 +119,10 @@ with st.sidebar:
         index=0, key="ngl_roll_method",
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="ngl_roll_n")
-    st.caption("Ethane/Propane/Butane/Isobutane are Mt Belvieu NGL swaps; Ethylene/Propylene are "
-               "Mt Belvieu / Polymer Grade petrochemical futures. Same Momentum/Carry/Value format "
-               "as the Metals and Energy dashboards.")
+    st.caption("Ethane/Propane/Butane/Isobutane are Mt Belvieu NGL swaps. Ethylene and Propylene "
+               "(the Mt Belvieu / Polymer Grade petrochemicals) are excluded from this dashboard as "
+               "of 2026-08-03; both remain in the underlying research config and engine. Same "
+               "Momentum/Carry/Value format as the Metals and Energy dashboards.")
     st.caption("Front contract: **F2**, not F1 -- NGL swaps are monthly-averaging instruments where "
                "F1 can be a stale/partial-month price. All Momentum/Carry/Value PnL and the Momentum "
                "signal are based on F2 (rolling into F3), matching Mark Bogorad's NGL_SKIP_FRONT "
@@ -169,11 +180,14 @@ with tab_compare:
                                             "Value": value_positions})
 
 with tab_portfolio:
-    st.caption("Combines all 6 NGL products (Ethane, Propane, Butane, Isobutane, Ethylene, "
-               "Propylene) into one asset-class-level portfolio -- independent of the sidebar's "
-               "Product selection above, which only affects the Momentum/Carry/Value/Comparison "
-               "tabs. Carry and Carry-Momentum use NGL's single F4-F15 tenor pair (Bogorad's own "
+    st.caption("Combines 4 NGL products (Ethane, Propane, Butane, Isobutane) into one "
+               "asset-class-level portfolio -- independent of the sidebar's Product selection "
+               "above, which only affects the Momentum/Carry/Value/Comparison tabs. Ethylene and "
+               "Propylene are excluded here too (dashboard-only, see sidebar note); both still "
+               "exist in research/configs/ngl.py's own PRODUCTS list for the research pipeline. "
+               "Carry and Carry-Momentum use NGL's single F4-F15 tenor pair (Bogorad's own "
                "convention), not the Metals-style two-tier structure. Does not include the "
                "StatArb sleeve (Bogorad's 8-spread cross-asset book, shared with Energy) -- this "
                "tab covers Momentum, Carry, Carry-Momentum, and Value only.")
-    render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio")
+    render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio",
+                          excluded_products=NGL_PORTFOLIO_EXCLUDED)

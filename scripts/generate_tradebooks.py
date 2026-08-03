@@ -341,6 +341,139 @@ def build_ma_tradebook(f1r: pd.Series, f1c: pd.Series, m: int, n: int, shift_n: 
     return pd.DataFrame(cols)
 
 
+def build_ma_reaction_tradebook(f1r: pd.Series, f1c: pd.Series, m: int, n: int, z_window: int | None, shift_n: int,
+                                 f2r: pd.Series | None = None, phase: pd.Series | None = None,
+                                 tc_bps: int = TC_BPS_DEFAULT) -> pd.DataFrame:
+    """Reaction-function-sized MA crossover -- same MA(m)-MA(n) crossover as
+    build_ma_tradebook, but instead of SIGN(crossover) (always full +-1),
+    z-scores the crossover against its own rolling mean/std (window=z_window)
+    and passes it through Bouchouev's reaction function (Virtual Barrels Eq.
+    5.5): R(z) = z * exp(0.5*(1-z^2)) -- odd, bounded to [-1,1] (global
+    max/min exactly at z=+-1, R=+-1), grows with conviction up to 1 std dev
+    then fades back toward 0 for more extreme readings. Mirrors
+    common_engine.ma_crossover_reaction_position exactly, reimplemented here
+    (not imported) so this tradebook is an independent check on that
+    function, same reconciliation philosophy as every other builder in this
+    file. Does NOT touch build_ma_tradebook or ma_crossover_position -- both
+    the binary and reaction-function versions coexist.
+
+    z_window=None uses `n` (the slow MA) itself as the z-scoring window,
+    matching common_engine.ma_crossover_reaction_position's default -- see
+    that function's docstring for the rationale."""
+    if z_window is None:
+        z_window = n
+    ma_m = f1r.rolling(m).mean()
+    ma_n = f1r.rolling(n).mean()
+    crossover = ma_m - ma_n
+    roll_mean = crossover.rolling(z_window).mean()
+    roll_std = crossover.rolling(z_window).std()
+    z = (crossover - roll_mean) / roll_std
+    z = z.replace([np.inf, -np.inf], np.nan)
+    signal = z * np.exp(0.5 * (1 - z ** 2))
+    # Position[t] = Signal[t-(shift_n+1)] -- same floor/extra-delay convention
+    # as build_ma_tradebook; see exec_shift()'s docstring.
+    position = exec_shift(signal, shift_n).fillna(0)
+
+    delta = f1c.diff()
+    daily_pnl = position * delta
+    cum_pnl = daily_pnl.cumsum()
+    mtm = position * f1c
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r, tc_bps, phase)
+
+    cols = {
+        "Date": f1r.index, "F1_raw": f1r.round(4).values,
+    }
+    if f2r is not None:
+        cols["F2_raw"] = f2r.reindex(f1r.index).round(4).values
+    if phase is not None:
+        cols["Phase"] = phase.reindex(f1r.index).values
+    cols["F1_continuous"] = f1c.round(4).values
+    cols.update({
+        f"MA_{m}": ma_m.round(4).values, f"MA_{n}": ma_n.round(4).values,
+        "Crossover": crossover.round(4).values,
+        f"Zscore_{z_window}d": z.round(4).values,
+        # Continuous position, not integer +-1/0 -- keep more decimal
+        # precision than the binary tradebook's Position column.
+        "Position": position.round(6).values,
+        "F1_cont_daily_change": delta.round(4).values, "Daily_PnL": daily_pnl.round(4).values,
+        "Position_Change": pos_chg.round(4).values, "TC_Cost": tc_cost.round(4).values,
+        "Daily_PnL_Net": daily_pnl_net.round(4).values,
+        "MTM": mtm.round(4).values, "Cum_PnL": cum_pnl.round(4).values,
+        "Cum_PnL_Net": cum_pnl_net.round(4).values,
+    })
+    return pd.DataFrame(cols)
+
+
+def build_ma_reaction_band_tradebook(f1r: pd.Series, f1c: pd.Series, m: int, n: int, z_window: int | None,
+                                      shift_n: int,
+                                      f2r: pd.Series | None = None, phase: pd.Series | None = None,
+                                      tc_bps: int = TC_BPS_DEFAULT) -> pd.DataFrame:
+    """"Strong signal only" MA crossover -- a third tradebook alongside the
+    binary (SIGN) and reaction-function (R(z)) ones, none of which touch each
+    other. Same z-scored crossover AND same reaction function R(z) =
+    z*exp(0.5*(1-z^2)) as build_ma_reaction_tradebook (same
+    z_window=None-uses-slow default), but instead of trading R(z) directly
+    as a continuous size (or an earlier version of this tradebook that
+    thresholded R(z) into a fixed [lo, hi] band -- superseded, not kept
+    alongside this), this simply takes the SIGN of the reaction function's
+    output:
+
+        position = +1  if  R(z) > 0
+        position = -1  if  R(z) < 0
+        position =  0  otherwise (R(z) == 0, i.e. z == 0, or during warm-up)
+
+    Note sign(R(z)) == sign(z) always (exp(...) > 0 for every real z), so
+    this is mathematically just sign(z) -- NOT the same as
+    build_ma_tradebook's SIGN(crossover): they agree only where the
+    crossover's own rolling mean is close to zero.
+
+    Mirrors common_engine.ma_crossover_reaction_band_position exactly,
+    reimplemented here (not imported) -- same independent-reconciliation
+    philosophy as every other builder in this file."""
+    if z_window is None:
+        z_window = n
+    ma_m = f1r.rolling(m).mean()
+    ma_n = f1r.rolling(n).mean()
+    crossover = ma_m - ma_n
+    roll_mean = crossover.rolling(z_window).mean()
+    roll_std = crossover.rolling(z_window).std()
+    z = (crossover - roll_mean) / roll_std
+    z = z.replace([np.inf, -np.inf], np.nan)
+    r = z * np.exp(0.5 * (1 - z ** 2))
+    signal = pd.Series(np.sign(r), index=r.index)
+    # Position[t] = Signal[t-(shift_n+1)] -- same floor/extra-delay convention
+    # as build_ma_tradebook; see exec_shift()'s docstring.
+    position = exec_shift(signal, shift_n).fillna(0)
+
+    delta = f1c.diff()
+    daily_pnl = position * delta
+    cum_pnl = daily_pnl.cumsum()
+    mtm = position * f1c
+    pos_chg, tc_cost, daily_pnl_net, cum_pnl_net = _tc_columns(position, daily_pnl, f1r, tc_bps, phase)
+
+    cols = {
+        "Date": f1r.index, "F1_raw": f1r.round(4).values,
+    }
+    if f2r is not None:
+        cols["F2_raw"] = f2r.reindex(f1r.index).round(4).values
+    if phase is not None:
+        cols["Phase"] = phase.reindex(f1r.index).values
+    cols["F1_continuous"] = f1c.round(4).values
+    cols.update({
+        f"MA_{m}": ma_m.round(4).values, f"MA_{n}": ma_n.round(4).values,
+        "Crossover": crossover.round(4).values,
+        f"Zscore_{z_window}d": z.round(4).values,
+        "Reaction_R(z)": r.round(4).values,
+        "Position": position.round(6).values,
+        "F1_cont_daily_change": delta.round(4).values, "Daily_PnL": daily_pnl.round(4).values,
+        "Position_Change": pos_chg.round(4).values, "TC_Cost": tc_cost.round(4).values,
+        "Daily_PnL_Net": daily_pnl_net.round(4).values,
+        "MTM": mtm.round(4).values, "Cum_PnL": cum_pnl.round(4).values,
+        "Cum_PnL_Net": cum_pnl_net.round(4).values,
+    })
+    return pd.DataFrame(cols)
+
+
 def _carry_v1_raw(curve: pd.DataFrame, a: str = "F1", b: str = "F2") -> pd.Series:
     fa, fb = curve[a], curve[b]
     return ((fa - fb) / fa).replace([np.inf, -np.inf], np.nan)
@@ -782,6 +915,226 @@ def write_manual_formula_sheet_ma(wb: Workbook, tb: pd.DataFrame, m: int, n: int
     ws.freeze_panes = "A2"
 
 
+# ══════════════════════════════════════════════════════════════════
+# MANUAL EXCEL-FORMULA RECONSTRUCTION -- Momentum Reaction Function
+# ══════════════════════════════════════════════════════════════════
+# Same MA(m)-MA(n) crossover as write_manual_formula_sheet_ma, but Signal (J)
+# replaces SIGN(Crossover) with Bouchouev's reaction function applied to the
+# crossover's own z-score, computed live in Excel via STDEV()/AVERAGE() over
+# a rolling z_window range -- no SIGN() anywhere on this sheet. Column
+# layout: A Date, B F1_raw, C F2_raw, D Phase, E F1_continuous, F MA_fast,
+# G MA_slow, H Crossover, I Zscore_{z_window}d, J Signal_R(z) (unshifted
+# reaction score), K Position (shifted), L F1_cont_daily_change, M Daily_PnL,
+# N Position_Change, O TC_Cost, P Daily_PnL_Net, Q MTM, R Cum_PnL,
+# S Cum_PnL_Net.
+#
+# Zscore (I) gate: Crossover (H) itself has no valid value until row m+n-ish
+# -- specifically row n+1 (n = slow MA window, the longer of the two). A
+# naive "have z_window rows elapsed since the sheet started" gate (the
+# shortcut that's exact for Carry V3, since Carry_Raw there has no warm-up)
+# would start STDEV/AVERAGE too early here: Excel's STDEV/AVERAGE silently
+# ignore blank cells rather than requiring a full window of real numbers, so
+# the formula would go non-blank as soon as *any* numbers are in range, not
+# once z_window GENUINE Crossover values are. That would diverge from
+# pandas' rolling(z_window).std() (default min_periods=z_window, which
+# requires z_window non-NaN observations). Gating on `i+1 >= n + z_window -
+# 1` instead means the STDEV/AVERAGE range [r-z_window+1, r] never includes
+# a pre-Crossover blank cell, matching pandas exactly with no ramp-up
+# discrepancy to document.
+
+def write_manual_formula_sheet_ma_reaction(wb: Workbook, tb: pd.DataFrame, m: int, n: int, z_window: int,
+                                            shift_n: int, sheet_name: str, tc_bps: int = TC_BPS_DEFAULT) -> None:
+    headers = ["Date", "F1_raw", "F2_raw", "Phase", "F1_continuous", f"MA_{m}", f"MA_{n}", "Crossover",
+               f"Zscore_{z_window}d", "Signal_R(z)", "Position", "F1_cont_daily_change", "Daily_PnL",
+               "Position_Change", "TC_Cost", "Daily_PnL_Net", "MTM", "Cum_PnL", "Cum_PnL_Net"]
+    ws = wb.create_sheet(sheet_name)
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        _style_cell(ws.cell(1, col_idx), fill=_MANUAL_HEADER_FILL, font=_TB_HEADER_FONT,
+                    align=Alignment(horizontal="center"))
+
+    n_rows = len(tb)
+    dates = tb["Date"].tolist()
+    f1_vals = tb["F1_raw"].tolist()
+    f2_vals = tb["F2_raw"].tolist() if "F2_raw" in tb.columns else [None] * n_rows
+    phase_vals = tb["Phase"].tolist() if "Phase" in tb.columns else [None] * n_rows
+    eff_shift = shift_n + 1
+    zscore_gate = n + z_window - 1  # see module comment above
+
+    for i in range(n_rows):
+        r = i + 2
+        row_vals = [dates[i], f1_vals[i], f2_vals[i], phase_vals[i]]
+        row_vals.append(_f1_continuous_formula(r, i))
+        # MA_fast / MA_slow: literal ranges (m, n fixed per sheet)
+        row_vals.append(f"=AVERAGE(B{r-m+1}:B{r})" if i + 1 >= m else "")
+        row_vals.append(f"=AVERAGE(B{r-n+1}:B{r})" if i + 1 >= n else "")
+        # Crossover
+        row_vals.append(f'=IF(OR(F{r}="",G{r}=""),"",F{r}-G{r})')
+        # Zscore: full-window-of-real-numbers gate (see module comment)
+        if i + 1 >= zscore_gate:
+            row_vals.append(
+                f'=IF(STDEV(H{r-z_window+1}:H{r})=0,"",'
+                f'(H{r}-AVERAGE(H{r-z_window+1}:H{r}))/STDEV(H{r-z_window+1}:H{r}))'
+            )
+        else:
+            row_vals.append("")
+        # Signal_R(z) = z * EXP(0.5*(1-z^2)) -- Bouchouev's reaction function,
+        # Virtual Barrels Eq. 5.5. No SIGN() anywhere on this sheet.
+        row_vals.append(f'=IF(I{r}="","",I{r}*EXP(0.5*(1-I{r}^2)))')
+        # Position -- Signal_R(z)[t-(shift_n+1)], same shift convention as
+        # every other sheet (shift(1) is the floor; shift_n is EXTRA delay
+        # on top of it).
+        if i + 1 > eff_shift:
+            row_vals.append(f'=IF(J{r-eff_shift}="",0,J{r-eff_shift})')
+        else:
+            row_vals.append(0)
+        # F1_cont_daily_change
+        row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
+        # Daily_PnL
+        row_vals.append(f'=IF(OR(K{r}="",L{r}=""),0,K{r}*L{r})')
+        # Position_Change / TC_Cost / Daily_PnL_Net -- TC_Cost adds the same
+        # roll-day-through charge as every other sheet; SIGN(K{r})=SIGN(K{r-1})
+        # still works correctly here even though K holds continuous values
+        # (not just +-1/0), since SIGN() of any nonzero number is still +-1.
+        row_vals.append(f"=ABS(K{r})" if i == 0 else f"=ABS(K{r}-K{r-1})")
+        if i == 0:
+            row_vals.append(f"=N{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(N{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",K{r}<>0,K{r-1}<>0,SIGN(K{r})=SIGN(K{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
+        row_vals.append(f"=M{r}-O{r}")
+        # MTM
+        row_vals.append(f"=K{r}*E{r}")
+        # Cum_PnL / Cum_PnL_Net
+        row_vals.append(f"=M{r}" if i == 0 else f"=R{r-1}+M{r}")
+        row_vals.append(f"=P{r}" if i == 0 else f"=S{r-1}+P{r}")
+
+        ws.append(row_vals)
+        for col_idx in (5, 12, 13, 15, 16, 17, 18, 19):  # F1_cont, delta, PnL, TC_Cost, PnL_Net, MTM, CumPnL, CumPnL_Net
+            ws.cell(r, col_idx).font = _MANUAL_FONT
+        row_fill = _row_phase_fill(phase_vals[i])
+        if row_fill is not None:
+            for col_idx in range(1, len(headers) + 1):
+                ws.cell(r, col_idx).fill = row_fill
+
+    ws.column_dimensions["A"].width = 12
+    for i in range(2, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 15
+    ws.freeze_panes = "A2"
+
+
+# ══════════════════════════════════════════════════════════════════
+# MANUAL EXCEL-FORMULA RECONSTRUCTION -- Momentum "Strong Signal" Reaction Band
+# ══════════════════════════════════════════════════════════════════
+# Same MA(m)-MA(n) crossover, live-Excel z-score, AND reaction function
+# R(z) = z*EXP(0.5*(1-z^2)) as write_manual_formula_sheet_ma_reaction, but
+# Signal_Band (K) is the SIGN of R(z) itself (an earlier version of this
+# sheet thresholded R(z) into a fixed [lo, hi] band -- superseded, not kept
+# alongside this): +1 if R(z) > 0, -1 if R(z) < 0, 0 otherwise. Note
+# SIGN(R(z)) == SIGN(z) always (EXP(...) > 0 for every real z) -- this is
+# mathematically just SIGN of the z-score, NOT the same as
+# write_manual_formula_sheet_ma's SIGN(Crossover): they agree only where the
+# crossover's own rolling mean is close to zero. Column layout: A Date,
+# B F1_raw, C F2_raw, D Phase, E F1_continuous, F MA_fast, G MA_slow,
+# H Crossover, I Zscore_{z_window}d, J Reaction_R(z), K Signal_Band,
+# L Position, M F1_cont_daily_change, N Daily_PnL, O Position_Change,
+# P TC_Cost, Q Daily_PnL_Net, R MTM, S Cum_PnL, T Cum_PnL_Net. Same Zscore
+# full-window gate as the Reaction sheet (`n + z_window - 1` rows elapsed) --
+# see that sheet's module comment for why the naive `z_window` gate would
+# diverge from pandas.
+
+def write_manual_formula_sheet_ma_reaction_band(wb: Workbook, tb: pd.DataFrame, m: int, n: int, z_window: int,
+                                                 shift_n: int, sheet_name: str,
+                                                 tc_bps: int = TC_BPS_DEFAULT) -> None:
+    headers = ["Date", "F1_raw", "F2_raw", "Phase", "F1_continuous", f"MA_{m}", f"MA_{n}", "Crossover",
+               f"Zscore_{z_window}d", "Reaction_R(z)", "Signal_Band", "Position",
+               "F1_cont_daily_change", "Daily_PnL", "Position_Change", "TC_Cost", "Daily_PnL_Net",
+               "MTM", "Cum_PnL", "Cum_PnL_Net"]
+    ws = wb.create_sheet(sheet_name)
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        _style_cell(ws.cell(1, col_idx), fill=_MANUAL_HEADER_FILL, font=_TB_HEADER_FONT,
+                    align=Alignment(horizontal="center"))
+
+    n_rows = len(tb)
+    dates = tb["Date"].tolist()
+    f1_vals = tb["F1_raw"].tolist()
+    f2_vals = tb["F2_raw"].tolist() if "F2_raw" in tb.columns else [None] * n_rows
+    phase_vals = tb["Phase"].tolist() if "Phase" in tb.columns else [None] * n_rows
+    eff_shift = shift_n + 1
+    zscore_gate = n + z_window - 1  # see module comment above
+
+    for i in range(n_rows):
+        r = i + 2
+        row_vals = [dates[i], f1_vals[i], f2_vals[i], phase_vals[i]]
+        row_vals.append(_f1_continuous_formula(r, i))
+        # MA_fast / MA_slow: literal ranges (m, n fixed per sheet)
+        row_vals.append(f"=AVERAGE(B{r-m+1}:B{r})" if i + 1 >= m else "")
+        row_vals.append(f"=AVERAGE(B{r-n+1}:B{r})" if i + 1 >= n else "")
+        # Crossover
+        row_vals.append(f'=IF(OR(F{r}="",G{r}=""),"",F{r}-G{r})')
+        # Zscore: full-window-of-real-numbers gate (see module comment)
+        if i + 1 >= zscore_gate:
+            row_vals.append(
+                f'=IF(STDEV(H{r-z_window+1}:H{r})=0,"",'
+                f'(H{r}-AVERAGE(H{r-z_window+1}:H{r}))/STDEV(H{r-z_window+1}:H{r}))'
+            )
+        else:
+            row_vals.append("")
+        # Reaction_R(z) = z * EXP(0.5*(1-z^2)) -- Bouchouev's reaction
+        # function, Virtual Barrels Eq. 5.5. Same formula as the Reaction
+        # sheet's Signal_R(z) column, just not traded directly here.
+        row_vals.append(f'=IF(I{r}="","",I{r}*EXP(0.5*(1-I{r}^2)))')
+        # Signal_Band = SIGN(Reaction_R(z)) -- the REACTION FUNCTION'S OUTPUT
+        # (J), not the z-score (I) directly, even though they always share a
+        # sign (see module comment above).
+        row_vals.append(f'=IF(J{r}="","",SIGN(J{r}))')
+        # Position -- Signal_Band[t-(shift_n+1)], same shift convention as
+        # every other sheet (shift(1) is the floor; shift_n is EXTRA delay
+        # on top of it).
+        if i + 1 > eff_shift:
+            row_vals.append(f'=IF(K{r-eff_shift}="",0,K{r-eff_shift})')
+        else:
+            row_vals.append(0)
+        # F1_cont_daily_change
+        row_vals.append("" if i == 0 else f"=E{r}-E{r-1}")
+        # Daily_PnL
+        row_vals.append(f'=IF(OR(L{r}="",M{r}=""),0,L{r}*M{r})')
+        # Position_Change / TC_Cost / Daily_PnL_Net -- same roll-day-through
+        # charge as every other sheet; Position here is always exactly
+        # -1/0/+1, so SIGN(L{r})=SIGN(L{r-1}) works the same as the binary
+        # sheet's check.
+        row_vals.append(f"=ABS(L{r})" if i == 0 else f"=ABS(L{r}-L{r-1})")
+        if i == 0:
+            row_vals.append(f"=O{r}*({tc_bps}/10000/2)*B{r}")
+        else:
+            row_vals.append(
+                f'=(O{r}+IF(AND(LEFT(D{r},8)="Roll_LTD",L{r}<>0,L{r-1}<>0,SIGN(L{r})=SIGN(L{r-1})),1,0))'
+                f'*({tc_bps}/10000/2)*B{r}'
+            )
+        row_vals.append(f"=N{r}-P{r}")
+        # MTM
+        row_vals.append(f"=L{r}*E{r}")
+        # Cum_PnL / Cum_PnL_Net
+        row_vals.append(f"=N{r}" if i == 0 else f"=S{r-1}+N{r}")
+        row_vals.append(f"=Q{r}" if i == 0 else f"=T{r-1}+Q{r}")
+
+        ws.append(row_vals)
+        for col_idx in (5, 13, 14, 16, 17, 18, 19, 20):  # F1_cont, delta, PnL, TC_Cost, PnL_Net, MTM, CumPnL, CumPnL_Net
+            ws.cell(r, col_idx).font = _MANUAL_FONT
+        row_fill = _row_phase_fill(phase_vals[i])
+        if row_fill is not None:
+            for col_idx in range(1, len(headers) + 1):
+                ws.cell(r, col_idx).fill = row_fill
+
+    ws.column_dimensions["A"].width = 12
+    for i in range(2, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 15
+    ws.freeze_panes = "A2"
+
+
 def _row_phase_fill(phase_val):
     if isinstance(phase_val, str) and phase_val.startswith("Roll_LTD"):
         return _ROLL_DAY_FILL
@@ -899,6 +1252,39 @@ def _reconcile_ma(tb: pd.DataFrame, m: int, n: int, shift_n: int) -> str:
     f1r_s = pd.Series(f1r)
     crossover = f1r_s.rolling(m).mean().values - f1r_s.rolling(n).mean().values
     signal = np.sign(crossover)
+    position = pd.Series(signal).shift(shift_n + 1).fillna(0).values
+    delta = np.diff(f1c_shadow, prepend=np.nan)
+    daily_pnl = np.nan_to_num(position * delta)
+    return _reconcile_cum_pnl(tb, daily_pnl, f1c_shadow)
+
+
+def _reconcile_ma_reaction(tb: pd.DataFrame, m: int, n: int, z_window: int, shift_n: int) -> str:
+    if "F2_raw" not in tb.columns or "Phase" not in tb.columns:
+        return "Not checked -- F2_raw/Phase unavailable for this product (no roll-cycle data)."
+    f1r, f2r, phase = tb["F1_raw"].values, tb["F2_raw"].values, tb["Phase"].values
+    f1c_shadow = _reconstruct_f1_continuous_shadow(f1r, f2r, phase)
+
+    f1r_s = pd.Series(f1r)
+    crossover = f1r_s.rolling(m).mean() - f1r_s.rolling(n).mean()
+    z = (crossover - crossover.rolling(z_window).mean()) / crossover.rolling(z_window).std()
+    signal = (z * np.exp(0.5 * (1 - z ** 2))).values
+    position = pd.Series(signal).shift(shift_n + 1).fillna(0).values
+    delta = np.diff(f1c_shadow, prepend=np.nan)
+    daily_pnl = np.nan_to_num(position * delta)
+    return _reconcile_cum_pnl(tb, daily_pnl, f1c_shadow)
+
+
+def _reconcile_ma_reaction_band(tb: pd.DataFrame, m: int, n: int, z_window: int, shift_n: int) -> str:
+    if "F2_raw" not in tb.columns or "Phase" not in tb.columns:
+        return "Not checked -- F2_raw/Phase unavailable for this product (no roll-cycle data)."
+    f1r, f2r, phase = tb["F1_raw"].values, tb["F2_raw"].values, tb["Phase"].values
+    f1c_shadow = _reconstruct_f1_continuous_shadow(f1r, f2r, phase)
+
+    f1r_s = pd.Series(f1r)
+    crossover = f1r_s.rolling(m).mean() - f1r_s.rolling(n).mean()
+    z = (crossover - crossover.rolling(z_window).mean()) / crossover.rolling(z_window).std()
+    r = z * np.exp(0.5 * (1 - z ** 2))
+    signal = np.sign(r).values
     position = pd.Series(signal).shift(shift_n + 1).fillna(0).values
     delta = np.diff(f1c_shadow, prepend=np.nan)
     daily_pnl = np.nan_to_num(position * delta)
@@ -1459,6 +1845,78 @@ def save_momentum_tradebook_excel(f1r: pd.Series, f1c: pd.Series, f2r: pd.Series
         met["EXCEL RECONCILIATION"] = _reconcile_ma(tb, m, n, shift_n)
         _write_xl_sheet(wb, tb, met, f"{label} Python")
         write_manual_formula_sheet_ma(wb, tb, m, n, shift_n, f"{label} Formulas", tc_bps)
+        sharpes[f"Shift-{shift_n} Sharpe"] = met["Sharpe Ratio (Gross)"]
+    return _save_strategy_workbook(wb, filepath, sharpes)
+
+
+def save_ma_reaction_tradebook_excel(f1r: pd.Series, f1c: pd.Series, f2r: pd.Series, phase: pd.Series,
+                                      m: int, n: int, z_window: int | None, unit_label: str, filepath: Path,
+                                      tc_bps: int = TC_BPS_DEFAULT) -> dict:
+    """Momentum Reaction-Function tradebook -- same crossover as the binary
+    Momentum tradebook, but Position is R(z) of the crossover's z-score
+    instead of SIGN(crossover). Independent of save_momentum_tradebook_excel
+    -- neither calls nor modifies the other. 6 sheets total (3 timing
+    variants x Python+Formulas).
+
+    z_window=None uses `n` (the slow MA) as the z-scoring window -- see
+    common_engine.ma_crossover_reaction_position's docstring for the
+    rationale. Resolved once here (not left to build_ma_reaction_tradebook)
+    so the SAME resolved window number is used for the Python tb, the Excel
+    formula sheet, and the reconciliation check below -- all three must
+    agree on z_window or "EXCEL RECONCILIATION" would flag a false mismatch."""
+    if z_window is None:
+        z_window = n
+    sharpes = {}
+    wb = Workbook()
+    wb.remove(wb.active)
+    for shift_n, label in TIMING_VARIANTS:
+        tb = build_ma_reaction_tradebook(f1r=f1r, f1c=f1c, m=m, n=n, z_window=z_window, shift_n=shift_n,
+                                          f2r=f2r, phase=phase, tc_bps=tc_bps)
+        pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
+        pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
+        f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
+        met["EXCEL RECONCILIATION"] = _reconcile_ma_reaction(tb, m, n, z_window, shift_n)
+        _write_xl_sheet(wb, tb, met, f"{label} Python")
+        write_manual_formula_sheet_ma_reaction(wb, tb, m, n, z_window, shift_n, f"{label} Formulas", tc_bps)
+        sharpes[f"Shift-{shift_n} Sharpe"] = met["Sharpe Ratio (Gross)"]
+    return _save_strategy_workbook(wb, filepath, sharpes)
+
+
+def save_ma_reaction_band_tradebook_excel(f1r: pd.Series, f1c: pd.Series, f2r: pd.Series, phase: pd.Series,
+                                           m: int, n: int, z_window: int | None,
+                                           unit_label: str, filepath: Path, tc_bps: int = TC_BPS_DEFAULT) -> dict:
+    """Momentum "Strong Signal" Reaction-Band tradebook -- same crossover and
+    z-score as the reaction-function Momentum tradebook, but Position is the
+    SIGN of the reaction function's output R(z) (+1 if R(z)>0, -1 if
+    R(z)<0, 0 otherwise) instead of trading R(z) directly, and instead of
+    SIGN(crossover). An earlier version of this tradebook thresholded R(z)
+    into a fixed [lo, hi] band -- superseded, not kept alongside this.
+    Independent of the binary and reaction-function tradebooks -- none of
+    the three call or modify each other. 6 sheets total (3 timing variants x
+    Python+Formulas).
+
+    z_window=None uses `n` (the slow MA) as the z-scoring window, same
+    convention and same rationale as save_ma_reaction_tradebook_excel.
+    Resolved once here so the Python tb, Excel formula sheet, and
+    reconciliation check all agree on z_window."""
+    if z_window is None:
+        z_window = n
+    sharpes = {}
+    wb = Workbook()
+    wb.remove(wb.active)
+    for shift_n, label in TIMING_VARIANTS:
+        tb = build_ma_reaction_band_tradebook(f1r=f1r, f1c=f1c, m=m, n=n, z_window=z_window,
+                                               shift_n=shift_n, f2r=f2r, phase=phase, tc_bps=tc_bps)
+        pos = pd.Series(tb["Position"].values, index=pd.DatetimeIndex(tb["Date"]))
+        pnl = pd.Series(tb["Daily_PnL"].values, index=pd.DatetimeIndex(tb["Date"]))
+        f1r_al = pd.Series(tb["F1_raw"].values, index=pd.DatetimeIndex(tb["Date"]))
+        phase_al = pd.Series(tb["Phase"].values, index=pd.DatetimeIndex(tb["Date"])) if "Phase" in tb.columns else None
+        met = compute_performance(pnl, pos, f1c.reindex(pos.index), f1r_al, shift_n, unit_label, tc_bps, phase_al)
+        met["EXCEL RECONCILIATION"] = _reconcile_ma_reaction_band(tb, m, n, z_window, shift_n)
+        _write_xl_sheet(wb, tb, met, f"{label} Python")
+        write_manual_formula_sheet_ma_reaction_band(wb, tb, m, n, z_window, shift_n, f"{label} Formulas", tc_bps)
         sharpes[f"Shift-{shift_n} Sharpe"] = met["Sharpe Ratio (Gross)"]
     return _save_strategy_workbook(wb, filepath, sharpes)
 

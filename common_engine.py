@@ -139,6 +139,121 @@ def ma_crossover_position(f1r: pd.Series, fast: int, slow: int, shift_n: int = 1
     return exec_shift(sig, shift_n).fillna(0)
 
 
+def ma_crossover_reaction_position(f1r: pd.Series, fast: int, slow: int, z_window: int | None = None,
+                                    shift_n: int = 1) -> pd.Series:
+    """Reaction-function-sized MA crossover -- a separate strategy alongside
+    ma_crossover_position, not a replacement for it. Same raw signal
+    (MA(fast) - MA(slow)), but instead of collapsing it to sign() (always
+    full ±1 size regardless of conviction), this z-scores the spread against
+    its own rolling mean/std (same recipe carry_v3_position already uses for
+    carry, not price-return vol -- keeps the z-score comparing the spread to
+    its own distribution, not mixing incompatible units) and passes it
+    through Bouchouev's reaction function (Virtual Barrels Eq. 5.5):
+
+        R(z) = z * exp(0.5 * (1 - z^2))
+
+    R is odd (symmetric long/short), R(0) = 0, and its only critical points
+    are at z = +-1 where R = +-1 (dR/dz = exp(0.5*(1-z^2)) * (1 - z^2), zero
+    only at z=+-1) -- since R(0)=0 and R->0 as |z|->inf, that critical point
+    is the global max/min, so R(z) is bounded to [-1, 1] for every z with no
+    clipping needed. Position size grows with conviction up to 1 standard
+    deviation of the spread's own history, then fades back down for more
+    extreme readings (crowded-trade/reversal-risk intuition), instead of
+    staying pinned at full size like sign() does.
+
+    z_window=None (default) uses `slow` itself as the z-scoring window,
+    instead of a fixed constant like 252. Rationale: a fixed 252-day window
+    normalizing an already-slow spread (e.g. MA(20,250)) barely has more
+    independent variation to work with than the spread's own smoothing
+    period, so the z-score ends up lagging rather than discriminating --
+    empirically this was the one pair (of the 3 benchmark pairs) whose
+    Sharpe flipped negative under reaction-function sizing with a fixed
+    252-day window. Tying the window to `slow` scales the z-score's lookback
+    to match each pair's own timescale instead of using one constant across
+    every pair. Pass an explicit z_window to override."""
+    if z_window is None:
+        z_window = slow
+    raw = f1r.rolling(fast).mean() - f1r.rolling(slow).mean()
+    z = (raw - raw.rolling(z_window).mean()) / raw.rolling(z_window).std()
+    z = z.replace([np.inf, -np.inf], np.nan)
+    sig = z * np.exp(0.5 * (1 - z ** 2))
+    return exec_shift(sig, shift_n).fillna(0)
+
+
+def ma_crossover_reaction_band_position(f1r: pd.Series, fast: int, slow: int, z_window: int | None = None,
+                                         shift_n: int = 1) -> pd.Series:
+    """"Strong signal only" MA crossover -- a third, separate strategy
+    alongside ma_crossover_position (sign()) and ma_crossover_reaction_position
+    (smooth R(z)), not a replacement for either. Same z-scored crossover and
+    same reaction function R(z) = z*exp(0.5*(1-z^2)) as
+    ma_crossover_reaction_position (same z_window=None-uses-slow default),
+    but instead of trading R(z) directly as a continuously-sized position (or
+    an earlier version of this function that thresholded R(z) into a fixed
+    [lo, hi] band -- superseded, not kept alongside this), this simply takes
+    the SIGN of the reaction function's output:
+
+        position = +1  if  R(z) > 0
+        position = -1  if  R(z) < 0
+        position =  0  otherwise (R(z) == 0, i.e. z == 0, or during warm-up)
+
+    Computed via R(z) explicitly (not shortcut straight to sign(z)) so the
+    tradebook's audit trail visibly goes Crossover -> Zscore -> Reaction_R(z)
+    -> Position, matching ma_crossover_reaction_position's pipeline exactly
+    up to the last step. Note that since exp(...) > 0 for every real z,
+    sign(R(z)) == sign(z) always -- this is mathematically just sign(z), NOT
+    the same as ma_crossover_position's sign(crossover): they agree only
+    where the crossover's own rolling mean is close to zero, and can diverge
+    whenever the crossover has drifted away from its recent average."""
+    if z_window is None:
+        z_window = slow
+    raw = f1r.rolling(fast).mean() - f1r.rolling(slow).mean()
+    z = (raw - raw.rolling(z_window).mean()) / raw.rolling(z_window).std()
+    z = z.replace([np.inf, -np.inf], np.nan)
+    r = z * np.exp(0.5 * (1 - z ** 2))
+    sig = np.sign(r)
+    return exec_shift(pd.Series(sig, index=r.index), shift_n).fillna(0)
+
+
+def ma_crossover_trapezoid_position(f1r: pd.Series, fast: int, slow: int, z_window: int | None = None,
+                                     z1: float = 0.5, z2: float = 1.0, z3: float = 2.0,
+                                     shift_n: int = 1) -> pd.Series:
+    """Piecewise-linear "trapezoid" position sizing -- a fourth, separate
+    strategy alongside sign() (ma_crossover_position), the smooth reaction
+    function (ma_crossover_reaction_position), and sign-of-reaction
+    (ma_crossover_reaction_band_position), not a replacement for any of
+    them. Same z-scored crossover (same z_window=None-uses-slow default),
+    but instead of a single instantaneous peak (the exponential shape) or a
+    hard on/off band, this ramps up LINEARLY to full size, HOLDS a genuine
+    plateau at full size, then ramps back down to flat -- odd/symmetric for
+    negative z:
+
+        position = z/z1 * sign(z)          for 0 <= |z| <= z1   (ramp up)
+        position = sign(z)                 for z1 <= |z| <= z2  (plateau, full size)
+        position = (1 - (|z|-z2)/(z3-z2)) * sign(z)  for z2 <= |z| <= z3  (ramp down)
+        position = 0                       for |z| > z3
+
+    Concentrates full size in a "sweet spot" conviction zone (like the
+    earlier hard-band idea) but transitions smoothly at both edges instead
+    of snapping between 0 and full size -- avoids the whipsaw risk of a
+    discontinuous band while still declining to chase either weak or
+    over-extended readings."""
+    if z_window is None:
+        z_window = slow
+    raw = f1r.rolling(fast).mean() - f1r.rolling(slow).mean()
+    z = (raw - raw.rolling(z_window).mean()) / raw.rolling(z_window).std()
+    z = z.replace([np.inf, -np.inf], np.nan)
+    az = z.abs()
+    s = np.sign(z)
+    v = pd.Series(
+        np.where(az <= z1, az / z1,
+                 np.where(az <= z2, 1.0,
+                          np.where(az <= z3, 1 - (az - z2) / (z3 - z2), 0.0))),
+        index=z.index,
+    )
+    sig = s * v
+    return exec_shift(sig, shift_n).fillna(0)
+
+
 @st.cache_data(show_spinner="Computing 250x250 momentum heatmap...")
 def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
                       start: str, end: str, shift_n: int, tc_bps: int) -> pd.DataFrame:

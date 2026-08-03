@@ -82,9 +82,9 @@ MOMENTUM_DEFAULT_FEATURE = {
 # Carry: (F1-F2)/F1 near-tenor roll yield is dominated by front-of-curve
 # heating-season seasonality for NGLs, not genuine term structure -- it is
 # strongly negative-Sharpe for every NGL ticker. The far-tenor V1 Level
-# pair (F4-F15) -- what used to be a separate "V2 Long Slope" variant
-# before V1/V2 were merged into one Level signal with a free contract
-# pair -- matching Mark Bogorad's paper2_energy_risk_premia carry
+# pair (originally F4-F15, what used to be a separate "V2 Long Slope"
+# variant before V1/V2 were merged into one Level signal with a free
+# contract pair) -- matching Mark Bogorad's paper2_energy_risk_premia carry
 # convention, is positive-Sharpe for 5 of 6 tickers and tracks the paper's
 # own Ethane/Propane/Butane results far more closely. Applied uniformly
 # (not per-product) to match the existing Metals/Energy convention of one
@@ -95,8 +95,14 @@ MOMENTUM_DEFAULT_FEATURE = {
 # sign(Carry - MA(Carry, n))) was his most robust systematic oil signal
 # across "hundreds of different blends," outperforming both plain carry
 # and plain momentum standalone.
-CARRY_DEFAULT_ACTIVE = ["V1 (F4-F15)", "V2 (win=252)", "V3 (N=20)"]
-CARRY_DEFAULT_FEATURE = "V1 (F4-F15)"
+#
+# CHANGED 2026-08-03: tenor pair moved from F4-F15 to F2-F14 (user's
+# decision, for a 12-month rather than 11-month span). NOT yet re-verified
+# against the near-tenor seasonality finding two paragraphs above -- F2 is
+# back in the same front-of-curve region that F1-F2 was rejected from.
+# See research/configs/ngl.py's docstring for the same caveat.
+CARRY_DEFAULT_ACTIVE = ["V1 (F2-F14)", "V2 (win=252)", "V3 (N=20)"]
+CARRY_DEFAULT_FEATURE = "V1 (F2-F14)"
 # Value: no NGL-specific override as of 2026-08-03 -- falls back to
 # render_value_tab's own default (F3 / 5yr / 10%), same as every other
 # dashboard, per the user's explicit decision to force F3 uniformly across

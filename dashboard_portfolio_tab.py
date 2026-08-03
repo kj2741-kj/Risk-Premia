@@ -85,7 +85,7 @@ PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
 # tab recomputes freely on every widget interaction.
 
 @st.cache_data(show_spinner="Loading asset-class data for Portfolio tab...")
-def _load_products(_cfg, cfg_name: str):
+def _load_products(_cfg, cfg_name: str, excluded_products: tuple[str, ...] = ()):
     """Load curve and log-return F1 series for every product in
     _cfg.PRODUCTS, then truncate all of them to the common date window
     across products (the latest start, the earliest end). This matches the
@@ -94,9 +94,16 @@ def _load_products(_cfg, cfg_name: str):
     already reported elsewhere. `cfg_name` is a plain string so Streamlit's
     cache has something hashable to key on; the leading underscore on `_cfg`
     tells it to skip hashing the module object itself.
+
+    `excluded_products`, if given, drops those product names from this
+    dashboard-layer view only -- `_cfg.PRODUCTS` itself (and therefore the
+    research pipeline / run_regime_table.py) is untouched. A tuple, not a
+    list, so it stays hashable for @st.cache_data's key.
     """
     data = {}
     for product in _cfg.PRODUCTS:
+        if product in excluded_products:
+            continue
         f1 = _cfg.load_f1_series_logret(product)
         curve = _cfg.load_curve(product)
         data[product] = {"f1r": f1["F1_raw"], "log_price": f1["log_price"],
@@ -124,7 +131,7 @@ def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
     if family == "CarryMom":
         return {"leg_id": leg_id, "near": near, "far": far, "horizon": 20}
     if family == "Value":
-        return {"leg_id": leg_id, "contract": "F8", "lookback": 1260, "threshold": 0.10}
+        return {"leg_id": leg_id, "contract": "F3", "lookback": 1260, "threshold": 0.10}
     raise ValueError(f"Unknown family {family!r}")
 
 
@@ -293,18 +300,21 @@ def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd
 
 
 @st.cache_data(show_spinner="Computing reference strategy returns...")
-def _compute_reference_returns(_cfg, cfg_name: str, tc_bps: int) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
+def _compute_reference_returns(_cfg, cfg_name: str, tc_bps: int,
+                                excluded_products: tuple[str, ...] = ()) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
     """Gross/net return series for all six locked reference strategies.
 
     These never change for a given tc_bps (the six configurations are
     fixed, read-only), so recomputing them on every rerun -- including
     reruns triggered by something unrelated, like ticking a checkbox in
-    the draft below -- was pure waste. `cfg_name`/`tc_bps` are the cache
-    key; `_cfg`'s leading underscore tells Streamlit to skip hashing the
-    module object itself, same convention as _load_products().
+    the draft below -- was pure waste. `cfg_name`/`tc_bps`/`excluded_products`
+    are the cache key; `_cfg`'s leading underscore tells Streamlit to skip
+    hashing the module object itself, same convention as _load_products().
+    `excluded_products` is forwarded to `_load_products()` -- see its
+    docstring for what it does.
     """
     reference_strategies = _build_reference_strategies(_cfg)
-    data, _, _ = _load_products(_cfg, cfg_name)
+    data, _, _ = _load_products(_cfg, cfg_name, excluded_products)
     gross: dict[str, pd.Series] = {}
     net: dict[str, pd.Series] = {}
     for instance in reference_strategies:
@@ -463,7 +473,7 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
         c1, c2, c3, c4 = st.columns([1.4, 1.6, 1.6, 1])
         with c1:
             leg["contract"] = st.selectbox("Contract", FAR_NEAR_OPTIONS,
-                                            index=_safe_index(FAR_NEAR_OPTIONS, leg.get("contract", "F8"), fallback=7),
+                                            index=_safe_index(FAR_NEAR_OPTIONS, leg.get("contract", "F3"), fallback=2),
                                             key=f"{key_prefix}_contract")
         with c2:
             leg["lookback"] = st.number_input("Lookback (days)", min_value=20, max_value=2520,
@@ -613,13 +623,18 @@ def _reset_sleeve_widget_state(family: str, key_prefix: str) -> None:
         st.session_state[f"{fam_prefix}_far"] = "F3"
 
 
-def render_portfolio_tab(cfg, key_prefix: str) -> None:
+def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...] = ()) -> None:
     """Render the full Portfolio tab for one asset class.
 
     `key_prefix` should be stable and asset-class-level, not tied to
     whichever single product a sidebar radio has selected elsewhere on the
     page, because this tab always combines across every product in
-    cfg.PRODUCTS.
+    cfg.PRODUCTS (minus `excluded_products`, if any).
+
+    `excluded_products`: product names (matching cfg.PRODUCTS' own strings)
+    to drop from this dashboard/portfolio view only -- cfg.PRODUCTS itself,
+    and therefore the research pipeline, is untouched. Use this to hide a
+    product from one dashboard's tabs without removing it from the engine.
     """
     st.caption(
         "Log-return methodology (research/engine.py), not the dollar-PnL convention used by the "
@@ -629,7 +644,7 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
         "exactly with those other tabs."
     )
 
-    data, common_start, common_end = _load_products(cfg, cfg.ASSET_CLASS)
+    data, common_start, common_end = _load_products(cfg, cfg.ASSET_CLASS, excluded_products)
     st.caption(f"Common data window across all {len(data)} {cfg.ASSET_CLASS} products: "
                f"{common_start.date()} to {common_end.date()}.")
 
@@ -756,7 +771,7 @@ def render_portfolio_tab(cfg, key_prefix: str) -> None:
             portfolios.pop(to_remove)
             st.rerun()
 
-    instance_gross, instance_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps)
+    instance_gross, instance_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded_products)
 
     if instance_net:
         agg_label = f"{combine_method} Portfolio (all reference strategies)"

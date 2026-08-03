@@ -760,8 +760,8 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     performance metrics, TC filter.
     `phase` (if passed) adds roll-day TC on top of position-change TC.
     `default_active_combo` is a (contract, lookback_label, threshold) tuple
-    overriding the pre-selected value variant (falls back to the 8th
-    contract / 5yr / 10% if omitted).
+    overriding the pre-selected value variant (falls back to F3 / 5yr / 10%
+    if omitted, or the 8th contract if F3 is not in `contracts`).
     `skip_front_contract=True` drops F1 from both the "Add a Value Variant"
     Contract dropdown and the Sharpe Heatmap's contract axis -- same reason
     as Carry's: for NGL swaps, F1 is a monthly-averaging, stale/partial-month
@@ -798,8 +798,9 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     st.markdown("**Add a Value Variant**")
     vcol1, vcol2, vcol3, vcol4 = st.columns([1, 1, 1, 1])
+    default_contract_idx = contracts.index("F3") if "F3" in contracts else min(7, len(contracts) - 1)
     with vcol1:
-        v_contract = st.selectbox("Contract", contracts, index=min(7, len(contracts) - 1),
+        v_contract = st.selectbox("Contract", contracts, index=default_contract_idx,
                                    key=f"{key_prefix}_val_contract")
     with vcol2:
         lb_labels = list(lookback_map.keys()) + ["Custom"]
@@ -828,7 +829,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         add_clicked = st.button("Add", key=f"{key_prefix}_val_add")
 
     ss_key = f"{key_prefix}_val_active"
-    default_contract = contracts[min(7, len(contracts) - 1)]
+    default_contract = contracts[default_contract_idx]
     default_combo = default_active_combo if default_active_combo else (default_contract, "5yr", 0.10)
     if ss_key not in st.session_state:
         st.session_state[ss_key] = [default_combo]

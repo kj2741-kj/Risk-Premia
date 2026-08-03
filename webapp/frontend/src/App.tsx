@@ -43,7 +43,7 @@ export default function App() {
           } />
           <Route path="/energy" element={
             <AssetClassPage key="energy" assetClass="energy" label="Energy"
-              products={["WTI Crude", "Brent Crude", "RBOB Gasoline", "Heating Oil", "Nat Gas", "Singapore Gasoil", "Fuel Oil"]} />
+              products={["WTI Crude", "Brent Crude", "RBOB Gasoline", "Heating Oil", "Nat Gas"]} />
           } />
           <Route path="/precious" element={
             <AssetClassPage key="precious" assetClass="precious" label="Precious Metals"
@@ -51,7 +51,7 @@ export default function App() {
           } />
           <Route path="/ngl" element={
             <AssetClassPage key="ngl" assetClass="ngl" label="NGL / Refined"
-              products={["Ethane", "Propane", "Butane", "Isobutane", "Ethylene", "Propylene"]} />
+              products={["Ethane", "Propane", "Butane", "Isobutane"]} />
           } />
           <Route path="/fundamental-analysis" element={<FundamentalAnalysisPage />} />
         </Routes>

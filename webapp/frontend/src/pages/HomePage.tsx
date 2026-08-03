@@ -3,9 +3,9 @@ import MetricCard from "../components/MetricCard";
 
 const DASHBOARD_LINKS = [
   { to: "/metals", name: "Metals", desc: "LME Copper, Aluminium, Lead, and Zinc. Momentum, Carry, and Value strategies." },
-  { to: "/energy", name: "Energy", desc: "WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil. Momentum, Carry, Value." },
+  { to: "/energy", name: "Energy", desc: "WTI, Brent, RBOB, Heating Oil, Nat Gas. Momentum, Carry, Value." },
   { to: "/precious", name: "Precious Metals", desc: "Gold, Silver, Copper (CME), Platinum, Palladium. Momentum, Carry, Value." },
-  { to: "/ngl", name: "NGL / Refined", desc: "Ethane, Propane, Butane, Isobutane, Ethylene, Propylene. Momentum, Carry, Value." },
+  { to: "/ngl", name: "NGL / Refined", desc: "Ethane, Propane, Butane, Isobutane. Momentum, Carry, Value." },
 ];
 
 export default function HomePage() {

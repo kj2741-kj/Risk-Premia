@@ -11,7 +11,8 @@ Signal form and most parameters are identical to Metals/Precious Metals:
     explicit choice: Energy keeps the Metals-style two-tier structure rather
     than Bogorad's single F4-F15, which is used for NGL instead).
   - Carry-Momentum: same horizon=20, kept separate from the Carry composite.
-  - Value: same F8 contract / 5yr lookback / +-10% threshold.
+  - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
+    uniformly across all four asset classes) / 5yr lookback / +-10% threshold.
 
 CARRY TENOR, verified via quote-availability (data/06-30 files have no
 Volume column, same weaker-proxy caveat as Precious Metals):
@@ -84,7 +85,7 @@ CARRY_SHIFT_N = 1
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
 
-VALUE_CONTRACT = "F8"
+VALUE_CONTRACT = "F3"
 VALUE_LOOKBACK_DAYS = 1260
 VALUE_THRESHOLD = 0.10
 VALUE_SHIFT_N = 2

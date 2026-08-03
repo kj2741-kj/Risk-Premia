@@ -87,12 +87,11 @@ MOMENTUM_DEFAULT_FEATURE = {
 # and plain momentum standalone.
 CARRY_DEFAULT_ACTIVE = ["V1 (F4-F15)", "V2 (win=252)", "V3 (N=20)"]
 CARRY_DEFAULT_FEATURE = "V1 (F4-F15)"
-# Value: F12 / 10yr / +-10% (Mark's paper2 convention) ranks top-1-3 of a
-# 9-combo grid (F8/F10/F12 x 5yr/7yr/10yr) for 4 of 6 tickers and is never
-# negative for any of them, unlike the Metals/Energy default of F8/5yr
-# (tuned for Copper), which is flat-to-negative for CAP/IBD/PCW/PGP.
-# Applied uniformly for the same reason as Carry above.
-VALUE_DEFAULT_ACTIVE = ("F12", "10yr", 0.10)
+# Value: no NGL-specific override as of 2026-08-03 -- falls back to
+# render_value_tab's own default (F3 / 5yr / 10%), same as every other
+# dashboard, per the user's explicit decision to force F3 uniformly across
+# all four asset classes. (Previously F12/10yr, empirically tuned for NGL;
+# that finding is superseded by this decision, not by new evidence.)
 
 with st.sidebar:
     st.markdown('<p class="main-title">🧪 NGL Dashboard</p>', unsafe_allow_html=True)
@@ -162,7 +161,6 @@ with tab_val:
     contracts = [c for c in curve.columns if c.startswith("F") and c[1:].isdigit() and int(c[1:]) <= 15]
     value_positions = render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix,
                                         contracts=contracts, phase=phase,
-                                        default_active_combo=VALUE_DEFAULT_ACTIVE,
                                         skip_front_contract=True)
 
 with tab_compare:

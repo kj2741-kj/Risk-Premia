@@ -13,7 +13,8 @@ which was re-derived from real data, not assumed:
   - Momentum: 3-way MA-crossover composite, same (1,20)/(5,60)/(20,250) pairs.
   - Carry: V1(Level)+V2(Z-score) composite, tenor pair F1-F2 ONLY (see below).
   - Carry-Momentum: same horizon=20, kept separate from the Carry composite.
-  - Value: same F8 contract / 5yr lookback / +-10% threshold.
+  - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
+    uniformly across all four asset classes) / 5yr lookback / +-10% threshold.
   - StatArb: NOT used -- already tested and excluded for Precious Metals
     (genuine null across all 10 pairs incl. Gold-Silver/Platinum-Palladium,
     see project_bogorad_ngl_methodology memory).
@@ -90,7 +91,7 @@ CARRY_SHIFT_N = 1
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
 
-VALUE_CONTRACT = "F8"
+VALUE_CONTRACT = "F3"
 VALUE_LOOKBACK_DAYS = 1260
 VALUE_THRESHOLD = 0.10
 VALUE_SHIFT_N = 2

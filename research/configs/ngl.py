@@ -19,7 +19,10 @@ Signal form and most parameters are identical to the other asset classes:
     own authority as a domain judgment, not re-derived here.
   - Carry-Momentum: same horizon=20, same F4-F15 tenor, kept separate from
     the Carry composite.
-  - Value: same F8 contract / 5yr lookback / +-10% threshold.
+  - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
+    uniformly across all four asset classes, overriding this file's own
+    previously-tuned dashboard default -- see ngl_dashboard/app.py history) /
+    5yr lookback / +-10% threshold.
 
 NGL's own front-month convention (established elsewhere in this project,
 e.g. ngl_dashboard/app.py and scripts/generate_tradebooks.py): the sheet's
@@ -85,7 +88,7 @@ CARRY_SHIFT_N = 1
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
 
-VALUE_CONTRACT = "F8"
+VALUE_CONTRACT = "F3"
 VALUE_LOOKBACK_DAYS = 1260
 VALUE_THRESHOLD = 0.10
 VALUE_SHIFT_N = 2

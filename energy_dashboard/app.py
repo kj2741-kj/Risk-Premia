@@ -45,11 +45,16 @@ inject_css()
 
 # unit_label: the product's natural pricing unit, used only for the
 # TC-per-flip $ display in the sidebar -- has no effect on the Sharpe/PnL math.
+# Singapore Gasoil (QS) and Fuel Oil (FO) removed from this dashboard 2026-08-03
+# (user's explicit decision) -- across the product selector, every standalone
+# tab, and the Portfolio tab below. Both remain fully intact in research/
+# configs/energy.py's own PRODUCTS list and the research pipeline; this is a
+# dashboard-display-only exclusion, not an engine change.
 PRODUCT_UNITS = {
-    "CL": "/bbl", "CO": "/bbl", "XB": "/gal", "HO": "/gal",
-    "NG": "/MMBtu", "QS": "/mt", "FO": "/mt",
+    "CL": "/bbl", "CO": "/bbl", "XB": "/gal", "HO": "/gal", "NG": "/MMBtu",
 }
-PRODUCT_ORDER = ["CL", "CO", "XB", "HO", "NG", "QS", "FO"]
+PRODUCT_ORDER = ["CL", "CO", "XB", "HO", "NG"]
+ENERGY_PORTFOLIO_EXCLUDED = ("SingaporeGasoil", "FuelOil")
 
 with st.sidebar:
     st.markdown('<p class="main-title">🛢️ Energy Dashboard</p>', unsafe_allow_html=True)
@@ -68,8 +73,10 @@ with st.sidebar:
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="energy_roll_n")
     st.caption("GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) are excluded — no usable "
-               "expiry-calendar coverage to build a continuous series. Same Momentum/Carry/Value format "
-               "as the Metals and Precious Metals dashboards.")
+               "expiry-calendar coverage to build a continuous series. Singapore Gasoil and Fuel Oil are "
+               "also excluded from this dashboard as of 2026-08-03; both remain in the underlying research "
+               "config and engine. Same Momentum/Carry/Value format as the Metals and Precious Metals "
+               "dashboards.")
 
 cfg = ENERGY_CONFIG[product_code]
 unit = PRODUCT_UNITS[product_code]
@@ -118,9 +125,12 @@ with tab_compare:
                                             "Value": value_positions})
 
 with tab_portfolio:
-    st.caption("Combines all 7 Energy products (WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore "
-               "Gasoil, Fuel Oil) into one asset-class-level portfolio -- independent of the "
-               "sidebar's Product selection above, which only affects the Momentum/Carry/Value/"
-               "Comparison tabs. Does not include the StatArb sleeve (Bogorad's 8-spread cross-asset "
-               "book, shared with NGL) -- this tab covers Momentum, Carry, Carry-Momentum, and Value only.")
-    render_portfolio_tab(energy_research_cfg, key_prefix="energy_portfolio")
+    st.caption("Combines 5 Energy products (WTI, Brent, RBOB, Heating Oil, Nat Gas) into one "
+               "asset-class-level portfolio -- independent of the sidebar's Product selection above, "
+               "which only affects the Momentum/Carry/Value/Comparison tabs. Singapore Gasoil and Fuel "
+               "Oil are excluded here too (dashboard-only, see sidebar note); both still exist in "
+               "research/configs/energy.py's own PRODUCTS list for the research pipeline. Does not "
+               "include the StatArb sleeve (Bogorad's 8-spread cross-asset book, shared with NGL) -- "
+               "this tab covers Momentum, Carry, Carry-Momentum, and Value only.")
+    render_portfolio_tab(energy_research_cfg, key_prefix="energy_portfolio",
+                          excluded_products=ENERGY_PORTFOLIO_EXCLUDED)

@@ -96,8 +96,10 @@ CARRY_SHIFT_N = 1
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
 
-# Value: existing dashboard anchor, unchanged.
-VALUE_CONTRACT = "F8"
+# Value: anchor contract changed from F8 to F3 2026-08-03 (user's explicit
+# decision, applied uniformly across all four asset classes' dashboards and
+# tabs) -- see project memory for the sensitivity study that preceded this.
+VALUE_CONTRACT = "F3"
 VALUE_LOOKBACK_DAYS = 1260  # ~5yr trading days
 VALUE_THRESHOLD = 0.10
 VALUE_SHIFT_N = 2

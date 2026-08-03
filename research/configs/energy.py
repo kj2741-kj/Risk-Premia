@@ -17,13 +17,21 @@ Signal form and most parameters are identical to Metals/Precious Metals:
 CARRY TENOR, verified via quote-availability (data/06-30 files have no
 Volume column, same weaker-proxy caveat as Precious Metals):
   - F1-F3: solid for all 7 products.
-  - F1-F12 (NOT F1-F13): WTI/Brent/RBOB/Heating Oil/Nat Gas/Singapore Gasoil
-    are all >=99.6% quoted through F13, but Fuel Oil only has 12 tenors total
-    (no F13 column at all) and even its own F12 is just 48.0% quoted.
-    User's explicit decision (2026-07-24): use F1-F12, not F1-F13, so Fuel
-    Oil at least has SOME data at the long leg (48%) rather than none.
-    Fuel Oil's F1-F12 Carry/CarryMom contribution should be read as weaker
-    than the other six products, not equally reliable.
+  - F1-F13, changed 2026-08-03 from F1-F12 (user's decision, to match
+    Metals' F1-F3/F1-F13 convention -- Fuel Oil, the original reason for
+    F1-F12, is now excluded from the Energy dashboard/Portfolio tab, see
+    energy_dashboard/app.py's ENERGY_PORTFOLIO_EXCLUDED). WTI/Brent/RBOB/
+    Heating Oil/Nat Gas/Singapore Gasoil are all >=99.6% quoted through F13.
+    CAVEAT: Fuel Oil has NO F13 column at all (only 12 tenors total) and
+    remains in this file's own PRODUCTS list for the research pipeline
+    (untouched, per the same dashboard-only-exclusion convention as
+    Singapore Gasoil/Fuel Oil elsewhere) -- so Fuel Oil's Carry (F1-F13)
+    and CarryMom (F1-F13) leg is silently flat/zero-contribution in
+    run_regime_table.py's reports (no crash: _carry_base() returns an empty
+    series when a tenor column is missing, which reindexes to all-zero
+    position), diluting the reported 7-product average by one always-flat
+    weight. The dashboard/Portfolio tab itself never sees this dilution
+    since Fuel Oil is excluded from that view entirely.
 
 STATARB -- new for this asset class, replicating Bogorad's Diversified
 Energy Portfolios paper's 8-spread sleeve exactly: Ethane-Natgas,
@@ -78,7 +86,7 @@ ANALYSIS_START = "2006-01-01"
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3"), ("F1", "F12")]
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3"), ("F1", "F13")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 

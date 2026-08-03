@@ -106,9 +106,12 @@ NGL = {
     "momentum_default_feature": {
         "CAP": (1, 20), "BAP": (20, 250), "DAE": (5, 60), "IBD": (20, 250),
     },
-    "carry_default_near": "F4",
-    "carry_default_far": "F15",
-    "carry_default_feature_label": "V1 (F4-F15)",
+    # Changed 2026-08-03 from F4-F15 to F2-F14 (user's decision, 12mo span) --
+    # NOT yet re-verified for liquidity/seasonality at this new pair, see
+    # ngl_dashboard/app.py's matching comment for the caveat.
+    "carry_default_near": "F2",
+    "carry_default_far": "F14",
+    "carry_default_feature_label": "V1 (F2-F14)",
     # No NGL-specific override as of 2026-08-03 -- falls back to services/
     # value.py's own generic default (F3 / 5yr / 10%), matching the Streamlit
     # ngl_dashboard's same-day change (see that file's history: previously

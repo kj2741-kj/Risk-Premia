@@ -93,17 +93,18 @@ NGL = {
         "Propane": {"code": "BAP", "unit": "/gal"},
         "Butane": {"code": "DAE", "unit": "/gal"},
         "Isobutane": {"code": "IBD", "unit": "/gal"},
-        "Ethylene": {"code": "PCW", "unit": "/lb"},
-        "Propylene": {"code": "PGP", "unit": "/lb"},
     },
+    # Ethylene and Propylene removed 2026-08-03 (matching the Streamlit
+    # ngl_dashboard's own exclusion, same day) -- both remain in
+    # research/configs/ngl.py's own PRODUCTS list for the portfolio route,
+    # excluded there via portfolio.EXCLUDED_PRODUCTS instead of here.
     "skip_front_contract": True,
     # Per-product override of which of the 3 default MA pairs is initially
-    # featured in the Momentum tab's Performance Metrics card (all 6 values
+    # featured in the Momentum tab's Performance Metrics card (all 4 values
     # are already members of the standard default active-pair set, so this
     # never needs to add a new pair -- only changes which one is highlighted).
     "momentum_default_feature": {
-        "CAP": (1, 20), "BAP": (20, 250), "DAE": (5, 60),
-        "IBD": (20, 250), "PCW": (1, 20), "PGP": (1, 20),
+        "CAP": (1, 20), "BAP": (20, 250), "DAE": (5, 60), "IBD": (20, 250),
     },
     "carry_default_near": "F4",
     "carry_default_far": "F15",

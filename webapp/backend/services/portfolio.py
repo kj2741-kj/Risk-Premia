@@ -45,6 +45,7 @@ _CONFIG_MODULES = {"metals": "metals", "energy": "energy", "precious": "precious
 # config_registry.py's display-label keys.
 EXCLUDED_PRODUCTS: dict[str, tuple[str, ...]] = {
     "energy": ("SingaporeGasoil", "FuelOil"),
+    "ngl": ("Ethylene", "Propylene"),
 }
 
 

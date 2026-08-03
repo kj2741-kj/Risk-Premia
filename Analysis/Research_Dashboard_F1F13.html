@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Risk Premia Research Dashboard (Energy Carry F1-F13)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --pos-strong:     #104281;
+    --pos-mid:        #3987e5;
+    --pos-weak:       #9ec5f4;
+    --neg-weak:       #eda19f;
+    --neg-mid:        #e34948;
+    --neg-strong:     #8a1f1e;
+    --neutral:        #f0efec;
+    --badge-built-bg: #e3f3e3;
+    --badge-built-fg: #0ca30c;
+    --badge-pending-bg:#f3e9d2;
+    --badge-pending-fg:#a06c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --pos-strong:     #86b6ef;
+      --pos-mid:        #3987e5;
+      --pos-weak:       #184f95;
+      --neg-weak:       #a34e4b;
+      --neg-mid:        #e66767;
+      --neg-strong:     #f3c9c8;
+      --neutral:        #383835;
+      --badge-built-bg: #123312;
+      --badge-built-fg: #4fd94f;
+      --badge-pending-bg:#3a2e10;
+      --badge-pending-fg:#e0b34a;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--page); }
+  body {
+    margin: 0; color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  h3 { font-size: 14px; margin: 20px 0 8px; color: var(--text-secondary); }
+  .subtitle { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+  .meta { color: var(--text-muted); font-size: 12px; }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 18px;
+  }
+
+  .tabs { display: flex; gap: 6px; margin: 18px 0 16px; flex-wrap: wrap; }
+  .tab-btn {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-secondary);
+  }
+  .tab-btn[aria-selected="true"] {
+    background: var(--pos-mid); color: #ffffff; border-color: var(--pos-mid);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .badge {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+    padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+  }
+  .badge-built { background: var(--badge-built-bg); color: var(--badge-built-fg); }
+  .badge-pending { background: var(--badge-pending-bg); color: var(--badge-pending-fg); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td {
+    padding: 7px 9px; text-align: right; border-bottom: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  th { text-align: right; color: var(--text-secondary); font-weight: 600; font-size: 11.5px; }
+  td:first-child, th:first-child { text-align: left; font-weight: 600; color: var(--text-primary); position: sticky; left: 0; background: var(--surface-1); }
+  .text-table td, .text-table th { text-align: left; font-weight: 400; color: var(--text-primary); position: static; }
+  .text-table td:first-child, .text-table th:first-child { font-weight: 600; }
+  tr:hover td { background: var(--neutral); }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  .ir-cell { border-radius: 4px; padding: 4px 8px; display: inline-block; min-width: 52px; text-align: right; }
+  .note { color: var(--text-secondary); font-size: 12.5px; margin: 6px 0; }
+  .strategy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 14px; margin-top: 10px; }
+  .strategy-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .strategy-card h4 { margin: 0 0 6px; font-size: 13px; }
+  .strategy-card p { margin: 0; font-size: 12.5px; color: var(--text-secondary); }
+  .placeholder { padding: 30px 10px; text-align: center; color: var(--text-muted); font-size: 13px; }
+  code { background: var(--neutral); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .legend-row { display:flex; gap:16px; align-items:center; font-size:12px; color:var(--text-secondary); margin-top:8px; flex-wrap:wrap; }
+  .legend-swatch { display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:5px; }
+  .window-select {
+    font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+    padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary); margin-left: 10px;
+  }
+  .window-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 20px 0 8px; }
+  .window-row h3 { margin: 0; }
+  .window-row label { font-size: 12.5px; color: var(--text-secondary); }
+  .compact-table th, .compact-table td { padding: 3px 7px; font-size: 10.5px; white-space: normal; }
+  .strategy-card-key { grid-column: span 2; padding-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Risk Premia Research Dashboard (Energy Carry F1-F13)</h1>
+  <div class="subtitle">Multi-Asset Systematic Risk Premia project. Ex-ante locked strategy backtests, log-return methodology.
+    <span class="meta" id="last-updated"></span>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab-btn" role="tab" aria-selected="true" data-tab="metals">Metals</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="energy">Oil / Energy</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="pm">Precious Metals</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="ngl">NGL</button>
+  </div>
+
+  <!-- ================= METALS ================= -->
+  <div class="tab-panel active" id="panel-metals">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Metals: Copper, Aluminium, Lead, Zinc (LME)</h2>
+      <p class="note">Source: <code>data/06-30/Metals_Futures_Curve_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all four products aligned on this common window.</p>
+
+      <p class="note">Carry tenors: F1-F3 (the volume peak for every product) and F1-F13 (the annual convention, weaker for Lead and Zinc but retained as a second, disclosed variant). Unchanged from the baseline dashboard -- Metals was already on F1-F13, not F1-F12, so this asset class is identical here to Research_Dashboard_F3.html.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="metals-window-select">Horizon: <select id="metals-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="metals-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="metals-table"></table></div>
+      <div class="legend-row">
+        <span><span class="legend-swatch" style="background:var(--pos-strong)"></span>strong positive</span>
+        <span><span class="legend-swatch" style="background:var(--pos-weak)"></span>weak positive</span>
+        <span><span class="legend-swatch" style="background:var(--neutral)"></span>near flat</span>
+        <span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative</span>
+        <span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative</span>
+      </div>
+      <p class="note">Reporting starts 2011-01-01 across every asset class (see the "Full" column), so that every strategy's longest-lookback signal -- Value's 1260-day moving average in particular -- is fully warmed up before the reported window begins; the underlying price data goes back to 2006 and is used to build that warm-up, it just isn't scored on its own. The 2026 YTD column is a partial year (roughly five months) shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+    </div>
+  </div>
+
+  <!-- ================= ENERGY ================= -->
+  <div class="tab-panel" id="panel-energy">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Oil / Energy: WTI, Brent, RBOB, Heating Oil, Nat Gas</h2>
+      <p class="note">Source: <code>data/06-30/Energy_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all five products aligned on this common window. Singapore Gasoil and Fuel Oil are excluded from this dashboard (2026-08-03, per decision); both remain in the underlying research config/engine and are unaffected there.</p>
+
+      <p class="note"><strong>Changed in this variant:</strong> the long Carry/CarryMom tenor is F1-F13 here, not F1-F12. The F1-F12 choice in the locked config existed specifically to give Fuel Oil (12 tenors total, no F13 column at all) at least partial data (48.0% quoted) at the long leg -- but Fuel Oil is already excluded from this dashboard's product set, and the remaining five products (WTI, Brent, RBOB, Heating Oil, Nat Gas) are all &ge;99.6% quoted through F13. So on this 5-product set, F1-F13 is fully supported data-wise and is a cleaner match to Metals' own F1-F13 long-tenor convention. This is a standalone sensitivity variant -- the locked research config (<code>research/configs/energy.py</code>) is untouched and still specifies F1-F12 for the full 7-product pipeline.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="energy-window-select">Horizon: <select id="energy-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="energy-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="energy-table"></table></div>
+      <p class="note">Reporting starts 2011-01-01, matched across every asset class so all four sleeves' longest-lookback signals are fully warmed up before the reported window begins (see the Metals tab's note for the full reasoning). The 2026 YTD column is a partial year shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+    </div>
+  </div>
+
+  <!-- ================= PRECIOUS METALS ================= -->
+  <div class="tab-panel" id="panel-pm">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Precious Metals: Gold, Silver, Copper (COMEX), Platinum, Palladium</h2>
+      <p class="note">Prices: <code>data/06-30/Precious_Metals_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30.</p>
+
+      <p class="note"><strong>Changed in this variant:</strong> Carry/CarryMom tenor is F1-F3 here, not F1-F2. F1 and F2 are the most liquid contracts across the product set, with liquidity dropping off from F3 onwards, most sharply for Platinum and Palladium (F3 fill rate: 96.1% Platinum, 99.6% Palladium, vs. ~100% for the other three products) -- F1-F3 is still well-populated for all five products, just not as uniformly clean as F1-F2. This is a standalone sensitivity variant; the locked research config (<code>research/configs/precious.py</code>) is untouched and still specifies F1-F2.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="pm-window-select">Horizon: <select id="pm-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="pm-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="pm-table"></table></div>
+      <p class="note">Reporting starts 2011-01-01, matched across every asset class so all four sleeves' longest-lookback signals are fully warmed up before the reported window begins (see the Metals tab's note for the full reasoning). The 2026 YTD column is a partial year shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+    </div>
+  </div>
+
+  <!-- ================= NGL ================= -->
+  <div class="tab-panel" id="panel-ngl">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> NGL: Ethane, Propane, Butane, Isobutane</h2>
+      <p class="note">Source: <code>data/06-30/NGL_Futures_Updated.xlsx</code>, 2009-11-10 to 2026-06-30, these four products aligned on this common window. Ethylene and Propylene are excluded from this dashboard (2026-08-03, per decision); both remain in the underlying research config/engine and are unaffected there. Removing them actually widened the common date range (2009-11-10 vs. the prior 6-product window's 2010-12-13 start) -- Ethylene and Propylene were the two products whose own later history was pulling the common start date forward.</p>
+
+      <p class="note"><strong>Changed in this variant:</strong> Carry tenors are F2-F4 (short) and F2-F14 (long), not the single F4-F15 tenor (Bogorad's own convention, front-month prices being stale/index-settled for this asset class) -- same two-tenor pattern as Metals (F1-F3/F1-F13) and Oil/Energy (F1-F3/F1-F13), reported as separate rows below rather than blended together.</p>
+      <p class="note">Each <strong>Carry (F2-Fn)</strong> row is itself an equal-weight (EW) portfolio of two views of that tenor's curve slope: V1 (Level, the raw sign of the slope) and V2 (Z-score, that slope's own 252-day rolling z-score) -- identical construction to every other Carry row in this dashboard (see the Strategy definitions card below), just applied separately to F2-F4 and to F2-F14 instead of to F4-F15. <strong>CarryMom (F2-Fn)</strong> is the 20-day rate-of-change signal on that same tenor's slope, also reported once per tenor pair, not V1/V2-composited (Carry-Momentum was never a V1+V2 blend in this dashboard's methodology, for any asset class). Both tenors are well-populated for all four products here (F2/F4/F14 all &ge;99.5% quoted) -- no Fuel-Oil-F12 or Platinum/Palladium-F6+ style data-quality gap on either leg. This is a standalone sensitivity variant; the locked research config (<code>research/configs/ngl.py</code>) is untouched and still specifies the single F4-F15 tenor.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="ngl-window-select">Horizon: <select id="ngl-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="ngl-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="ngl-table"></table></div>
+      <p class="note">With Ethylene/Propylene removed and the common start now 2009-11-10, every product here has more pre-2011 history available for signal warm-up than in the 6-product version -- the R1 window (2011-01 to 2015) should be read as at least as fully warmed-up as before, likely more so, though the exact burn-in clearance date for Value's 630-day minimum lookback on this specific 4-product set has not been separately re-verified.</p>
+    </div>
+  </div>
+
+  <div class="card" id="strategy-definitions-card">
+    <h2>Strategy definitions</h2>
+    <p class="note">Identical formulas and parameters across every asset class unless a tenor pair is noted otherwise.</p>
+    <div class="strategy-grid">
+      <div class="strategy-card">
+        <h4>Momentum: 3-way MA crossover composite</h4>
+        <p>Three moving-average crossovers, MA(1,20), MA(5,60), MA(20,250) in trading days. Each produces a directional sign; the three signs are averaged and the sign of that average sets the position. Long when the composite trend is positive, short when negative.</p>
+      </div>
+      <div class="strategy-card">
+        <h4>Carry: V1 Level + V2 Z-score composite</h4>
+        <p>Two views of the same curve slope (near tenor minus far tenor), each tenor pair's Carry row is an equal-weight (EW) portfolio of these two views: V1 is the raw sign of the slope; V2 is that slope's z-score against its own 252-day rolling mean and standard deviation. Tenor pairs: F1-F3 and F1-F13 for Metals; <strong>F1-F3 for Precious Metals (changed from F1-F2 in this variant)</strong>; <strong>F1-F3 and F1-F13 for Oil/Energy (changed from F1-F12 in this variant, 5-product set only)</strong>; <strong>F2-F4 and F2-F14 for NGL (changed from the single F4-F15 tenor in this variant, 4-product set)</strong> -- reported as two separate rows per asset class, same pattern throughout, not blended across tenors.</p>
+      </div>
+      <div class="strategy-card">
+        <h4>Carry-Momentum: 20-day rate of change</h4>
+        <p>Compares today's curve slope to its value 20 trading days earlier, capturing whether backwardation or contango is steepening or flattening. Reported as its own strategy, separate from the Carry composite above.</p>
+      </div>
+      <div class="strategy-card">
+        <h4>Value: F3, 1260-day lookback, 10% threshold</h4>
+        <p>Compares the F3 contract's price to its own 1260-trading-day (five-year) moving average. A position is taken only when the deviation exceeds 10% in either direction. (Changed from F8 to F3 2026-08-03, applied uniformly across all four asset classes -- unchanged from the baseline dashboard.)</p>
+      </div>
+      <div class="strategy-card">
+        <h4>EW Portfolio</h4>
+        <p>Equal-weight combination, first across products within a strategy, then across all strategies. The benefit shown depends on how uncorrelated the underlying strategies are with one another.</p>
+      </div>
+      <div class="strategy-card strategy-card-key">
+        <h4>Regime key</h4>
+        <p class="note" style="margin:0 0 6px;">Column codes used in every regime table above.</p>
+        <div class="table-scroll"><table id="regime-key-table" class="text-table compact-table"></table></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const LAST_UPDATED = "2026-08-03: Four changes from Research_Dashboard_F3.html. (1) Energy's long Carry/CarryMom tenor changed from F1-F12 to F1-F13, on the 5-product Energy set (WTI/Brent/RBOB/HeatingOil/NatGas, already used since the F3 dashboard). (2) NGL's product set reduced from 6 to 4 (Ethylene and Propylene removed; Ethane/Propane/Butane/Isobutane retained), which incidentally widened NGL's common date range to 2009-11-10 (from 2010-12-13) since those two products' own later history had been the binding constraint. (3) Precious Metals' Carry/CarryMom tenor changed from F1-F2 to F1-F3. (4) NGL's Carry/CarryMom tenor changed from the single F4-F15 to two separate tenor-pair rows, F2-F4 (short) and F2-F14 (long, new) -- same two-tenor-row pattern as Metals and Oil/Energy, not a cross-tenor blend; each Carry (F2-Fn) row is itself the standard V1(Level)+V2(Z-score) EW composite for that tenor, and each CarryMom (F2-Fn) row is the standard 20-day rate-of-change signal for that tenor. Metals numbers are unchanged and copied verbatim from Research_Dashboard_F3.html. All four changes are dashboard-display-only, in-process product/tenor overrides -- the locked research configs (research/configs/energy.py, research/configs/ngl.py, research/configs/precious.py) are untouched.";
+
+const METALS_COLUMNS = [
+  {key:"full", label:"Full", years:"2011-2026"},
+  {key:"r1", label:"R1", years:"2011-2015"},
+  {key:"r2", label:"R2", years:"2016-2019"},
+  {key:"r3", label:"R3", years:"2020-2021"},
+  {key:"r4", label:"R4", years:"2022-2026"},
+  {key:"y26", label:"2026", years:"YTD"},
+];
+
+const REGIME_KEY_ROWS = [
+  {code:"Full", name:"Full sample", years:"2011-2026"},
+  {code:"R1",   name:"Supercycle Unwind", years:"2011-2015"},
+  {code:"R2",   name:"Recovery/Stabilization", years:"2016-2019"},
+  {code:"R3",   name:"COVID Shock", years:"2020-2021"},
+  {code:"R4",   name:"Post-COVID/Russia-Ukraine", years:"2022-2026"},
+  {code:"2026", name:"2026 year to date, partial year, sits inside R4", years:"2026"},
+];
+
+function ewBold(rows) { rows.forEach(r => { if (r.name.startsWith("EW")) r.bold = true; }); return rows; }
+
+// Metals/Precious Metals/NGL: UNCHANGED, copied verbatim from Research_Dashboard_F3.html
+// (none of these three asset classes use an F1-F12 tenor -- Metals was already on F1-F13).
+const METALS_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:-6.74, vol:15.58, mdd:-123.68, ir:-0.433},
+    {name:"Carry (F1-F3)", ret:-1.21, vol:11.51, mdd:-85.86, ir:-0.105},
+    {name:"Carry (F1-F13)", ret:-0.46, vol:11.78, mdd:-60.80, ir:-0.039},
+    {name:"CarryMom (F1-F3)", ret:-1.46, vol:12.43, mdd:-107.78, ir:-0.117},
+    {name:"CarryMom (F1-F13)", ret:-0.69, vol:12.48, mdd:-70.47, ir:-0.056},
+    {name:"Value", ret:6.26, vol:10.98, mdd:-30.55, ir:0.571},
+    {name:"EW PORT", ret:-0.72, vol:6.89, mdd:-46.09, ir:-0.104},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:-10.74, vol:17.57, mdd:-74.42, ir:-0.611},
+    {name:"Carry (F1-F3)", ret:9.50, vol:12.62, mdd:-23.22, ir:0.753},
+    {name:"Carry (F1-F13)", ret:8.08, vol:14.15, mdd:-21.08, ir:0.571},
+    {name:"CarryMom (F1-F3)", ret:10.08, vol:13.12, mdd:-26.35, ir:0.769},
+    {name:"CarryMom (F1-F13)", ret:6.85, vol:12.88, mdd:-32.69, ir:0.532},
+    {name:"Value", ret:5.93, vol:10.65, mdd:-26.05, ir:0.557},
+    {name:"EW PORT", ret:4.95, vol:7.69, mdd:-15.12, ir:0.644},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:-8.47, vol:13.56, mdd:-40.18, ir:-0.624},
+    {name:"Carry (F1-F3)", ret:-8.76, vol:10.45, mdd:-49.47, ir:-0.839},
+    {name:"Carry (F1-F13)", ret:-10.77, vol:7.91, mdd:-44.69, ir:-1.361},
+    {name:"CarryMom (F1-F3)", ret:-8.74, vol:11.85, mdd:-53.34, ir:-0.738},
+    {name:"CarryMom (F1-F13)", ret:-7.74, vol:11.92, mdd:-43.59, ir:-0.649},
+    {name:"Value", ret:7.46, vol:10.77, mdd:-13.00, ir:0.693},
+    {name:"EW PORT", ret:-6.17, vol:6.40, mdd:-28.86, ir:-0.963},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:12.62, vol:15.50, mdd:-15.93, ir:0.814},
+    {name:"Carry (F1-F3)", ret:-6.50, vol:10.74, mdd:-28.55, ir:-0.605},
+    {name:"Carry (F1-F13)", ret:-0.03, vol:12.22, mdd:-25.45, ir:-0.002},
+    {name:"CarryMom (F1-F3)", ret:-3.59, vol:11.72, mdd:-18.83, ir:-0.307},
+    {name:"CarryMom (F1-F13)", ret:5.74, vol:12.64, mdd:-12.03, ir:0.454},
+    {name:"Value", ret:-6.79, vol:12.97, mdd:-23.57, ir:-0.523},
+    {name:"EW PORT", ret:0.24, vol:5.83, mdd:-10.25, ir:0.041},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:-9.41, vol:14.90, mdd:-76.69, ir:-0.631},
+    {name:"Carry (F1-F3)", ret:-4.02, vol:11.44, mdd:-41.76, ir:-0.352},
+    {name:"Carry (F1-F13)", ret:-0.96, vol:11.53, mdd:-29.53, ir:-0.083},
+    {name:"CarryMom (F1-F3)", ret:-6.85, vol:12.44, mdd:-48.50, ir:-0.550},
+    {name:"CarryMom (F1-F13)", ret:-5.69, vol:12.42, mdd:-54.30, ir:-0.458},
+    {name:"Value", ret:11.40, vol:10.53, mdd:-17.51, ir:1.083},
+    {name:"EW PORT", ret:-2.59, vol:6.81, mdd:-29.15, ir:-0.380},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:13.75, vol:14.33, mdd:-5.56, ir:0.959},
+    {name:"Carry (F1-F3)", ret:-4.49, vol:11.40, mdd:-7.52, ir:-0.394},
+    {name:"Carry (F1-F13)", ret:-6.26, vol:10.31, mdd:-7.06, ir:-0.608},
+    {name:"CarryMom (F1-F3)", ret:26.73, vol:11.40, mdd:-3.89, ir:2.344},
+    {name:"CarryMom (F1-F13)", ret:11.59, vol:10.37, mdd:-5.28, ir:1.117},
+    {name:"Value", ret:-5.43, vol:13.32, mdd:-10.02, ir:-0.407},
+    {name:"EW PORT", ret:5.98, vol:5.80, mdd:-3.09, ir:1.031},
+  ]),
+};
+
+// Precious Metals: CHANGED -- Carry/CarryMom tenor is F1-F3, not F1-F2.
+// Regenerated 2026-08-03 via `python research/run_regime_table.py precious
+// --window-grid` with cfg.CARRY_TENOR_PAIRS overridden to [("F1","F3")].
+// research/configs/precious.py itself is untouched.
+const PM_COLUMNS = METALS_COLUMNS;
+const PM_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:-7.02, vol:18.31, mdd:-150.10, ir:-0.383},
+    {name:"Carry (F1-F3)", ret:1.36, vol:13.42, mdd:-81.05, ir:0.101},
+    {name:"CarryMom (F1-F3)", ret:-0.83, vol:14.26, mdd:-92.09, ir:-0.058},
+    {name:"Value", ret:1.80, vol:16.54, mdd:-56.36, ir:0.109},
+    {name:"EW PORT", ret:-1.17, vol:7.89, mdd:-60.30, ir:-0.149},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:-5.77, vol:15.69, mdd:-48.99, ir:-0.367},
+    {name:"Carry (F1-F3)", ret:10.75, vol:13.04, mdd:-17.44, ir:0.824},
+    {name:"CarryMom (F1-F3)", ret:5.36, vol:11.69, mdd:-23.38, ir:0.458},
+    {name:"Value", ret:1.39, vol:15.66, mdd:-33.22, ir:0.089},
+    {name:"EW PORT", ret:2.93, vol:8.89, mdd:-11.67, ir:0.330},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:-2.34, vol:11.33, mdd:-37.87, ir:-0.207},
+    {name:"Carry (F1-F3)", ret:1.94, vol:9.95, mdd:-20.27, ir:0.195},
+    {name:"CarryMom (F1-F3)", ret:2.21, vol:9.18, mdd:-17.69, ir:0.241},
+    {name:"Value", ret:0.65, vol:9.43, mdd:-18.76, ir:0.069},
+    {name:"EW PORT", ret:0.61, vol:4.45, mdd:-7.38, ir:0.138},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:-15.58, vol:20.38, mdd:-42.56, ir:-0.764},
+    {name:"Carry (F1-F3)", ret:-12.70, vol:12.42, mdd:-33.61, ir:-1.023},
+    {name:"CarryMom (F1-F3)", ret:-3.48, vol:19.33, mdd:-36.99, ir:-0.180},
+    {name:"Value", ret:4.20, vol:18.72, mdd:-29.11, ir:0.224},
+    {name:"EW PORT", ret:-6.89, vol:7.30, mdd:-17.10, ir:-0.943},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:-8.76, vol:24.15, mdd:-85.48, ir:-0.363},
+    {name:"Carry (F1-F3)", ret:-3.32, vol:16.57, mdd:-64.93, ir:-0.201},
+    {name:"CarryMom (F1-F3)", ret:-9.27, vol:17.53, mdd:-75.94, ir:-0.529},
+    {name:"Value", ret:2.20, vol:20.87, mdd:-56.36, ir:0.105},
+    {name:"EW PORT", ret:-4.79, vol:9.22, mdd:-45.94, ir:-0.519},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:9.23, vol:45.46, mdd:-37.08, ir:0.203},
+    {name:"Carry (F1-F3)", ret:47.01, vol:19.73, mdd:-5.69, ir:2.383},
+    {name:"CarryMom (F1-F3)", ret:44.71, vol:33.57, mdd:-19.33, ir:1.332},
+    {name:"Value", ret:34.80, vol:44.98, mdd:-24.07, ir:0.774},
+    {name:"EW PORT", ret:33.94, vol:15.30, mdd:-5.51, ir:2.218},
+  ]),
+};
+
+// Energy: CHANGED -- long Carry/CarryMom tenor is F1-F13, not F1-F12.
+// Regenerated 2026-08-03 via `python research/run_regime_table.py energy --window-grid`
+// with cfg.PRODUCTS filtered in-process to the 5-product set (WTI/Brent/RBOB/HeatingOil/
+// NatGas, same as the F3 dashboard) and cfg.CARRY_TENOR_PAIRS overridden to
+// [("F1","F3"), ("F1","F13")]. research/configs/energy.py itself is untouched.
+const ENERGY_COLUMNS = METALS_COLUMNS;
+const ENERGY_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:12.16, vol:28.29, mdd:-85.85, ir:0.430},
+    {name:"Carry (F1-F3)", ret:2.94, vol:22.41, mdd:-87.53, ir:0.131},
+    {name:"Carry (F1-F13)", ret:8.19, vol:24.99, mdd:-66.34, ir:0.328},
+    {name:"CarryMom (F1-F3)", ret:7.68, vol:22.48, mdd:-55.60, ir:0.342},
+    {name:"CarryMom (F1-F13)", ret:16.14, vol:25.52, mdd:-52.63, ir:0.632},
+    {name:"Value", ret:-2.16, vol:27.40, mdd:-129.97, ir:-0.079},
+    {name:"EW PORT", ret:7.49, vol:13.84, mdd:-24.00, ir:0.541},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:13.17, vol:20.64, mdd:-37.28, ir:0.638},
+    {name:"Carry (F1-F3)", ret:5.47, vol:12.55, mdd:-22.81, ir:0.436},
+    {name:"Carry (F1-F13)", ret:8.06, vol:17.14, mdd:-26.64, ir:0.470},
+    {name:"CarryMom (F1-F3)", ret:5.82, vol:14.72, mdd:-38.35, ir:0.395},
+    {name:"CarryMom (F1-F13)", ret:8.52, vol:16.74, mdd:-23.94, ir:0.509},
+    {name:"Value", ret:-17.03, vol:21.20, mdd:-93.60, ir:-0.804},
+    {name:"EW PORT", ret:4.00, vol:8.69, mdd:-17.33, ir:0.460},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:-4.62, vol:23.45, mdd:-57.07, ir:-0.197},
+    {name:"Carry (F1-F3)", ret:2.75, vol:16.32, mdd:-24.49, ir:0.169},
+    {name:"Carry (F1-F13)", ret:0.63, vol:19.85, mdd:-39.26, ir:0.032},
+    {name:"CarryMom (F1-F3)", ret:7.87, vol:15.16, mdd:-16.64, ir:0.519},
+    {name:"CarryMom (F1-F13)", ret:3.25, vol:19.42, mdd:-32.53, ir:0.168},
+    {name:"Value", ret:12.89, vol:21.43, mdd:-25.26, ir:0.601},
+    {name:"EW PORT", ret:3.80, vol:10.28, mdd:-12.83, ir:0.369},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:58.80, vol:44.52, mdd:-38.39, ir:1.321},
+    {name:"Carry (F1-F3)", ret:8.85, vol:39.74, mdd:-57.83, ir:0.223},
+    {name:"Carry (F1-F13)", ret:28.90, vol:42.87, mdd:-66.34, ir:0.674},
+    {name:"CarryMom (F1-F3)", ret:-3.87, vol:38.52, mdd:-46.00, ir:-0.100},
+    {name:"CarryMom (F1-F13)", ret:60.35, vol:41.17, mdd:-20.99, ir:1.466},
+    {name:"Value", ret:-12.27, vol:44.52, mdd:-91.46, ir:-0.276},
+    {name:"EW PORT", ret:23.46, vol:23.11, mdd:-16.60, ir:1.015},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:5.11, vol:30.16, mdd:-85.85, ir:0.169},
+    {name:"Carry (F1-F3)", ret:-2.38, vol:24.83, mdd:-66.98, ir:-0.096},
+    {name:"Carry (F1-F13)", ret:5.82, vol:25.66, mdd:-55.16, ir:0.227},
+    {name:"CarryMom (F1-F3)", ret:14.77, vol:25.23, mdd:-35.91, ir:0.585},
+    {name:"CarryMom (F1-F13)", ret:16.36, vol:28.99, mdd:-52.63, ir:0.564},
+    {name:"Value", ret:5.55, vol:28.23, mdd:-67.89, ir:0.197},
+    {name:"EW PORT", ret:7.54, vol:15.62, mdd:-24.00, ir:0.482},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:89.28, vol:46.88, mdd:-16.80, ir:1.904},
+    {name:"Carry (F1-F3)", ret:38.84, vol:42.72, mdd:-18.70, ir:0.909},
+    {name:"Carry (F1-F13)", ret:42.66, vol:46.55, mdd:-22.60, ir:0.916},
+    {name:"CarryMom (F1-F3)", ret:86.10, vol:38.12, mdd:-10.53, ir:2.259},
+    {name:"CarryMom (F1-F13)", ret:79.83, vol:46.28, mdd:-10.53, ir:1.725},
+    {name:"Value", ret:32.00, vol:39.24, mdd:-26.21, ir:0.816},
+    {name:"EW PORT", ret:61.45, vol:27.33, mdd:-7.19, ir:2.249},
+  ]),
+};
+
+// NGL: CHANGED -- Ethylene and Propylene removed (4-product set: Ethane,
+// Propane, Butane, Isobutane), AND Carry/CarryMom reported as two separate
+// tenor-pair rows (F2-F4 short, F2-F14 long, new), replacing the locked
+// single F4-F15 tenor -- same Metals/Energy pattern (two disclosed tenor
+// rows, not a cross-tenor blend). Regenerated 2026-08-03 via
+// `python research/run_regime_table.py ngl --window-grid` with cfg.PRODUCTS
+// filtered in-process and cfg.CARRY_TENOR_PAIRS overridden to
+// [("F2","F4"), ("F2","F14")]. Each Carry (F2-Fn) row is the standard
+// V1(Level)+V2(Z-score) EW composite (carry_v1v2_composite_position) for
+// that tenor; each CarryMom (F2-Fn) row is the standard 20-day
+// rate-of-change signal (carry_v4_position) for that tenor. Momentum and
+// Value are unchanged. research/configs/ngl.py itself is untouched.
+const NGL_COLUMNS = METALS_COLUMNS;
+const NGL_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:22.60, vol:28.09, mdd:-90.27, ir:0.804},
+    {name:"Carry (F2-F4)", ret:6.76, vol:22.70, mdd:-84.06, ir:0.298},
+    {name:"Carry (F2-F14)", ret:13.89, vol:23.59, mdd:-69.71, ir:0.589},
+    {name:"CarryMom (F2-F4)", ret:2.82, vol:25.71, mdd:-78.40, ir:0.110},
+    {name:"CarryMom (F2-F14)", ret:18.43, vol:27.06, mdd:-78.71, ir:0.681},
+    {name:"Value", ret:6.84, vol:26.85, mdd:-124.60, ir:0.255},
+    {name:"EW PORT", ret:11.89, vol:14.09, mdd:-27.92, ir:0.844},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:17.24, vol:24.41, mdd:-30.78, ir:0.706},
+    {name:"Carry (F2-F4)", ret:18.96, vol:20.83, mdd:-25.57, ir:0.911},
+    {name:"Carry (F2-F14)", ret:20.81, vol:21.84, mdd:-21.19, ir:0.953},
+    {name:"CarryMom (F2-F4)", ret:-0.21, vol:21.80, mdd:-45.19, ir:-0.009},
+    {name:"CarryMom (F2-F14)", ret:16.09, vol:22.00, mdd:-23.72, ir:0.732},
+    {name:"Value", ret:-19.01, vol:22.31, mdd:-111.14, ir:-0.852},
+    {name:"EW PORT", ret:8.98, vol:11.86, mdd:-15.64, ir:0.757},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:36.29, vol:28.26, mdd:-32.40, ir:1.284},
+    {name:"Carry (F2-F4)", ret:7.79, vol:23.09, mdd:-60.96, ir:0.338},
+    {name:"Carry (F2-F14)", ret:19.40, vol:21.89, mdd:-33.20, ir:0.886},
+    {name:"CarryMom (F2-F4)", ret:2.71, vol:27.14, mdd:-56.91, ir:0.100},
+    {name:"CarryMom (F2-F14)", ret:22.28, vol:27.84, mdd:-25.73, ir:0.800},
+    {name:"Value", ret:23.57, vol:26.89, mdd:-44.97, ir:0.877},
+    {name:"EW PORT", ret:18.67, vol:15.14, mdd:-20.67, ir:1.233},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:54.27, vol:39.35, mdd:-62.15, ir:1.379},
+    {name:"Carry (F2-F4)", ret:-27.28, vol:29.69, mdd:-73.36, ir:-0.919},
+    {name:"Carry (F2-F14)", ret:39.19, vol:35.55, mdd:-63.45, ir:1.103},
+    {name:"CarryMom (F2-F4)", ret:-4.74, vol:34.62, mdd:-78.40, ir:-0.137},
+    {name:"CarryMom (F2-F14)", ret:36.62, vol:38.93, mdd:-51.98, ir:0.941},
+    {name:"Value", ret:-1.20, vol:41.93, mdd:-82.66, ir:-0.029},
+    {name:"EW PORT", ret:16.14, vol:18.15, mdd:-27.92, ir:0.889},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:2.17, vol:25.58, mdd:-90.27, ir:0.085},
+    {name:"Carry (F2-F4)", ret:7.46, vol:20.63, mdd:-41.29, ir:0.362},
+    {name:"Carry (F2-F14)", ret:-10.09, vol:19.88, mdd:-55.56, ir:-0.508},
+    {name:"CarryMom (F2-F4)", ret:9.70, vol:23.73, mdd:-39.19, ir:0.409},
+    {name:"CarryMom (F2-F14)", ret:9.44, vol:24.93, mdd:-78.71, ir:0.379},
+    {name:"Value", ret:24.36, vol:22.39, mdd:-39.02, ir:1.088},
+    {name:"EW PORT", ret:7.17, vol:13.31, mdd:-27.89, ir:0.539},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:22.29, vol:33.82, mdd:-23.08, ir:0.659},
+    {name:"Carry (F2-F4)", ret:-15.75, vol:24.21, mdd:-13.97, ir:-0.651},
+    {name:"Carry (F2-F14)", ret:-19.68, vol:35.80, mdd:-24.04, ir:-0.550},
+    {name:"CarryMom (F2-F4)", ret:25.65, vol:34.61, mdd:-21.57, ir:0.741},
+    {name:"CarryMom (F2-F14)", ret:51.38, vol:35.58, mdd:-21.04, ir:1.444},
+    {name:"Value", ret:66.45, vol:27.17, mdd:-9.28, ir:2.446},
+    {name:"EW PORT", ret:21.72, vol:21.96, mdd:-9.68, ir:0.989},
+  ]),
+};
+
+const WINDOW_GRIDS = {
+  metals: METALS_WINDOWS, pm: PM_WINDOWS, energy: ENERGY_WINDOWS, ngl: NGL_WINDOWS,
+};
+
+function regimeRowsFromWindows(windowGrid) {
+  return windowGrid.full.map(fr => {
+    const row = {name: fr.name, bold: !!fr.bold};
+    METALS_COLUMNS.forEach(c => {
+      const cell = windowGrid[c.key].find(r => r.name === fr.name);
+      row[c.key] = cell ? cell.ir : null;
+    });
+    return row;
+  });
+}
+
+function irColor(v) {
+  if (v === null || v === undefined || isNaN(v)) return null;
+  const a = Math.min(Math.abs(v), 2.2) / 2.2;
+  if (v >= 0) {
+    if (a < 0.15) return "var(--neutral)";
+    if (a < 0.5) return "var(--pos-weak)";
+    return "var(--pos-strong)";
+  } else {
+    if (a < 0.15) return "var(--neutral)";
+    if (a < 0.5) return "var(--neg-weak)";
+    return "var(--neg-strong)";
+  }
+}
+function irTextColor(v) {
+  const a = Math.min(Math.abs(v), 2.2) / 2.2;
+  return a < 0.5 ? "var(--text-primary)" : "#ffffff";
+}
+
+function renderTable(tableEl, columns, rows) {
+  let thead = "<thead><tr><th>Strategy</th>" + columns.map(c =>
+    `<th>${c.label}${c.years ? `<br><span style="font-weight:400;color:var(--text-muted);font-size:10.5px">${c.years}</span>` : ""}</th>`
+  ).join("") + "</tr></thead>";
+  let tbody = "<tbody>" + rows.map(row => {
+    const cells = columns.map(c => {
+      const v = row[c.key];
+      if (v === null || v === undefined) return `<td>n/a</td>`;
+      const bg = irColor(v);
+      const fg = irTextColor(v);
+      return `<td><span class="ir-cell" style="background:${bg};color:${fg}">${v.toFixed(3)}</span></td>`;
+    }).join("");
+    return `<tr style="${row.bold ? 'font-weight:700' : ''}"><td>${row.name}</td>${cells}</tr>`;
+  }).join("") + "</tbody>";
+  tableEl.innerHTML = thead + tbody;
+}
+
+function renderFullTable(tableEl, rows) {
+  let thead = "<thead><tr><th>Strategy</th><th>Return (annualized)</th><th>Vol (annualized)</th><th>Max Drawdown</th><th>IR</th></tr></thead>";
+  let tbody = "<tbody>" + rows.map(row => {
+    const hasData = row.ir !== null && row.ir !== undefined && !isNaN(row.ir);
+    const irCell = hasData
+      ? `<span class="ir-cell" style="background:${irColor(row.ir)};color:${irTextColor(row.ir)}">${row.ir.toFixed(3)}</span>`
+      : "n/a";
+    return `<tr style="${row.bold ? 'font-weight:700' : ''}"><td>${row.name}</td>` +
+           `<td>${hasData ? row.ret.toFixed(2) + "%" : "n/a"}</td>` +
+           `<td>${hasData ? row.vol.toFixed(2) + "%" : "n/a"}</td>` +
+           `<td>${hasData ? row.mdd.toFixed(2) + "%" : "n/a"}</td>` +
+           `<td>${irCell}</td></tr>`;
+  }).join("") + "</tbody>";
+  tableEl.innerHTML = thead + tbody;
+}
+
+function populateWindowSelect(selectEl) {
+  selectEl.innerHTML = METALS_COLUMNS.map(c => `<option value="${c.key}">${c.label} (${c.years})</option>`).join("");
+}
+
+function wireWindowSelect(selectId, tableId, gridKey) {
+  const selectEl = document.getElementById(selectId);
+  const tableEl = document.getElementById(tableId);
+  const grid = WINDOW_GRIDS[gridKey];
+  populateWindowSelect(selectEl);
+  const render = () => renderFullTable(tableEl, grid[selectEl.value]);
+  selectEl.addEventListener("change", render);
+  render();
+}
+
+function renderKeyTable(tableEl, rows) {
+  let thead = "<thead><tr><th>Code</th><th>Regime</th><th>Years</th></tr></thead>";
+  let tbody = "<tbody>" + rows.map(row =>
+    `<tr><td>${row.code}</td><td>${row.name}</td><td>${row.years}</td></tr>`
+  ).join("") + "</tbody>";
+  tableEl.innerHTML = thead + tbody;
+}
+
+renderKeyTable(document.getElementById("regime-key-table"), REGIME_KEY_ROWS);
+
+renderTable(document.getElementById("metals-table"), METALS_COLUMNS, regimeRowsFromWindows(METALS_WINDOWS));
+wireWindowSelect("metals-window-select", "metals-full-table", "metals");
+
+renderTable(document.getElementById("energy-table"), ENERGY_COLUMNS, regimeRowsFromWindows(ENERGY_WINDOWS));
+wireWindowSelect("energy-window-select", "energy-full-table", "energy");
+
+renderTable(document.getElementById("pm-table"), PM_COLUMNS, regimeRowsFromWindows(PM_WINDOWS));
+wireWindowSelect("pm-window-select", "pm-full-table", "pm");
+
+renderTable(document.getElementById("ngl-table"), NGL_COLUMNS, regimeRowsFromWindows(NGL_WINDOWS));
+wireWindowSelect("ngl-window-select", "ngl-full-table", "ngl");
+
+document.getElementById("last-updated").textContent = "Last updated " + LAST_UPDATED;
+
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.setAttribute("aria-selected", "false"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.setAttribute("aria-selected", "true");
+    document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+  });
+});
+</script>
+</body>
+</html>

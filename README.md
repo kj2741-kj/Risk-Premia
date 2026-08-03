@@ -20,17 +20,26 @@ Two layers:
 | `run_regime_table.py` | Canonical full-sample + regime-conditional IR table builder — run this, not ad hoc scripts, for reportable numbers. |
 | `generate_tradebooks_logret.py` | Formula-driven Excel tradebooks (one workbook per strategy, one sheet per product) for auditing the engine. Asset class selected via `TRADEBOOK_ASSET_CLASS` env var. Outputs are gitignored (large, regeneratable) — see below. |
 
-## Status (as of 2026-07-24)
+## Status (as of 2026-08-03)
 
-All 4 asset classes have a locked ex-ante strategy set and a full-sample + regime-conditional result:
+**IMPORTANT for anyone (human or AI agent) reading this repo: the engine's `configs/*.py` PRODUCTS lists and what the LIVE DASHBOARDS actually show/compute are deliberately different as of 2026-08-03.** See "Dashboard-only product exclusions" below before assuming a product that appears in a config file is also in the dashboard/Portfolio tab, or vice versa.
 
-- **Metals** (Copper/Aluminium/Lead/Zinc): Momentum, Carry V1+V2 (F1-F3 and F1-F13), Carry-Momentum (V3), Value. FDR (q=0.10) on the 49-cell grid: **0 survivors**.
-- **Precious Metals** (Gold/Silver/Copper-COMEX/Platinum/Palladium): same strategy set, Carry tenor corrected to **F1-F2 only** (real-volume liquidity check killed F1-F13 for all 5 products).
-- **Energy** (WTI/Brent/RBOB/HeatingOil/NatGas/SingaporeGasoil/FuelOil): Carry F1-F3 + F1-F12. WTI's 2020-04-20 negative print patched (single-cell impute).
-- **NGL** (Ethane/Propane/Butane/Isobutane/Ethylene/Propylene): Carry F4-F15 (Bogorad convention).
-- **StatArb** (Energy/NGL only — Metals/Precious tested and genuinely null): 8 cross-commodity spreads. FDR (q=0.10) on 64 valid cells: **2 survivors** — EW StatArb(8) full-sample (p=0.00052, the standout) and one isolated regime cell. **This is the first FDR-robust result in the project.**
+All 4 asset classes have a locked ex-ante strategy set and a full-sample + regime-conditional result. Value's anchor contract is **F3** everywhere (changed from F8 2026-08-03, applied uniformly):
 
-Consolidated view: `Analysis/Research_Dashboard.html`.
+- **Metals** (Copper/Aluminium/Lead/Zinc): Momentum, Carry V1+V2 (F1-F3 and F1-F13), Carry-Momentum (V3), Value (F3). Unchanged since 2026-07-24. FDR (q=0.10) on the 49-cell grid: **0 survivors**.
+- **Precious Metals** (Gold/Silver/Copper-COMEX/Platinum/Palladium): Carry tenor is **F1-F3** (changed 2026-08-03 from F1-F2 — user's explicit decision, overriding a real-volume liquidity finding that Platinum/Palladium F3 liquidity is weak, 87.0%/68.5% days traded; see `configs/precious.py`'s docstring for the full caveat).
+- **Energy** (engine PRODUCTS: WTI/Brent/RBOB/HeatingOil/NatGas/SingaporeGasoil/FuelOil — **dashboard shows only the first 5**, see below): Carry F1-F3 + **F1-F13** (changed 2026-08-03 from F1-F12, to match Metals). Fuel Oil has no F13 column at all and is still in this file's PRODUCTS list, so its Carry(F1-F13)/CarryMom(F1-F13) leg is silently flat/zero in `run_regime_table.py`'s reports (no crash, just a disclosed dilution) — irrelevant to the dashboard since Fuel Oil isn't shown there. WTI's 2020-04-20 negative print patched (single-cell impute).
+- **NGL** (engine PRODUCTS: Ethane/Propane/Butane/Isobutane/Ethylene/Propylene — **dashboard shows only the first 4**, see below): Carry is now **two tiers** as of 2026-08-03 — F2-F4 (short, new) and F2-F14 (changed from Bogorad's original F4-F15, for a 12- rather than 11-month span). Neither pair has been re-verified for liquidity/seasonality since; see `configs/ngl.py`'s docstring for the specific caveat (F2 reintroduces near-tenor heating-season seasonality that F4 was originally chosen to avoid).
+- **StatArb** (Energy/NGL only — Metals/Precious tested and genuinely null): 8 cross-commodity spreads, none of which reference Singapore Gasoil, Fuel Oil, Ethylene, or Propylene. FDR (q=0.10) on 64 valid cells: **2 survivors** — EW StatArb(8) full-sample (p=0.00052, the standout) and one isolated regime cell. **This is the first FDR-robust result in the project.** Not yet rerun since the 2026-08-03 tenor changes above (StatArb's own tenors are unaffected, but hasn't been re-verified).
+
+### Dashboard-only product exclusions (2026-08-03) — read this before touching products lists
+
+- **Energy dashboard** (`energy_dashboard/app.py`, all tabs including Portfolio) excludes **Singapore Gasoil and Fuel Oil**. `webapp/` (the React/FastAPI rebuild) excludes them too, via `config_registry.py`'s products dict and `services/portfolio.py`'s `EXCLUDED_PRODUCTS["energy"]`.
+- **NGL dashboard** (`ngl_dashboard/app.py`, all tabs including Portfolio) excludes **Ethylene and Propylene**. `webapp/` excludes them too, the same way (`EXCLUDED_PRODUCTS["ngl"]`).
+- In BOTH cases, `configs/energy.py`'s and `configs/ngl.py`'s own `PRODUCTS` lists are **untouched** — still 7 and 6 respectively. This is a dashboard/UI-layer filter only (an `excluded_products` param threaded through `dashboard_portfolio_tab.py`, and the webapp's `EXCLUDED_PRODUCTS` dict), not an engine change. `run_regime_table.py` and any other script that imports `configs/{energy,ngl}.py` directly still sees and computes on the full product list.
+- **Why this matters if you're extending this codebase**: there is currently no cross-asset-class ("Diversified Risk Premia") portfolio built yet — combining all 4 asset classes' EW Portfolios into one book is still discussion-only. When that gets built, it MUST reuse these same per-asset-class exclusion lists (not read `configs/*.py`'s raw `PRODUCTS`), or these 4 products will silently reappear in the cross-asset book.
+
+Consolidated view: `Analysis/Research_Dashboard_F3.html` (supersedes the older `Research_Dashboard.html`, which is stale/pre-F3 and kept only for historical comparison).
 
 ## In progress / pick up here
 

@@ -7,23 +7,23 @@ research/configs/metals.py / precious.py / energy.py's structure.
 
 Signal form and most parameters are identical to the other asset classes:
   - Momentum: 3-way MA-crossover composite, (1,20)/(5,60)/(20,250).
-  - Carry: V1(Level)+V2(Z-score) composite, SINGLE tenor pair F2-F14 (per
-    user's explicit choice: NGL keeps Bogorad's own convention rather than
-    the Metals-style two-tier structure used for Energy). CHANGED 2026-08-03
-    from F4-F15 to F2-F14 (user's decision, to get a clean 12-month span --
-    F4-F15 was 11 months) -- NOT yet re-verified for liquidity/seasonality at
-    this new pair. In particular, ngl_dashboard/app.py documents that NGL's
-    (F1-F2)/F1 near-tenor roll yield is dominated by front-of-curve
-    heating-season seasonality, not genuine term structure, and was
-    strongly negative-Sharpe for every NGL ticker -- that finding was the
-    original reason F4 (not F1/F2) was chosen as the near leg. F2-F14 moves
-    the near leg back into that same front-of-curve region; this has been
-    flagged to the user but not blocked on, per their explicit instruction.
-    The old F4-F15 quote-availability check (all 6 products well-quoted
-    through F15, worst case Propylene 79.6%) has NOT been redone for F2/F14
-    specifically -- treat this pair as provisional pending that re-check.
-  - Carry-Momentum: same horizon=20, same F2-F14 tenor, kept separate from
-    the Carry composite.
+  - Carry: V1(Level)+V2(Z-score) composite, TWO tenor pairs as of 2026-08-03
+    -- F2-F4 (short-term, added 2026-08-03 for consistency with Metals'/
+    Energy's two-tier structure) and F2-F14 (changed from F4-F15 the same
+    day, for a clean 12-month span -- F4-F15 was 11 months). Neither pair
+    has been re-verified for liquidity/seasonality since these changes.
+    In particular, ngl_dashboard/app.py documents that NGL's (F1-F2)/F1
+    near-tenor roll yield is dominated by front-of-curve heating-season
+    seasonality, not genuine term structure, and was strongly negative-
+    Sharpe for every NGL ticker -- that finding was the original reason F4
+    (not F1/F2) was chosen as the near leg. Both F2-F4 and F2-F14 put F2
+    back in that same front-of-curve region; this has been flagged to the
+    user but not blocked on, per their explicit instructions. The old
+    F4-F15 quote-availability check (all 6 products well-quoted through
+    F15, worst case Propylene 79.6%) has NOT been redone for either new
+    pair -- treat both as provisional pending that re-check.
+  - Carry-Momentum: same horizon=20, same two tenor pairs (F2-F4, F2-F14),
+    kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes, overriding this file's own
     previously-tuned dashboard default -- see ngl_dashboard/app.py history) /
@@ -85,10 +85,12 @@ ANALYSIS_START = "2009-08-01"  # NGL's own actual data start (per user's earlier
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-# Single tenor pair, changed 2026-08-03 from Bogorad's own F4-F15 convention
-# to F2-F14 (user's decision, for a 12-month rather than 11-month span) --
-# see module docstring for the not-yet-revisited liquidity/seasonality caveat.
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F2", "F14")]
+# Two tenor pairs as of 2026-08-03 -- F2-F4 (short-term, added for
+# consistency with Metals'/Energy's two-tier structure) and F2-F14 (changed
+# from Bogorad's own F4-F15 the same day, for a 12- rather than 11-month
+# span). See module docstring for the not-yet-revisited liquidity/
+# seasonality caveat on both.
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F2", "F4"), ("F2", "F14")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 

@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Risk Premia Correlation Matrices</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --pos-strong:     #104281;
+    --pos-mid:        #3987e5;
+    --pos-weak:       #9ec5f4;
+    --neg-weak:       #eda19f;
+    --neg-mid:        #e34948;
+    --neg-strong:     #8a1f1e;
+    --neutral:        #f0efec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+      --pos-strong:     #86b6ef;
+      --pos-mid:        #3987e5;
+      --pos-weak:       #184f95;
+      --neg-weak:       #a34e4b;
+      --neg-mid:        #e66767;
+      --neg-strong:     #f3c9c8;
+      --neutral:        #383835;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --border:         rgba(255,255,255,0.10);
+    --pos-strong:     #86b6ef;
+    --pos-mid:        #3987e5;
+    --pos-weak:       #184f95;
+    --neg-weak:       #a34e4b;
+    --neg-mid:        #e66767;
+    --neg-strong:     #f3c9c8;
+    --neutral:        #383835;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --surface-1: #fcfcfb; --page: #f9f9f7; --text-primary: #0b0b0b;
+    --text-secondary: #52514e; --text-muted: #898781; --grid: #e1e0d9;
+    --border: rgba(11,11,11,0.10); --pos-strong: #104281; --pos-mid: #3987e5;
+    --pos-weak: #9ec5f4; --neg-weak: #eda19f; --neg-mid: #e34948;
+    --neg-strong: #8a1f1e; --neutral: #f0efec;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { background: var(--page); }
+  body {
+    margin: 0; color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 10px; }
+  h3 { font-size: 14px; margin: 20px 0 8px; color: var(--text-secondary); }
+  .subtitle { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+  .meta { color: var(--text-muted); font-size: 12px; }
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px 20px; margin-bottom: 18px;
+  }
+  .note { color: var(--text-secondary); font-size: 12.5px; margin: 6px 0; }
+  code { background: var(--neutral); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .section-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px,1fr)); gap: 16px; margin-top: 10px; }
+  .matrix-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .matrix-card h4 { margin: 0 0 8px; font-size: 13px; }
+  table.corr { border-collapse: collapse; width: 100%; font-size: 11px; table-layout: fixed; }
+  table.corr th, table.corr td {
+    padding: 5px 4px; text-align: center; border: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums;
+  }
+  table.corr th {
+    color: var(--text-secondary); font-weight: 600; font-size: 10px;
+    background: var(--surface-1);
+  }
+  table.corr td:first-child, table.corr th:first-child {
+    text-align: left; font-weight: 600; color: var(--text-primary);
+    background: var(--surface-1); font-size: 10px; padding-left: 6px;
+  }
+  .corr-cell { display: block; padding: 3px 2px; border-radius: 3px; }
+  .legend-row { display:flex; gap:16px; align-items:center; font-size:12px; color:var(--text-secondary); margin-top:10px; flex-wrap:wrap; }
+  .legend-swatch { display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:5px; }
+  .tabs { display: flex; gap: 6px; margin: 18px 0 16px; flex-wrap: wrap; }
+  .tab-btn {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-secondary);
+  }
+  .tab-btn[aria-selected="true"] {
+    background: var(--pos-mid); color: #ffffff; border-color: var(--pos-mid);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Risk Premia Correlation Matrices</h1>
+  <div class="subtitle">Companion to Research_Dashboard_CombinedCarry.html. Daily NET log-return correlations, 2011-01-01 to 2026-06-30.
+    <span class="meta" id="last-updated"></span>
+  </div>
+
+  <div class="card">
+    <p class="note"><strong>Methodology:</strong> all correlations are Pearson, computed on daily NET log-return
+      series (the same 6 series -- Momentum, Carry, CarryMom, Value, EW PORT, Risk Parity -- underlying
+      Research_Dashboard_CombinedCarry.html), sliced to the standardized reporting window (2011-01-01 onward,
+      same as every other dashboard in this project). <strong>Within-asset-class</strong> matrices use each asset
+      class's own trading calendar directly (no gaps, since every strategy series is already reindexed to the
+      common product window and filled to 0 on non-trading days). <strong>Cross-commodity</strong> matrices align
+      the four asset classes on the INTERSECTION of trading dates only (n=3,828 days) -- Metals (LME), Oil/Energy
+      (NYMEX/ICE), Precious Metals (COMEX/NYMEX), and NGL (Argus OTC) trade on different calendars, so an inner
+      join is the only way to compare them fairly rather than silently treating "exchange closed" as "flat that
+      day" (same convention already documented in <code>research/engine.py::combine_returns</code>).</p>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab-btn" role="tab" aria-selected="true" data-tab="within">Within Asset Class (6x6)</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="cross">Cross-Commodity (4x4)</button>
+  </div>
+
+  <div class="tab-panel active" id="panel-within">
+    <div class="card">
+      <h2>Within-Asset-Class: Momentum, Carry, CarryMom, Value, EW PORT, Risk Parity</h2>
+      <p class="note">How correlated are the 4 base strategies and 2 portfolio combinations with EACH OTHER, inside one asset class? High EW/Risk Parity correlation with individual strategies indicates concentration risk (the "portfolio" isn't diversifying much); negative Value correlation with the other three strategies is the diversification benefit Value is supposed to provide.</p>
+      <div class="section-grid" id="within-grid"></div>
+      <div class="legend-row">
+        <span><span class="legend-swatch" style="background:var(--pos-strong)"></span>strong positive (&ge;0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--pos-weak)"></span>weak positive (0.15-0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--neutral)"></span>near zero (&lt;0.15)</span>
+        <span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative (0.15-0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative (&ge;0.5)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-panel" id="panel-cross">
+    <div class="card">
+      <h2>Cross-Commodity: same strategy, across all 4 asset classes</h2>
+      <p class="note">How correlated is (say) Metals Momentum with Energy Momentum, Precious Metals Momentum, and NGL Momentum? High cross-commodity correlation for a given strategy/portfolio row means that row is NOT providing independent diversification across asset classes -- worth knowing before sizing multiple asset classes together at the portfolio level.</p>
+      <div class="section-grid" id="cross-grid"></div>
+      <div class="legend-row">
+        <span><span class="legend-swatch" style="background:var(--pos-strong)"></span>strong positive (&ge;0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--pos-weak)"></span>weak positive (0.15-0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--neutral)"></span>near zero (&lt;0.15)</span>
+        <span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative (0.15-0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative (&ge;0.5)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Key patterns</h2>
+    <p class="note"><strong>Energy and NGL are not independent books.</strong> Their cross-commodity correlation
+      is the highest off-diagonal pair for 5 of 6 strategy types -- Value (0.53), Momentum (0.45), Risk Parity
+      (0.31), EW PORT (0.28), Carry (0.23) -- confirming both trade on shared hydrocarbon-complex drivers
+      (shale/export capacity cycles, the 2022 energy shock). Sizing both asset classes up together should account
+      for this shared exposure, not treat them as two fully independent diversifiers.</p>
+    <p class="note"><strong>Metals and Precious Metals show a smaller but consistent correlation</strong> across
+      every strategy type (~0.30-0.36 for Momentum, Carry, Value, EW PORT, and Risk Parity) -- both being
+      "metals" in a broad sense, this is a real, if modest, shared-factor exposure worth knowing about even
+      though the two complexes have very different fundamental drivers (industrial demand vs. real rates).</p>
+    <p class="note"><strong>CarryMom is the most genuinely diversifying strategy across commodities</strong> --
+      its cross-commodity correlations are the lowest of any row type (mostly under 0.16 in magnitude, several
+      near zero or slightly negative), suggesting term-structure rate-of-change carries little shared information
+      across unrelated commodity complexes, unlike Value and Momentum which both show meaningful cross-commodity
+      correlation.</p>
+    <p class="note"><strong>Within every asset class, Value is the true diversifier</strong> -- it is the only
+      strategy with a negative or near-zero correlation to EW PORT in 3 of 4 asset classes (Metals 0.04, Energy
+      -0.19, NGL -0.02; only Precious Metals breaks the pattern at 0.37), consistent with the mean-reversion vs.
+      trend-following split already visible in the regime tables. Risk Parity is consistently MORE correlated
+      with EW PORT than any individual strategy (0.78-0.96 across all four asset classes) -- expected, since both
+      portfolios are built from the same 4 legs, just weighted differently.</p>
+  </div>
+
+</div>
+
+<script>
+const LAST_UPDATED = "2026-08-03: New companion dashboard. Correlations computed on the same daily net-return series underlying Research_Dashboard_CombinedCarry.html (Energy 5-product, NGL 4-product filters, same tenor choices), sliced to the 2011-2026 reporting window. Standalone analysis file -- does not touch any locked research config.";
+
+const ROW_LABELS = ["Momentum", "Carry", "CarryMom", "Value", "EW PORT", "Risk Parity"];
+const ASSET_ORDER = ["metals", "energy", "precious", "ngl"];
+const ASSET_DISPLAY = {metals: "Metals", energy: "Oil/Energy", precious: "Precious Metals", ngl: "NGL"};
+const WITHIN_TAB = {"metals": [[1.0, 0.256, 0.165, -0.472, 0.594, 0.347], [0.256, 1.0, 0.34, -0.186, 0.697, 0.543], [0.165, 0.34, 1.0, -0.024, 0.683, 0.594], [-0.472, -0.186, -0.024, 1.0, 0.041, 0.406], [0.594, 0.697, 0.683, 0.041, 1.0, 0.895], [0.347, 0.543, 0.594, 0.406, 0.895, 1.0]], "energy": [[1.0, 0.607, 0.557, -0.485, 0.826, 0.431], [0.607, 1.0, 0.454, -0.708, 0.628, 0.236], [0.557, 0.454, 1.0, -0.292, 0.795, 0.532], [-0.485, -0.708, -0.292, 1.0, -0.191, 0.356], [0.826, 0.628, 0.795, -0.191, 1.0, 0.776], [0.431, 0.236, 0.532, 0.356, 0.776, 1.0]], "precious": [[1.0, -0.011, 0.142, -0.395, 0.433, 0.363], [-0.011, 1.0, 0.237, 0.325, 0.697, 0.677], [0.142, 0.237, 1.0, -0.131, 0.567, 0.491], [-0.395, 0.325, -0.131, 1.0, 0.374, 0.465], [0.433, 0.697, 0.567, 0.374, 1.0, 0.965], [0.363, 0.677, 0.491, 0.465, 0.965, 1.0]], "ngl": [[1.0, 0.583, 0.514, -0.444, 0.765, 0.479], [0.583, 1.0, 0.432, -0.509, 0.657, 0.419], [0.514, 0.432, 1.0, -0.173, 0.788, 0.624], [-0.444, -0.509, -0.173, 1.0, -0.022, 0.362], [0.765, 0.657, 0.788, -0.022, 1.0, 0.872], [0.479, 0.419, 0.624, 0.362, 0.872, 1.0]]};
+const CROSS_COMMODITY = {"Momentum": [[1.0, 0.137, 0.36, 0.122], [0.137, 1.0, 0.11, 0.451], [0.36, 0.11, 1.0, 0.095], [0.122, 0.451, 0.095, 1.0]], "Carry": [[1.0, 0.043, 0.302, 0.07], [0.043, 1.0, -0.039, 0.231], [0.302, -0.039, 1.0, 0.001], [0.07, 0.231, 0.001, 1.0]], "CarryMom": [[1.0, -0.019, 0.052, 0.039], [-0.019, 1.0, 0.02, 0.163], [0.052, 0.02, 1.0, -0.028], [0.039, 0.163, -0.028, 1.0]], "Value": [[1.0, 0.196, 0.341, 0.172], [0.196, 1.0, 0.128, 0.534], [0.341, 0.128, 1.0, 0.061], [0.172, 0.534, 0.061, 1.0]], "EW PORT": [[1.0, 0.067, 0.35, 0.057], [0.067, 1.0, 0.079, 0.279], [0.35, 0.079, 1.0, 0.023], [0.057, 0.279, 0.023, 1.0]], "Risk Parity": [[1.0, 0.059, 0.337, 0.069], [0.059, 1.0, 0.069, 0.311], [0.337, 0.069, 1.0, 0.027], [0.069, 0.311, 0.027, 1.0]]};
+
+function corrColor(v) {
+  const a = Math.min(Math.abs(v), 1.0);
+  if (v >= 0) {
+    if (a < 0.15) return "var(--neutral)";
+    if (a < 0.5) return "var(--pos-weak)";
+    return "var(--pos-strong)";
+  } else {
+    if (a < 0.15) return "var(--neutral)";
+    if (a < 0.5) return "var(--neg-weak)";
+    return "var(--neg-strong)";
+  }
+}
+function corrTextColor(v) {
+  const a = Math.min(Math.abs(v), 1.0);
+  return a < 0.5 ? "var(--text-primary)" : "#ffffff";
+}
+
+function renderMatrix(container, title, labels, matrix) {
+  const card = document.createElement("div");
+  card.className = "matrix-card";
+  const h4 = document.createElement("h4");
+  h4.textContent = title;
+  card.appendChild(h4);
+
+  const table = document.createElement("table");
+  table.className = "corr";
+  let thead = "<thead><tr><th></th>" + labels.map(l => `<th>${l}</th>`).join("") + "</tr></thead>";
+  let tbody = "<tbody>" + matrix.map((row, i) => {
+    const cells = row.map(v => {
+      const bg = corrColor(v);
+      const fg = corrTextColor(v);
+      return `<td><span class="corr-cell" style="background:${bg};color:${fg}">${v.toFixed(2)}</span></td>`;
+    }).join("");
+    return `<tr><td>${labels[i]}</td>${cells}</tr>`;
+  }).join("") + "</tbody>";
+  table.innerHTML = thead + tbody;
+  card.appendChild(table);
+  container.appendChild(card);
+}
+
+const withinGrid = document.getElementById("within-grid");
+ASSET_ORDER.forEach(a => {
+  renderMatrix(withinGrid, ASSET_DISPLAY[a], ROW_LABELS, WITHIN_TAB[a]);
+});
+
+const crossGrid = document.getElementById("cross-grid");
+ROW_LABELS.forEach(label => {
+  const assetLabels = ASSET_ORDER.map(a => ASSET_DISPLAY[a]);
+  renderMatrix(crossGrid, label, assetLabels, CROSS_COMMODITY[label]);
+});
+
+document.getElementById("last-updated").textContent = "Last updated " + LAST_UPDATED;
+
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.setAttribute("aria-selected", "false"));
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    btn.setAttribute("aria-selected", "true");
+    document.getElementById("panel-" + btn.dataset.tab).classList.add("active");
+  });
+});
+</script>
+</body>
+</html>

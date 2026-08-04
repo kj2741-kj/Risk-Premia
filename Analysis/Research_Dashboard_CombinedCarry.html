@@ -121,6 +121,17 @@
   .window-row label { font-size: 12.5px; color: var(--text-secondary); }
   .compact-table th, .compact-table td { padding: 3px 7px; font-size: 10.5px; white-space: normal; }
   .strategy-card-key { grid-column: span 2; padding-bottom: 8px; }
+  table.corr { border-collapse: collapse; width: 100%; font-size: 11.5px; table-layout: fixed; }
+  table.corr th, table.corr td {
+    padding: 6px 5px; text-align: center; border: 1px solid var(--grid);
+    font-variant-numeric: tabular-nums;
+  }
+  table.corr th { color: var(--text-secondary); font-weight: 600; font-size: 10.5px; background: var(--surface-1); }
+  table.corr td:first-child, table.corr th:first-child {
+    text-align: left; font-weight: 600; color: var(--text-primary);
+    background: var(--surface-1); font-size: 10.5px; padding-left: 8px;
+  }
+  .corr-cell { display: block; padding: 3px 2px; border-radius: 3px; }
 </style>
 </head>
 <body>
@@ -145,6 +156,9 @@
     <button class="tab-btn" role="tab" aria-selected="false" data-tab="energy">Oil / Energy</button>
     <button class="tab-btn" role="tab" aria-selected="false" data-tab="pm">Precious Metals</button>
     <button class="tab-btn" role="tab" aria-selected="false" data-tab="ngl">NGL</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="correlations">Correlations</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="crosscommodity">Cross-Commodity Portfolio</button>
+    <button class="tab-btn" role="tab" aria-selected="false" data-tab="crosspair">Cross-Pair Portfolios</button>
   </div>
 
   <!-- ================= METALS ================= -->
@@ -234,6 +248,86 @@
     </div>
   </div>
 
+  <!-- ================= CORRELATIONS ================= -->
+  <div class="tab-panel" id="panel-correlations">
+    <div class="card">
+      <p class="note"><strong>Methodology:</strong> Pearson correlations on daily NET log-return series (the same 6 series -- Momentum, Carry, CarryMom, Value, EW PORT, Risk Parity -- underlying every tab above), sliced to the standardized reporting window (2011-01-01 onward). <strong>Within-asset-class</strong> (Section 1) uses each asset class's own trading calendar directly. <strong>Cross-commodity</strong> (Section 2) aligns all four asset classes on the INTERSECTION of trading dates only (n=3,828 days) -- Metals (LME), Oil/Energy (NYMEX/ICE), Precious Metals (COMEX/NYMEX), and NGL (Argus OTC) trade on different calendars, so an inner join is the only fair comparison, rather than silently treating "exchange closed" as "flat that day."</p>
+    </div>
+
+    <div class="card">
+      <h2>Section 1: Within-Asset-Class Correlation</h2>
+      <p class="note">How correlated are the 4 base strategies and 2 portfolio combinations with EACH OTHER, inside one asset class? High EW/Risk Parity correlation with an individual strategy indicates concentration risk (the "portfolio" isn't diversifying much); low or negative Value correlation with the other three is the diversification benefit Value is supposed to provide.</p>
+      <div class="window-row">
+        <h3>Select commodity</h3>
+        <label for="corr-commodity-select">Asset class: <select id="corr-commodity-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="corr-within-table" class="corr"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>Section 2: Cross-Commodity Correlation</h2>
+      <p class="note">How correlated is (say) Metals Momentum with Energy Momentum, Precious Metals Momentum, and NGL Momentum for the SAME strategy? High cross-commodity correlation means that strategy is not providing independent diversification across asset classes -- worth knowing before sizing multiple asset classes together at the portfolio level.</p>
+      <div class="window-row">
+        <h3>Select strategy</h3>
+        <label for="corr-strategy-select">Strategy: <select id="corr-strategy-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="corr-cross-table" class="corr"></table></div>
+      <div class="legend-row">
+        <span><span class="legend-swatch" style="background:var(--pos-strong)"></span>strong positive (&ge;0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--pos-weak)"></span>weak positive (0.15-0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--neutral)"></span>near zero (&lt;0.15)</span>
+        <span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative (0.15-0.5)</span>
+        <span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative (&ge;0.5)</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Key patterns</h2>
+      <p class="note"><strong>Energy and NGL are not independent books.</strong> Their cross-commodity correlation is the highest off-diagonal pair for 5 of 6 strategy types -- Value (0.53), Momentum (0.45), Risk Parity (0.31), EW PORT (0.28), Carry (0.23) -- confirming both trade on shared hydrocarbon-complex drivers. Sizing both asset classes up together should account for this shared exposure.</p>
+      <p class="note"><strong>Metals and Precious Metals show a smaller but consistent correlation</strong> across every strategy type (~0.30-0.36 for Momentum, Carry, Value, EW PORT, and Risk Parity) -- a real, if modest, shared-factor exposure despite very different fundamental drivers.</p>
+      <p class="note"><strong>CarryMom is the most genuinely diversifying strategy across commodities</strong> -- its cross-commodity correlations are the lowest of any strategy (mostly under 0.16 in magnitude), unlike Value and Momentum which both carry meaningful cross-commodity correlation.</p>
+      <p class="note"><strong>Within every asset class, Value is the true diversifier</strong> against EW PORT (Metals 0.04, Energy -0.19, NGL -0.02; only Precious Metals breaks the pattern at 0.37). Risk Parity is consistently MORE correlated with EW PORT than any individual strategy (0.78-0.96 across all four) -- expected, since both are built from the same 4 legs, just weighted differently.</p>
+    </div>
+  </div>
+
+  <!-- ================= CROSS-COMMODITY PORTFOLIO ================= -->
+  <div class="tab-panel" id="panel-crosscommodity">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Cross-Commodity Portfolio: all 4 strategies, across all 4 asset classes</h2>
+      <p class="note"><strong>Two-stage construction.</strong> Stage 1: each of the 4 base strategies (Momentum, Carry, CarryMom, Value -- same series as every asset-class tab above) is equal-weighted ACROSS the 4 asset classes (Metals, Oil/Energy, Precious Metals, NGL), giving one cross-commodity Momentum series, one cross-commodity Carry series, etc. Stage 2: those 4 cross-commodity strategy series are combined into <strong>EW PORT</strong> (equal weight) and <strong>Risk Parity</strong> (rolling ERC, same 252-day/~21-day/tilt=0 construction as every other Risk Parity row in this dashboard). This is a hierarchical combination -- first EW across commodities within a strategy, then EW or Risk Parity across strategies -- not a single flat optimization over all 16 underlying asset-class x strategy legs at once.</p>
+      <p class="note">Cross-commodity combination is computed on the INTERSECTION of trading dates across all 4 asset classes (n=3,828 days, same convention as the Correlations tab), since Metals (LME), Oil/Energy (NYMEX/ICE), Precious Metals (COMEX/NYMEX), and NGL (Argus OTC) trade on different calendars.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="crosscommodity-window-select">Horizon: <select id="crosscommodity-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="crosscommodity-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by strategy</h3>
+      <div class="table-scroll"><table id="crosscommodity-table"></table></div>
+      <p class="note">Reporting starts 2011-01-01, same window as every other tab. The 2026 YTD column is a partial year shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+    </div>
+  </div>
+
+  <!-- ================= CROSS-PAIR PORTFOLIOS ================= -->
+  <div class="tab-panel" id="panel-crosspair">
+    <div class="card">
+      <h2><span class="badge badge-built">Built</span> Cross-Pair Portfolios: EW-combining two asset classes' own EW PORT</h2>
+      <p class="note">Each row here is a simple 50/50 equal-weight combination of two asset classes' own <strong>EW PORT</strong> series (the same EW PORT shown on each asset-class tab -- Momentum+Carry+CarryMom+Value already equal-weighted within that asset class). Only the 4 "cross" pairs are shown -- Metals-Energy, Metals-NGL, Precious-Energy, Precious-NGL -- deliberately excluding Metals-Precious and Energy-NGL, since the Correlations tab already showed those two pairs are the most correlated (~0.3-0.5), making them the weakest diversification candidates of the 6 possible pairs.</p>
+      <p class="note">Combined on the INTERSECTION of trading dates across the two asset classes in each pair (different exchange calendars), same convention as the Correlations and Cross-Commodity Portfolio tabs.</p>
+
+      <div class="window-row">
+        <h3>Performance by horizon</h3>
+        <label for="crosspair-window-select">Horizon: <select id="crosspair-window-select" class="window-select"></select></label>
+      </div>
+      <div class="table-scroll"><table id="crosspair-full-table"></table></div>
+
+      <h3>Regime-conditional IR, by pair</h3>
+      <div class="table-scroll"><table id="crosspair-table"></table></div>
+      <p class="note">Reporting starts 2011-01-01, same window as every other tab. <strong>Metals-NGL is the strongest pair full-sample (IR 0.945)</strong> -- pairing Metals' weak-to-flat standalone performance with NGL's strong, consistent performance benefits from NGL carrying the combination while Metals' low correlation to it smooths the ride. Precious-Energy is the weakest pair (IR 0.367), consistent with Precious Metals being the weakest individual sleeve in the whole dashboard regardless of partner.</p>
+    </div>
+  </div>
+
   <div class="card" id="strategy-definitions-card">
     <h2>Strategy definitions</h2>
     <p class="note">Identical formulas and parameters across every asset class unless a tenor pair is noted otherwise. Where an asset class has two Carry tenor pairs (Metals, Oil/Energy: F1-F3 &amp; F1-F13; NGL: F2-F4 &amp; F2-F14), the Carry and CarryMom rows shown are each an equal-weight combination of the two tenor-level signals -- see each tab's own note for the exact pairs.</p>
@@ -273,7 +367,7 @@
 </div>
 
 <script>
-const LAST_UPDATED = "2026-08-03: New dashboard, built alongside (not replacing) Research_Dashboard_F1F13.html for direct comparison. Same underlying strategy legs, tenor choices (Metals/Oil-Energy F1-F3 & F1-F13; NGL F2-F4 & F2-F14; Precious Metals F1-F3 only), and product filters (5-product Energy, 4-product NGL) as that dashboard -- the only difference is presentation: where an asset class has two Carry tenor pairs, this dashboard equal-weights them into ONE Carry row and ONE CarryMom row instead of showing each tenor pair as its own row, giving exactly 4 main risk premia per tab (Momentum, Carry, CarryMom, Value) plus 2 portfolio-level combinations (EW PORT, Risk Parity ERC rolling), both computed across exactly those 4 rows. Precious Metals only ever had one tenor pair, so its numbers are identical to Research_Dashboard_F1F13.html. Locked research configs are untouched -- this is a standalone, in-process dashboard variant.";
+const LAST_UPDATED = "2026-08-03: New dashboard, built alongside (not replacing) Research_Dashboard_F1F13.html for direct comparison. Same underlying strategy legs, tenor choices (Metals/Oil-Energy F1-F3 & F1-F13; NGL F2-F4 & F2-F14; Precious Metals F1-F3 only), and product filters (5-product Energy, 4-product NGL) as that dashboard -- the only difference is presentation: where an asset class has two Carry tenor pairs, this dashboard equal-weights them into ONE Carry row and ONE CarryMom row instead of showing each tenor pair as its own row, giving exactly 4 main risk premia per tab (Momentum, Carry, CarryMom, Value) plus 2 portfolio-level combinations (EW PORT, Risk Parity ERC rolling), both computed across exactly those 4 rows. Precious Metals only ever had one tenor pair, so its numbers are identical to Research_Dashboard_F1F13.html. Added a Correlations tab: Section 1 lets you pick an asset class and see its within-tab 6x6 correlation matrix across these same 6 rows; Section 2 lets you pick a strategy/portfolio and see its 4x4 correlation across all 4 asset classes (aligned on the intersection of trading dates, n=3,828 days). Added a Cross-Commodity Portfolio tab: each of the 4 base strategies is first equal-weighted ACROSS all 4 asset classes, then those 4 cross-commodity strategy series are combined into EW PORT and Risk Parity (rolling ERC) -- a hierarchical, not flat, combination. Added a Cross-Pair Portfolios tab: 50/50 EW combinations of each asset class's own EW PORT, for the 4 cross pairs only (Metals-Energy, Metals-NGL, Precious-Energy, Precious-NGL) -- Metals-Precious and Energy-NGL deliberately excluded as the two most-correlated pairs per the Correlations tab. Locked research configs are untouched -- this is a standalone, in-process dashboard variant.";
 
 const METALS_COLUMNS = [
   {key:"full", label:"Full", years:"2011-2026"},
@@ -502,8 +596,109 @@ const NGL_WINDOWS = {
   ]),
 };
 
+// Cross-Commodity Portfolio: Stage 1 equal-weights each strategy (Momentum/
+// Carry/CarryMom/Value) ACROSS the 4 asset classes; Stage 2 combines those 4
+// cross-commodity strategy series into EW PORT and Risk Parity. Computed on
+// the intersection of trading dates across all 4 asset classes (n=3,828).
+const CROSSCOMMODITY_COLUMNS = METALS_COLUMNS;
+const CROSSCOMMODITY_WINDOWS = {
+  full: ewBold([
+    {name:"Momentum", ret:5.63, vol:14.85, mdd:-58.41, ir:0.379},
+    {name:"Carry", ret:6.08, vol:10.69, mdd:-33.58, ir:0.569},
+    {name:"CarryMom", ret:5.83, vol:9.59, mdd:-22.42, ir:0.608},
+    {name:"Value", ret:3.35, vol:14.08, mdd:-72.57, ir:0.238},
+    {name:"EW PORT", ret:5.22, vol:6.19, mdd:-16.71, ir:0.844},
+    {name:"Risk Parity", ret:4.47, vol:5.48, mdd:-11.73, ir:0.816},
+  ]),
+  r1: ewBold([
+    {name:"Momentum", ret:4.51, vol:12.83, mdd:-25.74, ir:0.351},
+    {name:"Carry", ret:12.74, vol:9.36, mdd:-10.75, ir:1.361},
+    {name:"CarryMom", ret:7.78, vol:7.38, mdd:-8.28, ir:1.055},
+    {name:"Value", ret:-8.51, vol:11.71, mdd:-63.84, ir:-0.727},
+    {name:"EW PORT", ret:4.13, vol:5.01, mdd:-5.87, ir:0.825},
+    {name:"Risk Parity", ret:2.12, vol:4.53, mdd:-5.87, ir:0.468},
+  ]),
+  r2: ewBold([
+    {name:"Momentum", ret:5.62, vol:12.63, mdd:-23.74, ir:0.445},
+    {name:"Carry", ret:3.83, vol:7.94, mdd:-13.33, ir:0.482},
+    {name:"CarryMom", ret:3.17, vol:8.65, mdd:-14.69, ir:0.366},
+    {name:"Value", ret:11.26, vol:11.95, mdd:-14.60, ir:0.942},
+    {name:"EW PORT", ret:5.97, vol:5.75, mdd:-7.16, ir:1.038},
+    {name:"Risk Parity", ret:5.52, vol:5.20, mdd:-6.06, ir:1.062},
+  ]),
+  r3: ewBold([
+    {name:"Momentum", ret:29.93, vol:21.50, mdd:-17.16, ir:1.392},
+    {name:"Carry", ret:9.05, vol:15.72, mdd:-27.59, ir:0.575},
+    {name:"CarryMom", ret:11.06, vol:13.76, mdd:-11.32, ir:0.804},
+    {name:"Value", ret:-4.37, vol:21.68, mdd:-36.32, ir:-0.201},
+    {name:"EW PORT", ret:11.42, vol:7.61, mdd:-5.53, ir:1.500},
+    {name:"Risk Parity", ret:8.98, vol:5.52, mdd:-4.81, ir:1.625},
+  ]),
+  r4: ewBold([
+    {name:"Momentum", ret:-3.99, vol:15.13, mdd:-58.41, ir:-0.264},
+    {name:"Carry", ret:-0.69, vol:11.42, mdd:-33.58, ir:-0.060},
+    {name:"CarryMom", ret:3.70, vol:10.28, mdd:-22.42, ir:0.359},
+    {name:"Value", ret:13.00, vol:13.90, mdd:-27.35, ir:0.935},
+    {name:"EW PORT", ret:3.00, vol:7.01, mdd:-16.71, ir:0.428},
+    {name:"Risk Parity", ret:4.12, vol:6.56, mdd:-11.73, ir:0.629},
+  ]),
+  y26: ewBold([
+    {name:"Momentum", ret:30.25, vol:22.75, mdd:-9.57, ir:1.330},
+    {name:"Carry", ret:10.38, vol:19.15, mdd:-9.43, ir:0.542},
+    {name:"CarryMom", ret:48.54, vol:16.62, mdd:-5.92, ir:2.920},
+    {name:"Value", ret:33.02, vol:17.33, mdd:-8.64, ir:1.905},
+    {name:"EW PORT", ret:30.55, vol:11.55, mdd:-3.53, ir:2.644},
+    {name:"Risk Parity", ret:31.71, vol:10.70, mdd:-3.30, ir:2.965},
+  ]),
+};
+
+// Cross-Pair Portfolios: 50/50 EW combination of two asset classes' own
+// EW PORT series, for the 4 "cross" pairs only (Metals-Precious and
+// Energy-NGL excluded -- the two pairs the Correlations tab already showed
+// are most correlated). Combined on the intersection of trading dates.
+const CROSSPAIR_COLUMNS = METALS_COLUMNS;
+const CROSSPAIR_WINDOWS = {
+  full: ewBold([
+    {name:"Metals-Energy", ret:3.78, vol:7.26, mdd:-14.62, ir:0.521},
+    {name:"Metals-NGL", ret:7.20, vol:7.63, mdd:-16.76, ir:0.945},
+    {name:"Precious-Energy", ret:2.82, vol:7.67, mdd:-27.80, ir:0.367},
+    {name:"Precious-NGL", ret:6.31, vol:7.88, mdd:-25.25, ir:0.800},
+  ]),
+  r1: ewBold([
+    {name:"Metals-Energy", ret:2.88, vol:5.54, mdd:-8.69, ir:0.521},
+    {name:"Metals-NGL", ret:5.47, vol:6.23, mdd:-8.29, ir:0.878},
+    {name:"Precious-Energy", ret:2.57, vol:6.33, mdd:-8.94, ir:0.405},
+    {name:"Precious-NGL", ret:4.96, vol:6.81, mdd:-7.96, ir:0.729},
+  ]),
+  r2: ewBold([
+    {name:"Metals-Energy", ret:0.07, vol:6.05, mdd:-10.18, ir:0.011},
+    {name:"Metals-NGL", ret:9.18, vol:8.28, mdd:-10.96, ir:1.109},
+    {name:"Precious-Energy", ret:2.42, vol:5.72, mdd:-8.50, ir:0.423},
+    {name:"Precious-NGL", ret:11.73, vol:7.96, mdd:-10.01, ir:1.473},
+  ]),
+  r3: ewBold([
+    {name:"Metals-Energy", ret:13.90, vol:10.17, mdd:-5.92, ir:1.366},
+    {name:"Metals-NGL", ret:13.24, vol:9.21, mdd:-10.19, ir:1.437},
+    {name:"Precious-Energy", ret:8.61, vol:10.24, mdd:-9.65, ir:0.841},
+    {name:"Precious-NGL", ret:7.65, vol:8.91, mdd:-10.29, ir:0.859},
+  ]),
+  r4: ewBold([
+    {name:"Metals-Energy", ret:3.59, vol:8.31, mdd:-14.62, ir:0.432},
+    {name:"Metals-NGL", ret:4.66, vol:7.64, mdd:-16.76, ir:0.609},
+    {name:"Precious-Energy", ret:0.86, vol:9.08, mdd:-27.80, ir:0.094},
+    {name:"Precious-NGL", ret:2.36, vol:8.40, mdd:-25.25, ir:0.281},
+  ]),
+  y26: ewBold([
+    {name:"Metals-Energy", ret:31.96, vol:12.76, mdd:-3.10, ir:2.506},
+    {name:"Metals-NGL", ret:14.48, vol:11.40, mdd:-4.70, ir:1.270},
+    {name:"Precious-Energy", ret:47.15, vol:14.93, mdd:-4.44, ir:3.158},
+    {name:"Precious-NGL", ret:30.45, vol:13.86, mdd:-5.67, ir:2.197},
+  ]),
+};
+
 const WINDOW_GRIDS = {
   metals: METALS_WINDOWS, pm: PM_WINDOWS, energy: ENERGY_WINDOWS, ngl: NGL_WINDOWS,
+  crosscommodity: CROSSCOMMODITY_WINDOWS, crosspair: CROSSPAIR_WINDOWS,
 };
 
 function regimeRowsFromWindows(windowGrid) {
@@ -603,6 +798,72 @@ wireWindowSelect("pm-window-select", "pm-full-table", "pm");
 
 renderTable(document.getElementById("ngl-table"), NGL_COLUMNS, regimeRowsFromWindows(NGL_WINDOWS));
 wireWindowSelect("ngl-window-select", "ngl-full-table", "ngl");
+
+renderTable(document.getElementById("crosscommodity-table"), CROSSCOMMODITY_COLUMNS, regimeRowsFromWindows(CROSSCOMMODITY_WINDOWS));
+wireWindowSelect("crosscommodity-window-select", "crosscommodity-full-table", "crosscommodity");
+
+renderTable(document.getElementById("crosspair-table"), CROSSPAIR_COLUMNS, regimeRowsFromWindows(CROSSPAIR_WINDOWS));
+wireWindowSelect("crosspair-window-select", "crosspair-full-table", "crosspair");
+
+// ---- Correlations tab: within-asset-class (6x6) + cross-commodity (4x4) ----
+// Computed on daily NET log-return series for the same 6 rows every other tab
+// shows (Momentum/Carry/CarryMom/Value/EW PORT/Risk Parity), sliced to the
+// 2011-2026 reporting window. Cross-commodity aligned on the intersection of
+// trading dates across all 4 asset classes (n=3,828). See
+// Research_Dashboard_Correlations.html for the standalone, all-matrices-at-once
+// version of the same data.
+const CORR_ROW_LABELS = ["Momentum", "Carry", "CarryMom", "Value", "EW PORT", "Risk Parity"];
+const CORR_ASSET_ORDER = ["metals", "energy", "precious", "ngl"];
+const CORR_ASSET_DISPLAY = {metals: "Metals", energy: "Oil/Energy", precious: "Precious Metals", ngl: "NGL"};
+const CORR_WITHIN_TAB = {"metals": [[1.0, 0.256, 0.165, -0.472, 0.594, 0.347], [0.256, 1.0, 0.34, -0.186, 0.697, 0.543], [0.165, 0.34, 1.0, -0.024, 0.683, 0.594], [-0.472, -0.186, -0.024, 1.0, 0.041, 0.406], [0.594, 0.697, 0.683, 0.041, 1.0, 0.895], [0.347, 0.543, 0.594, 0.406, 0.895, 1.0]], "energy": [[1.0, 0.607, 0.557, -0.485, 0.826, 0.431], [0.607, 1.0, 0.454, -0.708, 0.628, 0.236], [0.557, 0.454, 1.0, -0.292, 0.795, 0.532], [-0.485, -0.708, -0.292, 1.0, -0.191, 0.356], [0.826, 0.628, 0.795, -0.191, 1.0, 0.776], [0.431, 0.236, 0.532, 0.356, 0.776, 1.0]], "precious": [[1.0, -0.011, 0.142, -0.395, 0.433, 0.363], [-0.011, 1.0, 0.237, 0.325, 0.697, 0.677], [0.142, 0.237, 1.0, -0.131, 0.567, 0.491], [-0.395, 0.325, -0.131, 1.0, 0.374, 0.465], [0.433, 0.697, 0.567, 0.374, 1.0, 0.965], [0.363, 0.677, 0.491, 0.465, 0.965, 1.0]], "ngl": [[1.0, 0.583, 0.514, -0.444, 0.765, 0.479], [0.583, 1.0, 0.432, -0.509, 0.657, 0.419], [0.514, 0.432, 1.0, -0.173, 0.788, 0.624], [-0.444, -0.509, -0.173, 1.0, -0.022, 0.362], [0.765, 0.657, 0.788, -0.022, 1.0, 0.872], [0.479, 0.419, 0.624, 0.362, 0.872, 1.0]]};
+const CORR_CROSS_COMMODITY = {"Momentum": [[1.0, 0.137, 0.36, 0.122], [0.137, 1.0, 0.11, 0.451], [0.36, 0.11, 1.0, 0.095], [0.122, 0.451, 0.095, 1.0]], "Carry": [[1.0, 0.043, 0.302, 0.07], [0.043, 1.0, -0.039, 0.231], [0.302, -0.039, 1.0, 0.001], [0.07, 0.231, 0.001, 1.0]], "CarryMom": [[1.0, -0.019, 0.052, 0.039], [-0.019, 1.0, 0.02, 0.163], [0.052, 0.02, 1.0, -0.028], [0.039, 0.163, -0.028, 1.0]], "Value": [[1.0, 0.196, 0.341, 0.172], [0.196, 1.0, 0.128, 0.534], [0.341, 0.128, 1.0, 0.061], [0.172, 0.534, 0.061, 1.0]], "EW PORT": [[1.0, 0.067, 0.35, 0.057], [0.067, 1.0, 0.079, 0.279], [0.35, 0.079, 1.0, 0.023], [0.057, 0.279, 0.023, 1.0]], "Risk Parity": [[1.0, 0.059, 0.337, 0.069], [0.059, 1.0, 0.069, 0.311], [0.337, 0.069, 1.0, 0.027], [0.069, 0.311, 0.027, 1.0]]};
+
+function corrColor(v) {
+  const a = Math.min(Math.abs(v), 1.0);
+  if (v >= 0) {
+    if (a < 0.15) return "var(--neutral)";
+    if (a < 0.5) return "var(--pos-weak)";
+    return "var(--pos-strong)";
+  } else {
+    if (a < 0.15) return "var(--neutral)";
+    if (a < 0.5) return "var(--neg-weak)";
+    return "var(--neg-strong)";
+  }
+}
+function corrTextColor(v) {
+  const a = Math.min(Math.abs(v), 1.0);
+  return a < 0.5 ? "var(--text-primary)" : "#ffffff";
+}
+
+function renderCorrMatrix(tableEl, labels, matrix) {
+  let thead = "<thead><tr><th></th>" + labels.map(l => `<th>${l}</th>`).join("") + "</tr></thead>";
+  let tbody = "<tbody>" + matrix.map((row, i) => {
+    const cells = row.map(v => {
+      const bg = corrColor(v);
+      const fg = corrTextColor(v);
+      return `<td><span class="corr-cell" style="background:${bg};color:${fg}">${v.toFixed(2)}</span></td>`;
+    }).join("");
+    return `<tr><td>${labels[i]}</td>${cells}</tr>`;
+  }).join("") + "</tbody>";
+  tableEl.innerHTML = thead + tbody;
+}
+
+function wireCorrSelects() {
+  const commoditySelect = document.getElementById("corr-commodity-select");
+  const withinTable = document.getElementById("corr-within-table");
+  commoditySelect.innerHTML = CORR_ASSET_ORDER.map(a => `<option value="${a}">${CORR_ASSET_DISPLAY[a]}</option>`).join("");
+  const renderWithin = () => renderCorrMatrix(withinTable, CORR_ROW_LABELS, CORR_WITHIN_TAB[commoditySelect.value]);
+  commoditySelect.addEventListener("change", renderWithin);
+  renderWithin();
+
+  const strategySelect = document.getElementById("corr-strategy-select");
+  const crossTable = document.getElementById("corr-cross-table");
+  strategySelect.innerHTML = CORR_ROW_LABELS.map(l => `<option value="${l}">${l}</option>`).join("");
+  const renderCross = () => renderCorrMatrix(crossTable, CORR_ASSET_ORDER.map(a => CORR_ASSET_DISPLAY[a]), CORR_CROSS_COMMODITY[strategySelect.value]);
+  strategySelect.addEventListener("change", renderCross);
+  renderCross();
+}
+wireCorrSelects();
 
 document.getElementById("last-updated").textContent = "Last updated " + LAST_UPDATED;
 

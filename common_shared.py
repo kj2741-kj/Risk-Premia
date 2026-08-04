@@ -351,10 +351,11 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
         return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
 
     cum = net.fillna(0).cumsum()
+    value = np.exp(cum)
     ann_pnl = net.dropna().mean() * 252 if net.notna().any() else np.nan
     return dict(gross=_s(gp), net=_s(net),
                 ann=float(ann_pnl) if pd.notna(ann_pnl) else np.nan,
-                mdd=float((cum - cum.cummax()).min()), nact=int((pos != 0).sum()),
+                mdd=float((value / value.cummax() - 1).min()), nact=int((pos != 0).sum()),
                 flat_pct=float(100 * (pos == 0).sum() / len(pos)) if len(pos) else np.nan)
 
 

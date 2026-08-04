@@ -389,8 +389,11 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
         vol = float(n.std(ddof=1) * np.sqrt(252) * 100)
     else:
         ann = vol = np.nan
+    # True value-based drawdown, not log-space peak-to-trough -- see
+    # research/run_regime_table.py::_metrics for the full derivation.
     cum = n.cumsum()
-    mdd = float((cum - cum.cummax()).min() * 100) if len(cum) else np.nan
+    value = np.exp(cum)
+    mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
     return dict(gross=_sharpe(g), net=_sharpe(n), ann=ann, vol=vol, mdd=mdd)
 
 

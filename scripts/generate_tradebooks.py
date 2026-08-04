@@ -229,8 +229,11 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
         return ann, std, sh, so
 
     def _max_dd(pnl_series):
+        # True value-based drawdown, not log-space peak-to-trough -- see
+        # research/run_regime_table.py::_metrics for the full derivation.
         cum = pnl_series.fillna(0).cumsum()
-        return float((cum - cum.cummax()).min())
+        value = np.exp(cum)
+        return float((value / value.cummax() - 1).min())
 
     ann_pnl, ann_std, sharpe, sortino = _ratios(active_pnl)
     ann_pnl_net, ann_std_net, sharpe_net, sortino_net = _ratios(active_pnl_net)

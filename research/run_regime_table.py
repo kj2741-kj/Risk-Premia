@@ -79,8 +79,18 @@ def _metrics(series: pd.Series) -> dict:
     # annualized per window rather than sliced off one continuous full-sample
     # equity curve -- so a regime's drawdown reflects what that regime alone
     # did, not carry-over from before it started.
+    #
+    # TRUE value-based drawdown (fixed 2026-08-04, was log-space peak-to-
+    # trough before -- e.g. a "-114.6%" log drawdown was actually a -68.2%
+    # decline in portfolio value; log returns compress large negative moves,
+    # so the two diverge more the bigger the drawdown). value = exp(cum) is
+    # the compounded growth factor implied by the log returns (value[0]=1);
+    # (value / running-peak - 1) is the exact percentage decline in that
+    # value from its own prior high, which is what "max drawdown" means
+    # everywhere outside this project.
     cum = s.cumsum()
-    mdd = float((cum - cum.cummax()).min()) * 100
+    value = np.exp(cum)
+    mdd = float((value / value.cummax() - 1).min()) * 100
     return dict(ret=ret * 100, vol=vol * 100, mdd=mdd, ir=ir)
 
 

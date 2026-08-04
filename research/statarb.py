@@ -148,8 +148,11 @@ def metrics(net: pd.Series) -> dict:
     vol = float(a.std(ddof=1) * np.sqrt(252))
     # Max drawdown WITHIN this window (cumulative log-return reset to 0 at the
     # window's own start) -- same per-window convention as run_regime_table.py.
+    # True value-based drawdown, not log-space peak-to-trough -- see
+    # research/run_regime_table.py::_metrics for the full derivation.
     cum = a.cumsum()
-    mdd = float((cum - cum.cummax()).min()) * 100
+    value = np.exp(cum)
+    mdd = float((value / value.cummax() - 1).min()) * 100
     return dict(ret=ret * 100, vol=vol * 100, mdd=mdd, ir=(ret / vol) if vol > 0 else np.nan)
 
 

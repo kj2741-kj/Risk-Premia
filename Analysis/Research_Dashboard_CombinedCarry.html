@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Risk Premia Research Dashboard (Energy Carry F1-F13)</title>
+<title>Risk Premia Research Dashboard (Combined Carry + Risk Parity)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -126,10 +126,19 @@
 <body>
 <div class="wrap">
 
-  <h1>Risk Premia Research Dashboard (Energy Carry F1-F13)</h1>
+  <h1>Risk Premia Research Dashboard (Combined Carry + Risk Parity)</h1>
   <div class="subtitle">Multi-Asset Systematic Risk Premia project. Ex-ante locked strategy backtests, log-return methodology.
     <span class="meta" id="last-updated"></span>
   </div>
+
+  <p class="note"><strong>How this differs from Research_Dashboard_F1F13.html (for comparison, not a replacement):</strong>
+    that dashboard shows each Carry/CarryMom tenor pair as its own row (e.g. "Carry (F1-F3)" and "Carry (F1-F13)"
+    separately). This dashboard instead equal-weights those tenor-level composites into exactly ONE Carry row and
+    ONE CarryMom row per asset class -- giving exactly 4 main risk premia per tab (Momentum, Carry, CarryMom, Value)
+    plus 2 portfolio-level combinations (EW and Risk Parity). Precious Metals only ever had one tenor pair (F1-F3),
+    so its numbers are identical in both dashboards. Same underlying strategy legs, same tenor choices, same product
+    filters (5-product Energy, 4-product NGL) as Research_Dashboard_F1F13.html -- only the Carry/CarryMom
+    presentation (combined vs. separate) differs.</p>
 
   <div class="tabs" role="tablist">
     <button class="tab-btn" role="tab" aria-selected="true" data-tab="metals">Metals</button>
@@ -144,7 +153,7 @@
       <h2><span class="badge badge-built">Built</span> Metals: Copper, Aluminium, Lead, Zinc (LME)</h2>
       <p class="note">Source: <code>data/06-30/Metals_Futures_Curve_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all four products aligned on this common window.</p>
 
-      <p class="note">Carry tenors: F1-F3 (the volume peak for every product) and F1-F13 (the annual convention, weaker for Lead and Zinc but retained as a second, disclosed variant). Unchanged from the baseline dashboard -- Metals was already on F1-F13, not F1-F12, so this asset class is identical here to Research_Dashboard_F3.html.</p>
+      <p class="note"><strong>Carry</strong> row = equal-weight combination of the F1-F3 and F1-F13 tenor-level V1+V2 composites (each computed exactly as in Research_Dashboard_F1F13.html, then equal-weighted into one final signal before shifting). <strong>CarryMom</strong> row = equal-weight combination of the F1-F3 and F1-F13 20-day rate-of-change signals, same pattern.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -161,7 +170,7 @@
         <span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative</span>
         <span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative</span>
       </div>
-      <p class="note">Reporting starts 2011-01-01 across every asset class (see the "Full" column), so that every strategy's longest-lookback signal -- Value's 1260-day moving average in particular -- is fully warmed up before the reported window begins; the underlying price data goes back to 2006 and is used to build that warm-up, it just isn't scored on its own. The 2026 YTD column is a partial year (roughly five months) shown for reference alongside the full 2022-2026 regime it sits inside.</p>
+      <p class="note">Reporting starts 2011-01-01 across every asset class (see the "Full" column), so that every strategy's longest-lookback signal -- Value's 1260-day moving average in particular -- is fully warmed up before the reported window begins. The 2026 YTD column is a partial year (roughly five months) shown for reference alongside the full 2022-2026 regime it sits inside.</p>
     </div>
   </div>
 
@@ -169,9 +178,9 @@
   <div class="tab-panel" id="panel-energy">
     <div class="card">
       <h2><span class="badge badge-built">Built</span> Oil / Energy: WTI, Brent, RBOB, Heating Oil, Nat Gas</h2>
-      <p class="note">Source: <code>data/06-30/Energy_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all five products aligned on this common window. Singapore Gasoil and Fuel Oil are excluded from this dashboard (2026-08-03, per decision); both remain in the underlying research config/engine and are unaffected there.</p>
+      <p class="note">Source: <code>data/06-30/Energy_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all five products aligned on this common window. Singapore Gasoil and Fuel Oil are excluded from this dashboard, same as Research_Dashboard_F1F13.html; both remain in the underlying research config/engine and are unaffected there.</p>
 
-      <p class="note"><strong>Changed in this variant:</strong> the long Carry/CarryMom tenor is F1-F13 here, not F1-F12. The F1-F12 choice in the locked config existed specifically to give Fuel Oil (12 tenors total, no F13 column at all) at least partial data (48.0% quoted) at the long leg -- but Fuel Oil is already excluded from this dashboard's product set, and the remaining five products (WTI, Brent, RBOB, Heating Oil, Nat Gas) are all &ge;99.6% quoted through F13. So on this 5-product set, F1-F13 is fully supported data-wise and is a cleaner match to Metals' own F1-F13 long-tenor convention. This is a standalone sensitivity variant -- the locked research config (<code>research/configs/energy.py</code>) is untouched and still specifies F1-F12 for the full 7-product pipeline.</p>
+      <p class="note"><strong>Carry</strong> row = equal-weight combination of the F1-F3 and F1-F13 tenor-level V1+V2 composites. <strong>CarryMom</strong> row = equal-weight combination of the F1-F3 and F1-F13 20-day rate-of-change signals.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -191,7 +200,7 @@
       <h2><span class="badge badge-built">Built</span> Precious Metals: Gold, Silver, Copper (COMEX), Platinum, Palladium</h2>
       <p class="note">Prices: <code>data/06-30/Precious_Metals_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30.</p>
 
-      <p class="note"><strong>Changed in this variant:</strong> Carry/CarryMom tenor is F1-F3 here, not F1-F2. F1 and F2 are the most liquid contracts across the product set, with liquidity dropping off from F3 onwards, most sharply for Platinum and Palladium (F3 fill rate: 96.1% Platinum, 99.6% Palladium, vs. ~100% for the other three products) -- F1-F3 is still well-populated for all five products, just not as uniformly clean as F1-F2. This is a standalone sensitivity variant; the locked research config (<code>research/configs/precious.py</code>) is untouched and still specifies F1-F2.</p>
+      <p class="note">Only one Carry tenor pair (F1-F3) exists for this asset class, so <strong>Carry</strong> and <strong>CarryMom</strong> here are identical to Research_Dashboard_F1F13.html -- there is nothing to combine.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -209,10 +218,9 @@
   <div class="tab-panel" id="panel-ngl">
     <div class="card">
       <h2><span class="badge badge-built">Built</span> NGL: Ethane, Propane, Butane, Isobutane</h2>
-      <p class="note">Source: <code>data/06-30/NGL_Futures_Updated.xlsx</code>, 2009-11-10 to 2026-06-30, these four products aligned on this common window. Ethylene and Propylene are excluded from this dashboard (2026-08-03, per decision); both remain in the underlying research config/engine and are unaffected there. Removing them actually widened the common date range (2009-11-10 vs. the prior 6-product window's 2010-12-13 start) -- Ethylene and Propylene were the two products whose own later history was pulling the common start date forward.</p>
+      <p class="note">Source: <code>data/06-30/NGL_Futures_Updated.xlsx</code>, 2009-11-10 to 2026-06-30. Ethylene and Propylene are excluded from this dashboard, same as Research_Dashboard_F1F13.html; both remain in the underlying research config/engine and are unaffected there.</p>
 
-      <p class="note"><strong>Changed in this variant:</strong> Carry tenors are F2-F4 (short) and F2-F14 (long), not the single F4-F15 tenor (Bogorad's own convention, front-month prices being stale/index-settled for this asset class) -- same two-tenor pattern as Metals (F1-F3/F1-F13) and Oil/Energy (F1-F3/F1-F13), reported as separate rows below rather than blended together.</p>
-      <p class="note">Each <strong>Carry (F2-Fn)</strong> row is itself an equal-weight (EW) portfolio of two views of that tenor's curve slope: V1 (Level, the raw sign of the slope) and V2 (Z-score, that slope's own 252-day rolling z-score) -- identical construction to every other Carry row in this dashboard (see the Strategy definitions card below), just applied separately to F2-F4 and to F2-F14 instead of to F4-F15. <strong>CarryMom (F2-Fn)</strong> is the 20-day rate-of-change signal on that same tenor's slope, also reported once per tenor pair, not V1/V2-composited (Carry-Momentum was never a V1+V2 blend in this dashboard's methodology, for any asset class). Both tenors are well-populated for all four products here (F2/F4/F14 all &ge;99.5% quoted) -- no Fuel-Oil-F12 or Platinum/Palladium-F6+ style data-quality gap on either leg. This is a standalone sensitivity variant; the locked research config (<code>research/configs/ngl.py</code>) is untouched and still specifies the single F4-F15 tenor.</p>
+      <p class="note"><strong>Carry</strong> row = equal-weight combination of the F2-F4 and F2-F14 tenor-level V1+V2 composites. <strong>CarryMom</strong> row = equal-weight combination of the F2-F4 and F2-F14 20-day rate-of-change signals.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -222,37 +230,37 @@
 
       <h3>Regime-conditional IR, by strategy</h3>
       <div class="table-scroll"><table id="ngl-table"></table></div>
-      <p class="note">With Ethylene/Propylene removed and the common start now 2009-11-10, every product here has more pre-2011 history available for signal warm-up than in the 6-product version -- the R1 window (2011-01 to 2015) should be read as at least as fully warmed-up as before, likely more so, though the exact burn-in clearance date for Value's 630-day minimum lookback on this specific 4-product set has not been separately re-verified.</p>
+      <p class="note">With Ethylene/Propylene removed, the common start is 2009-11-10 (earlier than the 6-product window's 2010-12-13), so every product here has ample pre-2011 history for signal warm-up.</p>
     </div>
   </div>
 
   <div class="card" id="strategy-definitions-card">
     <h2>Strategy definitions</h2>
-    <p class="note">Identical formulas and parameters across every asset class unless a tenor pair is noted otherwise.</p>
+    <p class="note">Identical formulas and parameters across every asset class unless a tenor pair is noted otherwise. Where an asset class has two Carry tenor pairs (Metals, Oil/Energy: F1-F3 &amp; F1-F13; NGL: F2-F4 &amp; F2-F14), the Carry and CarryMom rows shown are each an equal-weight combination of the two tenor-level signals -- see each tab's own note for the exact pairs.</p>
     <div class="strategy-grid">
       <div class="strategy-card">
         <h4>Momentum: 3-way MA crossover composite</h4>
         <p>Three moving-average crossovers, MA(1,20), MA(5,60), MA(20,250) in trading days. Each produces a directional sign; the three signs are averaged and the sign of that average sets the position. Long when the composite trend is positive, short when negative.</p>
       </div>
       <div class="strategy-card">
-        <h4>Carry: V1 Level + V2 Z-score composite</h4>
-        <p>Two views of the same curve slope (near tenor minus far tenor), each tenor pair's Carry row is an equal-weight (EW) portfolio of these two views: V1 is the raw sign of the slope; V2 is that slope's z-score against its own 252-day rolling mean and standard deviation. Tenor pairs: F1-F3 and F1-F13 for Metals; <strong>F1-F3 for Precious Metals (changed from F1-F2 in this variant)</strong>; <strong>F1-F3 and F1-F13 for Oil/Energy (changed from F1-F12 in this variant, 5-product set only)</strong>; <strong>F2-F4 and F2-F14 for NGL (changed from the single F4-F15 tenor in this variant, 4-product set)</strong> -- reported as two separate rows per asset class, same pattern throughout, not blended across tenors.</p>
+        <h4>Carry: V1 Level + V2 Z-score, EW across tenors</h4>
+        <p>Within one tenor pair: two views of that tenor's curve slope (near minus far), averaged into one signal -- V1 is the raw sign of the slope, V2 is that slope's z-score against its own 252-day rolling mean/std. Where an asset class has two tenor pairs, that per-tenor composite is computed separately for each pair, then the two tenor-level composites are equal-weighted into the single Carry row shown. Precious Metals has only one tenor pair (F1-F3), so no cross-tenor combination applies there.</p>
       </div>
       <div class="strategy-card">
-        <h4>Carry-Momentum: 20-day rate of change</h4>
-        <p>Compares today's curve slope to its value 20 trading days earlier, capturing whether backwardation or contango is steepening or flattening. Reported as its own strategy, separate from the Carry composite above.</p>
+        <h4>Carry-Momentum: 20-day rate of change, EW across tenors</h4>
+        <p>Compares today's curve slope to its value 20 trading days earlier, capturing whether backwardation or contango is steepening or flattening -- computed per tenor pair, then equal-weighted across tenor pairs the same way as Carry above. Reported as its own strategy, separate from the Carry composite.</p>
       </div>
       <div class="strategy-card">
         <h4>Value: F3, 1260-day lookback, 10% threshold</h4>
-        <p>Compares the F3 contract's price to its own 1260-trading-day (five-year) moving average. A position is taken only when the deviation exceeds 10% in either direction. (Changed from F8 to F3 2026-08-03, applied uniformly across all four asset classes -- unchanged from the baseline dashboard.)</p>
+        <p>Compares the F3 contract's price to its own 1260-trading-day (five-year) moving average. A position is taken only when the deviation exceeds 10% in either direction.</p>
       </div>
       <div class="strategy-card">
         <h4>EW Portfolio</h4>
-        <p>Equal-weight combination, first across products within a strategy, then across all strategies. The benefit shown depends on how uncorrelated the underlying strategies are with one another.</p>
+        <p>Equal-weight combination of exactly the 4 rows above (Momentum, Carry, CarryMom, Value) -- first across products within each strategy (as usual), then equal-weighted across these 4 strategies. Unlike Research_Dashboard_F1F13.html's EW PORT, which averages across every separately-disclosed tenor row (5-6 legs depending on asset class), this EW PORT always averages exactly 4 legs, matching the "4 main risk premia" framing of this dashboard.</p>
       </div>
       <div class="strategy-card">
         <h4>Risk Parity (ERC, rolling)</h4>
-        <p>Equal Risk Contribution portfolio combining that tab's own individual strategies (Momentum, Carry, CarryMom, Value -- same legs EW Portfolio averages, just weighted differently): weights solved from the trailing 252-day covariance matrix so every strategy contributes equal risk, rebalanced every ~21 trading days, using only data strictly before each rebalance date (no look-ahead). Falls back to equal weight before the first full 252-day window is available. Same construction and defaults (window=252, rebalance=21, tilt=0 i.e. pure ERC with no return-tilt) as the "Risk Parity (ERC, rolling)" option in the Streamlit Portfolio tabs' combine-method selector -- see <code>research/risk_parity.py</code>.</p>
+        <p>Equal Risk Contribution portfolio across the SAME 4 rows (Momentum, Carry, CarryMom, Value): weights solved from the trailing 252-day covariance matrix so each of the 4 strategies contributes equal risk, rebalanced every ~21 trading days, no look-ahead. Falls back to equal weight before the first full 252-day window is available. Same defaults (window=252, rebalance=21, tilt=0 i.e. pure ERC) as the Streamlit Portfolio tabs' "Risk Parity (ERC, rolling)" option -- see <code>research/risk_parity.py</code>.</p>
       </div>
       <div class="strategy-card strategy-card-key">
         <h4>Regime key</h4>
@@ -265,7 +273,7 @@
 </div>
 
 <script>
-const LAST_UPDATED = "2026-08-03: Five changes from Research_Dashboard_F3.html. (1) Energy's long Carry/CarryMom tenor changed from F1-F12 to F1-F13, on the 5-product Energy set (WTI/Brent/RBOB/HeatingOil/NatGas, already used since the F3 dashboard). (2) NGL's product set reduced from 6 to 4 (Ethylene and Propylene removed; Ethane/Propane/Butane/Isobutane retained), which incidentally widened NGL's common date range to 2009-11-10 (from 2010-12-13) since those two products' own later history had been the binding constraint. (3) Precious Metals' Carry/CarryMom tenor changed from F1-F2 to F1-F3. (4) NGL's Carry/CarryMom tenor changed from the single F4-F15 to two separate tenor-pair rows, F2-F4 (short) and F2-F14 (long, new) -- same two-tenor-row pattern as Metals and Oil/Energy, not a cross-tenor blend; each Carry (F2-Fn) row is itself the standard V1(Level)+V2(Z-score) EW composite for that tenor, and each CarryMom (F2-Fn) row is the standard 20-day rate-of-change signal for that tenor. (5) Added a Risk Parity (ERC, rolling) row to every tab, combining that tab's own individual strategies via the rolling Equal Risk Contribution solver already used in the Streamlit Portfolio tabs (research/risk_parity.py: 252-day trailing covariance, ~21-day rebalance, tilt=0/pure ERC) -- computed on the SAME filtered product sets and tenor choices already used for that tab's other rows (5-product Energy, 4-product NGL), not the raw locked-config defaults, so it is apples-to-apples with Momentum/Carry/CarryMom/Value/EW PORT already shown. Metals numbers (aside from the new Risk Parity row) are unchanged and copied verbatim from Research_Dashboard_F3.html. All five changes are dashboard-display-only, in-process product/tenor overrides -- the locked research configs (research/configs/energy.py, research/configs/ngl.py, research/configs/precious.py) reflect items (1)/(3)/(4) as of Kartavya's 2026-08-03 commits, but this dashboard's Energy/NGL rows still use the filtered 5-/4-product sets, not those configs' full 7-/6-product PRODUCTS lists.";
+const LAST_UPDATED = "2026-08-03: New dashboard, built alongside (not replacing) Research_Dashboard_F1F13.html for direct comparison. Same underlying strategy legs, tenor choices (Metals/Oil-Energy F1-F3 & F1-F13; NGL F2-F4 & F2-F14; Precious Metals F1-F3 only), and product filters (5-product Energy, 4-product NGL) as that dashboard -- the only difference is presentation: where an asset class has two Carry tenor pairs, this dashboard equal-weights them into ONE Carry row and ONE CarryMom row instead of showing each tenor pair as its own row, giving exactly 4 main risk premia per tab (Momentum, Carry, CarryMom, Value) plus 2 portfolio-level combinations (EW PORT, Risk Parity ERC rolling), both computed across exactly those 4 rows. Precious Metals only ever had one tenor pair, so its numbers are identical to Research_Dashboard_F1F13.html. Locked research configs are untouched -- this is a standalone, in-process dashboard variant.";
 
 const METALS_COLUMNS = [
   {key:"full", label:"Full", years:"2011-2026"},
@@ -287,269 +295,210 @@ const REGIME_KEY_ROWS = [
 
 function ewBold(rows) { rows.forEach(r => { if (r.name.startsWith("EW") || r.name.startsWith("Risk Parity")) r.bold = true; }); return rows; }
 
-// Metals/Precious Metals/NGL: UNCHANGED, copied verbatim from Research_Dashboard_F3.html
-// (none of these three asset classes use an F1-F12 tenor -- Metals was already on F1-F13).
 const METALS_WINDOWS = {
   full: ewBold([
     {name:"Momentum", ret:-6.74, vol:15.58, mdd:-123.68, ir:-0.433},
-    {name:"Carry (F1-F3)", ret:-1.21, vol:11.51, mdd:-85.86, ir:-0.105},
-    {name:"Carry (F1-F13)", ret:-0.46, vol:11.78, mdd:-60.80, ir:-0.039},
-    {name:"CarryMom (F1-F3)", ret:-1.46, vol:12.43, mdd:-107.78, ir:-0.117},
-    {name:"CarryMom (F1-F13)", ret:-0.69, vol:12.48, mdd:-70.47, ir:-0.056},
+    {name:"Carry", ret:-0.12, vol:12.30, mdd:-63.62, ir:-0.010},
+    {name:"CarryMom", ret:-1.01, vol:11.22, mdd:-87.79, ir:-0.090},
     {name:"Value", ret:6.26, vol:10.98, mdd:-30.55, ir:0.571},
-    {name:"EW PORT", ret:-0.72, vol:6.89, mdd:-46.09, ir:-0.104},
-    {name:"Risk Parity (ERC, rolling)", ret:-0.10, vol:5.75, mdd:-32.52, ir:-0.017},
+    {name:"EW PORT", ret:-0.40, vol:6.48, mdd:-29.79, ir:-0.062},
+    {name:"Risk Parity (ERC, rolling)", ret:0.20, vol:5.72, mdd:-23.31, ir:0.035},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:-10.74, vol:17.57, mdd:-74.42, ir:-0.611},
-    {name:"Carry (F1-F3)", ret:9.50, vol:12.62, mdd:-23.22, ir:0.753},
-    {name:"Carry (F1-F13)", ret:8.08, vol:14.15, mdd:-21.08, ir:0.571},
-    {name:"CarryMom (F1-F3)", ret:10.08, vol:13.12, mdd:-26.35, ir:0.769},
-    {name:"CarryMom (F1-F13)", ret:6.85, vol:12.88, mdd:-32.69, ir:0.532},
+    {name:"Carry", ret:8.84, vol:14.34, mdd:-26.05, ir:0.617},
+    {name:"CarryMom", ret:8.53, vol:11.64, mdd:-26.84, ir:0.733},
     {name:"Value", ret:5.93, vol:10.65, mdd:-26.05, ir:0.557},
-    {name:"EW PORT", ret:4.95, vol:7.69, mdd:-15.12, ir:0.644},
-    {name:"Risk Parity (ERC, rolling)", ret:4.57, vol:5.91, mdd:-8.71, ir:0.774},
+    {name:"EW PORT", ret:3.14, vol:7.07, mdd:-13.41, ir:0.444},
+    {name:"Risk Parity (ERC, rolling)", ret:3.83, vol:5.62, mdd:-7.16, ir:0.681},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:-8.47, vol:13.56, mdd:-40.18, ir:-0.624},
-    {name:"Carry (F1-F3)", ret:-8.76, vol:10.45, mdd:-49.47, ir:-0.839},
-    {name:"Carry (F1-F13)", ret:-10.77, vol:7.91, mdd:-44.69, ir:-1.361},
-    {name:"CarryMom (F1-F3)", ret:-8.74, vol:11.85, mdd:-53.34, ir:-0.738},
-    {name:"CarryMom (F1-F13)", ret:-7.74, vol:11.92, mdd:-43.59, ir:-0.649},
+    {name:"Carry", ret:-9.70, vol:9.96, mdd:-48.33, ir:-0.974},
+    {name:"CarryMom", ret:-8.28, vol:10.85, mdd:-48.11, ir:-0.763},
     {name:"Value", ret:7.46, vol:10.77, mdd:-13.00, ir:0.693},
-    {name:"EW PORT", ret:-6.17, vol:6.40, mdd:-28.86, ir:-0.963},
-    {name:"Risk Parity (ERC, rolling)", ret:-4.65, vol:5.92, mdd:-22.64, ir:-0.786},
+    {name:"EW PORT", ret:-4.75, vol:6.30, mdd:-22.32, ir:-0.753},
+    {name:"Risk Parity (ERC, rolling)", ret:-3.56, vol:6.06, mdd:-18.52, ir:-0.588},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:12.62, vol:15.50, mdd:-15.93, ir:0.814},
-    {name:"Carry (F1-F3)", ret:-6.50, vol:10.74, mdd:-28.55, ir:-0.605},
-    {name:"Carry (F1-F13)", ret:-0.03, vol:12.22, mdd:-25.45, ir:-0.002},
-    {name:"CarryMom (F1-F3)", ret:-3.59, vol:11.72, mdd:-18.83, ir:-0.307},
-    {name:"CarryMom (F1-F13)", ret:5.74, vol:12.64, mdd:-12.03, ir:0.454},
+    {name:"Carry", ret:-1.28, vol:12.41, mdd:-26.65, ir:-0.103},
+    {name:"CarryMom", ret:1.12, vol:10.76, mdd:-14.19, ir:0.104},
     {name:"Value", ret:-6.79, vol:12.97, mdd:-23.57, ir:-0.523},
-    {name:"EW PORT", ret:0.24, vol:5.83, mdd:-10.25, ir:0.041},
-    {name:"Risk Parity (ERC, rolling)", ret:-1.78, vol:3.69, mdd:-6.35, ir:-0.481},
+    {name:"EW PORT", ret:1.42, vol:5.08, mdd:-6.36, ir:0.279},
+    {name:"Risk Parity (ERC, rolling)", ret:-1.48, vol:3.93, mdd:-6.49, ir:-0.377},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:-9.41, vol:14.90, mdd:-76.69, ir:-0.631},
-    {name:"Carry (F1-F3)", ret:-4.02, vol:11.44, mdd:-41.76, ir:-0.352},
-    {name:"Carry (F1-F13)", ret:-0.96, vol:11.53, mdd:-29.53, ir:-0.083},
-    {name:"CarryMom (F1-F3)", ret:-6.85, vol:12.44, mdd:-48.50, ir:-0.550},
-    {name:"CarryMom (F1-F13)", ret:-5.69, vol:12.42, mdd:-54.30, ir:-0.458},
+    {name:"Carry", ret:-1.05, vol:11.65, mdd:-33.89, ir:-0.090},
+    {name:"CarryMom", ret:-6.12, vol:11.24, mdd:-49.21, ir:-0.544},
     {name:"Value", ret:11.40, vol:10.53, mdd:-17.51, ir:1.083},
-    {name:"EW PORT", ret:-2.59, vol:6.81, mdd:-29.15, ir:-0.380},
-    {name:"Risk Parity (ERC, rolling)", ret:-0.48, vol:6.14, mdd:-19.55, ir:-0.078},
+    {name:"EW PORT", ret:-1.29, vol:6.51, mdd:-24.36, ir:-0.199},
+    {name:"Risk Parity (ERC, rolling)", ret:0.27, vol:6.16, mdd:-16.78, ir:0.044},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:13.75, vol:14.33, mdd:-5.56, ir:0.959},
-    {name:"Carry (F1-F3)", ret:-4.49, vol:11.40, mdd:-7.52, ir:-0.394},
-    {name:"Carry (F1-F13)", ret:-6.26, vol:10.31, mdd:-7.06, ir:-0.608},
-    {name:"CarryMom (F1-F3)", ret:26.73, vol:11.40, mdd:-3.89, ir:2.344},
-    {name:"CarryMom (F1-F13)", ret:11.59, vol:10.37, mdd:-5.28, ir:1.117},
+    {name:"Carry", ret:-9.06, vol:10.30, mdd:-7.67, ir:-0.879},
+    {name:"CarryMom", ret:19.27, vol:9.90, mdd:-3.87, ir:1.946},
     {name:"Value", ret:-5.43, vol:13.32, mdd:-10.02, ir:-0.407},
-    {name:"EW PORT", ret:5.98, vol:5.80, mdd:-3.09, ir:1.031},
-    {name:"Risk Parity (ERC, rolling)", ret:2.86, vol:5.96, mdd:-3.30, ir:0.480},
+    {name:"EW PORT", ret:4.63, vol:5.11, mdd:-2.76, ir:0.907},
+    {name:"Risk Parity (ERC, rolling)", ret:2.13, vol:5.47, mdd:-2.91, ir:0.390},
   ]),
 };
 
-// Precious Metals: CHANGED -- Carry/CarryMom tenor is F1-F3, not F1-F2.
-// Regenerated 2026-08-03 via `python research/run_regime_table.py precious
-// --window-grid` with cfg.CARRY_TENOR_PAIRS overridden to [("F1","F3")].
-// research/configs/precious.py itself is untouched.
 const PM_COLUMNS = METALS_COLUMNS;
 const PM_WINDOWS = {
   full: ewBold([
     {name:"Momentum", ret:-7.02, vol:18.31, mdd:-150.10, ir:-0.383},
-    {name:"Carry (F1-F3)", ret:1.36, vol:13.42, mdd:-81.05, ir:0.101},
-    {name:"CarryMom (F1-F3)", ret:-0.83, vol:14.26, mdd:-92.09, ir:-0.058},
+    {name:"Carry", ret:1.36, vol:13.42, mdd:-81.05, ir:0.101},
+    {name:"CarryMom", ret:-0.83, vol:14.26, mdd:-92.09, ir:-0.058},
     {name:"Value", ret:1.80, vol:16.54, mdd:-56.36, ir:0.109},
     {name:"EW PORT", ret:-1.17, vol:7.89, mdd:-60.30, ir:-0.149},
     {name:"Risk Parity (ERC, rolling)", ret:-2.21, vol:7.55, mdd:-64.84, ir:-0.293},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:-5.77, vol:15.69, mdd:-48.99, ir:-0.367},
-    {name:"Carry (F1-F3)", ret:10.75, vol:13.04, mdd:-17.44, ir:0.824},
-    {name:"CarryMom (F1-F3)", ret:5.36, vol:11.69, mdd:-23.38, ir:0.458},
+    {name:"Carry", ret:10.75, vol:13.04, mdd:-17.44, ir:0.824},
+    {name:"CarryMom", ret:5.36, vol:11.69, mdd:-23.38, ir:0.458},
     {name:"Value", ret:1.39, vol:15.66, mdd:-33.22, ir:0.089},
     {name:"EW PORT", ret:2.93, vol:8.89, mdd:-11.67, ir:0.330},
     {name:"Risk Parity (ERC, rolling)", ret:1.33, vol:8.51, mdd:-13.02, ir:0.156},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:-2.34, vol:11.33, mdd:-37.87, ir:-0.207},
-    {name:"Carry (F1-F3)", ret:1.94, vol:9.95, mdd:-20.27, ir:0.195},
-    {name:"CarryMom (F1-F3)", ret:2.21, vol:9.18, mdd:-17.69, ir:0.241},
+    {name:"Carry", ret:1.94, vol:9.95, mdd:-20.27, ir:0.195},
+    {name:"CarryMom", ret:2.21, vol:9.18, mdd:-17.69, ir:0.241},
     {name:"Value", ret:0.65, vol:9.43, mdd:-18.76, ir:0.069},
     {name:"EW PORT", ret:0.61, vol:4.45, mdd:-7.38, ir:0.138},
     {name:"Risk Parity (ERC, rolling)", ret:-0.19, vol:3.99, mdd:-7.31, ir:-0.048},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:-15.58, vol:20.38, mdd:-42.56, ir:-0.764},
-    {name:"Carry (F1-F3)", ret:-12.70, vol:12.42, mdd:-33.61, ir:-1.023},
-    {name:"CarryMom (F1-F3)", ret:-3.48, vol:19.33, mdd:-36.99, ir:-0.180},
+    {name:"Carry", ret:-12.70, vol:12.42, mdd:-33.61, ir:-1.023},
+    {name:"CarryMom", ret:-3.48, vol:19.33, mdd:-36.99, ir:-0.180},
     {name:"Value", ret:4.20, vol:18.72, mdd:-29.11, ir:0.224},
     {name:"EW PORT", ret:-6.89, vol:7.30, mdd:-17.10, ir:-0.943},
     {name:"Risk Parity (ERC, rolling)", ret:-6.18, vol:6.59, mdd:-15.30, ir:-0.938},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:-8.76, vol:24.15, mdd:-85.48, ir:-0.363},
-    {name:"Carry (F1-F3)", ret:-3.32, vol:16.57, mdd:-64.93, ir:-0.201},
-    {name:"CarryMom (F1-F3)", ret:-9.27, vol:17.53, mdd:-75.94, ir:-0.529},
+    {name:"Carry", ret:-3.32, vol:16.57, mdd:-64.93, ir:-0.201},
+    {name:"CarryMom", ret:-9.27, vol:17.53, mdd:-75.94, ir:-0.529},
     {name:"Value", ret:2.20, vol:20.87, mdd:-56.36, ir:0.105},
     {name:"EW PORT", ret:-4.79, vol:9.22, mdd:-45.94, ir:-0.519},
     {name:"Risk Parity (ERC, rolling)", ret:-6.19, vol:9.08, mdd:-48.51, ir:-0.682},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:9.23, vol:45.46, mdd:-37.08, ir:0.203},
-    {name:"Carry (F1-F3)", ret:47.01, vol:19.73, mdd:-5.69, ir:2.383},
-    {name:"CarryMom (F1-F3)", ret:44.71, vol:33.57, mdd:-19.33, ir:1.332},
+    {name:"Carry", ret:47.01, vol:19.73, mdd:-5.69, ir:2.383},
+    {name:"CarryMom", ret:44.71, vol:33.57, mdd:-19.33, ir:1.332},
     {name:"Value", ret:34.80, vol:44.98, mdd:-24.07, ir:0.774},
     {name:"EW PORT", ret:33.94, vol:15.30, mdd:-5.51, ir:2.218},
     {name:"Risk Parity (ERC, rolling)", ret:29.70, vol:15.72, mdd:-6.78, ir:1.890},
   ]),
 };
 
-// Energy: CHANGED -- long Carry/CarryMom tenor is F1-F13, not F1-F12.
-// Regenerated 2026-08-03 via `python research/run_regime_table.py energy --window-grid`
-// with cfg.PRODUCTS filtered in-process to the 5-product set (WTI/Brent/RBOB/HeatingOil/
-// NatGas, same as the F3 dashboard) and cfg.CARRY_TENOR_PAIRS overridden to
-// [("F1","F3"), ("F1","F13")]. research/configs/energy.py itself is untouched.
 const ENERGY_COLUMNS = METALS_COLUMNS;
 const ENERGY_WINDOWS = {
   full: ewBold([
     {name:"Momentum", ret:12.16, vol:28.29, mdd:-85.85, ir:0.430},
-    {name:"Carry (F1-F3)", ret:2.94, vol:22.41, mdd:-87.53, ir:0.131},
-    {name:"Carry (F1-F13)", ret:8.19, vol:24.99, mdd:-66.34, ir:0.328},
-    {name:"CarryMom (F1-F3)", ret:7.68, vol:22.48, mdd:-55.60, ir:0.342},
-    {name:"CarryMom (F1-F13)", ret:16.14, vol:25.52, mdd:-52.63, ir:0.632},
+    {name:"Carry", ret:5.26, vol:24.14, mdd:-68.42, ir:0.218},
+    {name:"CarryMom", ret:11.97, vol:21.17, mdd:-31.39, ir:0.566},
     {name:"Value", ret:-2.16, vol:27.40, mdd:-129.97, ir:-0.079},
-    {name:"EW PORT", ret:7.49, vol:13.84, mdd:-24.00, ir:0.541},
-    {name:"Risk Parity (ERC, rolling)", ret:4.40, vol:9.21, mdd:-15.28, ir:0.478},
+    {name:"EW PORT", ret:6.81, vol:12.53, mdd:-21.66, ir:0.543},
+    {name:"Risk Parity (ERC, rolling)", ret:4.19, vol:9.70, mdd:-14.97, ir:0.432},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:13.17, vol:20.64, mdd:-37.28, ir:0.638},
-    {name:"Carry (F1-F3)", ret:5.47, vol:12.55, mdd:-22.81, ir:0.436},
-    {name:"Carry (F1-F13)", ret:8.06, vol:17.14, mdd:-26.64, ir:0.470},
-    {name:"CarryMom (F1-F3)", ret:5.82, vol:14.72, mdd:-38.35, ir:0.395},
-    {name:"CarryMom (F1-F13)", ret:8.52, vol:16.74, mdd:-23.94, ir:0.509},
+    {name:"Carry", ret:5.49, vol:15.20, mdd:-23.98, ir:0.361},
+    {name:"CarryMom", ret:7.17, vol:13.98, mdd:-25.19, ir:0.513},
     {name:"Value", ret:-17.03, vol:21.20, mdd:-93.60, ir:-0.804},
-    {name:"EW PORT", ret:4.00, vol:8.69, mdd:-17.33, ir:0.460},
-    {name:"Risk Parity (ERC, rolling)", ret:-0.70, vol:5.68, mdd:-11.68, ir:-0.123},
+    {name:"EW PORT", ret:2.20, vol:8.00, mdd:-13.92, ir:0.275},
+    {name:"Risk Parity (ERC, rolling)", ret:-1.32, vol:6.22, mdd:-12.84, ir:-0.212},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:-4.62, vol:23.45, mdd:-57.07, ir:-0.197},
-    {name:"Carry (F1-F3)", ret:2.75, vol:16.32, mdd:-24.49, ir:0.169},
-    {name:"Carry (F1-F13)", ret:0.63, vol:19.85, mdd:-39.26, ir:0.032},
-    {name:"CarryMom (F1-F3)", ret:7.87, vol:15.16, mdd:-16.64, ir:0.519},
-    {name:"CarryMom (F1-F13)", ret:3.25, vol:19.42, mdd:-32.53, ir:0.168},
+    {name:"Carry", ret:2.99, vol:18.36, mdd:-29.42, ir:0.163},
+    {name:"CarryMom", ret:5.66, vol:15.16, mdd:-21.34, ir:0.373},
     {name:"Value", ret:12.89, vol:21.43, mdd:-25.26, ir:0.601},
-    {name:"EW PORT", ret:3.80, vol:10.28, mdd:-12.83, ir:0.369},
-    {name:"Risk Parity (ERC, rolling)", ret:5.96, vol:8.38, mdd:-8.59, ir:0.711},
+    {name:"EW PORT", ret:4.23, vol:10.19, mdd:-12.26, ir:0.415},
+    {name:"Risk Parity (ERC, rolling)", ret:6.19, vol:8.62, mdd:-9.33, ir:0.719},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:58.80, vol:44.52, mdd:-38.39, ir:1.321},
-    {name:"Carry (F1-F3)", ret:8.85, vol:39.74, mdd:-57.83, ir:0.223},
-    {name:"Carry (F1-F13)", ret:28.90, vol:42.87, mdd:-66.34, ir:0.674},
-    {name:"CarryMom (F1-F3)", ret:-3.87, vol:38.52, mdd:-46.00, ir:-0.100},
-    {name:"CarryMom (F1-F13)", ret:60.35, vol:41.17, mdd:-20.99, ir:1.466},
+    {name:"Carry", ret:21.60, vol:41.82, mdd:-68.42, ir:0.517},
+    {name:"CarryMom", ret:28.33, vol:34.83, mdd:-20.99, ir:0.813},
     {name:"Value", ret:-12.27, vol:44.52, mdd:-91.46, ir:-0.276},
-    {name:"EW PORT", ret:23.46, vol:23.11, mdd:-16.60, ir:1.015},
-    {name:"Risk Parity (ERC, rolling)", ret:13.89, vol:10.47, mdd:-6.51, ir:1.327},
+    {name:"EW PORT", ret:24.12, vol:18.81, mdd:-11.91, ir:1.282},
+    {name:"Risk Parity (ERC, rolling)", ret:14.43, vol:11.25, mdd:-8.23, ir:1.283},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:5.11, vol:30.16, mdd:-85.85, ir:0.169},
-    {name:"Carry (F1-F3)", ret:-2.38, vol:24.83, mdd:-66.98, ir:-0.096},
-    {name:"Carry (F1-F13)", ret:5.82, vol:25.66, mdd:-55.16, ir:0.227},
-    {name:"CarryMom (F1-F3)", ret:14.77, vol:25.23, mdd:-35.91, ir:0.585},
-    {name:"CarryMom (F1-F13)", ret:16.36, vol:28.99, mdd:-52.63, ir:0.564},
+    {name:"Carry", ret:-0.29, vol:25.96, mdd:-62.92, ir:-0.011},
+    {name:"CarryMom", ret:15.66, vol:24.15, mdd:-31.39, ir:0.648},
     {name:"Value", ret:5.55, vol:28.23, mdd:-67.89, ir:0.197},
-    {name:"EW PORT", ret:7.54, vol:15.62, mdd:-24.00, ir:0.482},
-    {name:"Risk Parity (ERC, rolling)", ret:4.46, vol:12.07, mdd:-15.28, ir:0.370},
+    {name:"EW PORT", ret:6.51, vol:14.85, mdd:-21.66, ir:0.438},
+    {name:"Risk Parity (ERC, rolling)", ret:3.96, vol:12.61, mdd:-14.97, ir:0.314},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:89.28, vol:46.88, mdd:-16.80, ir:1.904},
-    {name:"Carry (F1-F3)", ret:38.84, vol:42.72, mdd:-18.70, ir:0.909},
-    {name:"Carry (F1-F13)", ret:42.66, vol:46.55, mdd:-22.60, ir:0.916},
-    {name:"CarryMom (F1-F3)", ret:86.10, vol:38.12, mdd:-10.53, ir:2.259},
-    {name:"CarryMom (F1-F13)", ret:79.83, vol:46.28, mdd:-10.53, ir:1.725},
+    {name:"Carry", ret:35.92, vol:43.96, mdd:-21.66, ir:0.817},
+    {name:"CarryMom", ret:83.11, vol:39.59, mdd:-10.53, ir:2.099},
     {name:"Value", ret:32.00, vol:39.24, mdd:-26.21, ir:0.816},
-    {name:"EW PORT", ret:61.45, vol:27.33, mdd:-7.19, ir:2.249},
-    {name:"Risk Parity (ERC, rolling)", ret:54.67, vol:21.11, mdd:-5.18, ir:2.590},
+    {name:"EW PORT", ret:60.08, vol:23.76, mdd:-5.88, ir:2.528},
+    {name:"Risk Parity (ERC, rolling)", ret:54.15, vol:19.27, mdd:-5.20, ir:2.810},
   ]),
 };
 
-// NGL: CHANGED -- Ethylene and Propylene removed (4-product set: Ethane,
-// Propane, Butane, Isobutane), AND Carry/CarryMom reported as two separate
-// tenor-pair rows (F2-F4 short, F2-F14 long, new), replacing the locked
-// single F4-F15 tenor -- same Metals/Energy pattern (two disclosed tenor
-// rows, not a cross-tenor blend). Regenerated 2026-08-03 via
-// `python research/run_regime_table.py ngl --window-grid` with cfg.PRODUCTS
-// filtered in-process and cfg.CARRY_TENOR_PAIRS overridden to
-// [("F2","F4"), ("F2","F14")]. Each Carry (F2-Fn) row is the standard
-// V1(Level)+V2(Z-score) EW composite (carry_v1v2_composite_position) for
-// that tenor; each CarryMom (F2-Fn) row is the standard 20-day
-// rate-of-change signal (carry_v4_position) for that tenor. Momentum and
-// Value are unchanged. research/configs/ngl.py itself is untouched.
 const NGL_COLUMNS = METALS_COLUMNS;
 const NGL_WINDOWS = {
   full: ewBold([
     {name:"Momentum", ret:22.60, vol:28.09, mdd:-90.27, ir:0.804},
-    {name:"Carry (F2-F4)", ret:6.76, vol:22.70, mdd:-84.06, ir:0.298},
-    {name:"Carry (F2-F14)", ret:13.89, vol:23.59, mdd:-69.71, ir:0.589},
-    {name:"CarryMom (F2-F4)", ret:2.82, vol:25.71, mdd:-78.40, ir:0.110},
-    {name:"CarryMom (F2-F14)", ret:18.43, vol:27.06, mdd:-78.71, ir:0.681},
+    {name:"Carry", ret:15.14, vol:22.86, mdd:-59.12, ir:0.662},
+    {name:"CarryMom", ret:10.56, vol:22.67, mdd:-42.85, ir:0.466},
     {name:"Value", ret:6.84, vol:26.85, mdd:-124.60, ir:0.255},
-    {name:"EW PORT", ret:11.89, vol:14.09, mdd:-27.92, ir:0.844},
-    {name:"Risk Parity (ERC, rolling)", ret:9.04, vol:11.26, mdd:-21.25, ir:0.803},
+    {name:"EW PORT", ret:13.78, vol:13.44, mdd:-27.69, ir:1.025},
+    {name:"Risk Parity (ERC, rolling)", ret:11.95, vol:11.72, mdd:-21.14, ir:1.020},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:17.24, vol:24.41, mdd:-30.78, ir:0.706},
-    {name:"Carry (F2-F4)", ret:18.96, vol:20.83, mdd:-25.57, ir:0.911},
-    {name:"Carry (F2-F14)", ret:20.81, vol:21.84, mdd:-21.19, ir:0.953},
-    {name:"CarryMom (F2-F4)", ret:-0.21, vol:21.80, mdd:-45.19, ir:-0.009},
-    {name:"CarryMom (F2-F14)", ret:16.09, vol:22.00, mdd:-23.72, ir:0.732},
+    {name:"Carry", ret:21.69, vol:21.06, mdd:-23.03, ir:1.030},
+    {name:"CarryMom", ret:8.04, vol:18.79, mdd:-22.96, ir:0.428},
     {name:"Value", ret:-19.01, vol:22.31, mdd:-111.14, ir:-0.852},
-    {name:"EW PORT", ret:8.98, vol:11.86, mdd:-15.64, ir:0.757},
-    {name:"Risk Parity (ERC, rolling)", ret:1.57, vol:7.43, mdd:-16.69, ir:0.211},
+    {name:"EW PORT", ret:6.99, vol:10.59, mdd:-15.87, ir:0.660},
+    {name:"Risk Parity (ERC, rolling)", ret:0.25, vol:7.70, mdd:-19.75, ir:0.033},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:36.29, vol:28.26, mdd:-32.40, ir:1.284},
-    {name:"Carry (F2-F4)", ret:7.79, vol:23.09, mdd:-60.96, ir:0.338},
-    {name:"Carry (F2-F14)", ret:19.40, vol:21.89, mdd:-33.20, ir:0.886},
-    {name:"CarryMom (F2-F4)", ret:2.71, vol:27.14, mdd:-56.91, ir:0.100},
-    {name:"CarryMom (F2-F14)", ret:22.28, vol:27.84, mdd:-25.73, ir:0.800},
+    {name:"Carry", ret:19.27, vol:23.03, mdd:-29.01, ir:0.837},
+    {name:"CarryMom", ret:12.25, vol:24.70, mdd:-30.93, ir:0.496},
     {name:"Value", ret:23.57, vol:26.89, mdd:-44.97, ir:0.877},
-    {name:"EW PORT", ret:18.67, vol:15.14, mdd:-20.67, ir:1.233},
-    {name:"Risk Parity (ERC, rolling)", ret:18.47, vol:13.64, mdd:-21.25, ir:1.354},
+    {name:"EW PORT", ret:22.85, vol:14.98, mdd:-18.47, ir:1.526},
+    {name:"Risk Parity (ERC, rolling)", ret:22.25, vol:14.33, mdd:-19.06, ir:1.552},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:54.27, vol:39.35, mdd:-62.15, ir:1.379},
-    {name:"Carry (F2-F4)", ret:-27.28, vol:29.69, mdd:-73.36, ir:-0.919},
-    {name:"Carry (F2-F14)", ret:39.19, vol:35.55, mdd:-63.45, ir:1.103},
-    {name:"CarryMom (F2-F4)", ret:-4.74, vol:34.62, mdd:-78.40, ir:-0.137},
-    {name:"CarryMom (F2-F14)", ret:36.62, vol:38.93, mdd:-51.98, ir:0.941},
+    {name:"Carry", ret:19.96, vol:29.33, mdd:-59.12, ir:0.681},
+    {name:"CarryMom", ret:15.73, vol:30.74, mdd:-42.85, ir:0.512},
     {name:"Value", ret:-1.20, vol:41.93, mdd:-82.66, ir:-0.029},
-    {name:"EW PORT", ret:16.14, vol:18.15, mdd:-27.92, ir:0.889},
-    {name:"Risk Parity (ERC, rolling)", ret:12.21, vol:14.48, mdd:-15.29, ir:0.843},
+    {name:"EW PORT", ret:22.19, vol:16.95, mdd:-22.08, ir:1.309},
+    {name:"Risk Parity (ERC, rolling)", ret:19.87, vol:14.87, mdd:-13.24, ir:1.336},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:2.17, vol:25.58, mdd:-90.27, ir:0.085},
-    {name:"Carry (F2-F4)", ret:7.46, vol:20.63, mdd:-41.29, ir:0.362},
-    {name:"Carry (F2-F14)", ret:-10.09, vol:19.88, mdd:-55.56, ir:-0.508},
-    {name:"CarryMom (F2-F4)", ret:9.70, vol:23.73, mdd:-39.19, ir:0.409},
-    {name:"CarryMom (F2-F14)", ret:9.44, vol:24.93, mdd:-78.71, ir:0.379},
+    {name:"Carry", ret:1.96, vol:21.27, mdd:-46.77, ir:0.092},
+    {name:"CarryMom", ret:9.56, vol:20.40, mdd:-41.15, ir:0.468},
     {name:"Value", ret:24.36, vol:22.39, mdd:-39.02, ir:1.088},
-    {name:"EW PORT", ret:7.17, vol:13.31, mdd:-27.89, ir:0.539},
-    {name:"Risk Parity (ERC, rolling)", ret:7.56, vol:10.79, mdd:-18.46, ir:0.701},
+    {name:"EW PORT", ret:9.51, vol:13.06, mdd:-27.69, ir:0.728},
+    {name:"Risk Parity (ERC, rolling)", ret:12.28, vol:11.21, mdd:-21.14, ir:1.096},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:22.29, vol:33.82, mdd:-23.08, ir:0.659},
-    {name:"Carry (F2-F4)", ret:-15.75, vol:24.21, mdd:-13.97, ir:-0.651},
-    {name:"Carry (F2-F14)", ret:-19.68, vol:35.80, mdd:-24.04, ir:-0.550},
-    {name:"CarryMom (F2-F4)", ret:25.65, vol:34.61, mdd:-21.57, ir:0.741},
-    {name:"CarryMom (F2-F14)", ret:51.38, vol:35.58, mdd:-21.04, ir:1.444},
+    {name:"Carry", ret:-19.59, vol:29.67, mdd:-17.32, ir:-0.660},
+    {name:"CarryMom", ret:38.71, vol:31.94, mdd:-18.20, ir:1.212},
     {name:"Value", ret:66.45, vol:27.17, mdd:-9.28, ir:2.446},
-    {name:"EW PORT", ret:21.72, vol:21.96, mdd:-9.68, ir:0.989},
-    {name:"Risk Parity (ERC, rolling)", ret:27.75, vol:19.48, mdd:-7.18, ir:1.424},
+    {name:"EW PORT", ret:26.97, vol:20.58, mdd:-7.83, ir:1.310},
+    {name:"Risk Parity (ERC, rolling)", ret:32.76, vol:18.63, mdd:-7.51, ir:1.758},
   ]),
 };
 

@@ -89,7 +89,6 @@ this flag. So this report covers those 4 strategies only; StatArb is out of scop
 <a href="#variants">2. Variant deep dives (tabbed: F2 / F3 / F4)</a>
 <a href="#comparison">3. Side-by-side comparison (F8 baseline vs F2 vs F3 vs F4)</a>
 <a href="#findings">4. Findings / synthesis</a>
-<a href="#combined-carry">5. Combined Carry (alternative construction)</a>
 </nav>
 
 <h2 id="overview">1. Overview</h2>
@@ -594,123 +593,6 @@ been re-verified for liquidity or the near-tenor heating-season seasonality conc
 over F1/F2 as the near leg (see the callout in the Overview and research/configs/ngl.py) &mdash; these numbers are
 internally consistent and correctly computed on the current config, but both tenor pairs remain provisional pending
 that re-check.</p>
-</div>
-
-<h2 id="combined-carry">5. Combined Carry (alternative construction)</h2>
-<p>Added 2026-08-04. Sections 1-4 above treat each of NGL's two Carry tenor pairs (F2-F4, F2-F14) as its own separate row, combining all six sleeves (Momentum, Carry F2-F4, Carry F2-F14, CarryMom F2-F4, CarryMom F2-F14, Value) directly. Dimil (project collaborator) built an alternative convention in <code>Research_Dashboard_CombinedCarry.html</code>: first equal-weight the two Carry tenor pairs into one <strong>Combined Carry</strong> row, and the two CarryMom variants into one <strong>Combined CarryMom</strong> row, <em>then</em> combine exactly four rows (Momentum, Combined Carry, Combined CarryMom, Value) &mdash; a cleaner "4 main risk premia" framing. This section reproduces that construction here, extended to all 4 combine methods used elsewhere in this report (Dimil's own dashboard showed Equal Weight and Risk Parity only). <strong>Value on F3 (today's actual default)</strong>, computed on NGL's full 6-product research universe (same basis as Sections 1-4 of this report).</p>
-<div class="callout">This is an <strong>additive, alternative</strong> presentation, not a correction &mdash; Sections 1-4's six-row numbers remain the officially reported ones for this report. Both conventions are internally consistent; they simply weight the underlying strategies differently (six-row: each tenor pair gets 1/6 weight directly; four-row: each tenor pair gets 1/8 weight via two levels of 1/2-then-1/4 averaging, while Momentum and Value each get 1/4 instead of 1/6). Note that Combined Carry and Combined CarryMom are pure averages of the two Carry tenor pairs and do not involve Value at all, so their numbers are identical regardless of which Value anchor contract is chosen &mdash; only the Value row itself, and any combine-method row that includes it, changes with the F8&rarr;F3 switch.</div>
-<h3>5.1 Individual strategies (4-row set) &mdash; full sample</h3>
-<table><caption>Full sample (2011-01-01 to 2026-06-30) &mdash; Value on F3</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Momentum</td><td>+27.83%</td><td>22.19%</td><td>-38.64%</td><td><span class="pos">+1.254</span></td></tr>
-<tr><td>Combined Carry</td><td>+7.78%</td><td>15.81%</td><td>-51.56%</td><td><span class="pos">+0.492</span></td></tr>
-<tr><td>Combined CarryMom</td><td>+14.05%</td><td>17.45%</td><td>-33.42%</td><td><span class="pos">+0.805</span></td></tr>
-<tr><td>Value</td><td>+5.43%</td><td>20.84%</td><td>-114.62%</td><td><span class="pos">+0.260</span></td></tr>
-</tbody></table>
-<h3>5.2 Individual strategies &mdash; regime table</h3>
-<table><caption>Individual strategies, Value on F3 &mdash; Information Ratio by regime</caption>
-<thead><tr><th>Strategy</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>Full Sample</th></tr></thead><tbody>
-<tr><td>Momentum</td><td><span class="pos">+1.122</span></td><td><span class="pos">+1.564</span></td><td><span class="pos">+2.031</span></td><td><span class="pos">+0.663</span></td><td><b>+1.254</b></td></tr>
-<tr><td>Combined Carry</td><td><span class="pos">+0.884</span></td><td><span class="pos">+0.421</span></td><td><span class="pos">+0.963</span></td><td><span class="neg">-0.087</span></td><td><b>+0.492</b></td></tr>
-<tr><td>Combined CarryMom</td><td><span class="pos">+0.463</span></td><td><span class="pos">+0.791</span></td><td><span class="pos">+0.604</span></td><td><span class="pos">+1.312</span></td><td><b>+0.805</b></td></tr>
-<tr><td>Value</td><td><span class="neg">-1.086</span></td><td><span class="pos">+0.881</span></td><td><span class="neg">-0.099</span></td><td><span class="pos">+1.212</span></td><td><b>+0.260</b></td></tr>
-</tbody></table>
-<table><caption>Individual strategies, Value on F3 &mdash; R1: Supercycle Unwind (2011-01-01 to 2015-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Momentum</td><td>+20.73%</td><td>18.47%</td><td>-21.59%</td><td><span class="pos">+1.122</span></td></tr>
-<tr><td>Combined Carry</td><td>+12.01%</td><td>13.58%</td><td>-14.92%</td><td><span class="pos">+0.884</span></td></tr>
-<tr><td>Combined CarryMom</td><td>+6.21%</td><td>13.40%</td><td>-21.76%</td><td><span class="pos">+0.463</span></td></tr>
-<tr><td>Value</td><td>-16.91%</td><td>15.57%</td><td>-102.31%</td><td><span class="neg">-1.086</span></td></tr>
-</tbody></table>
-<table><caption>Individual strategies, Value on F3 &mdash; R2: Recovery Stabilization (2016-01-01 to 2019-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Momentum</td><td>+33.53%</td><td>21.44%</td><td>-21.61%</td><td><span class="pos">+1.564</span></td></tr>
-<tr><td>Combined Carry</td><td>+6.39%</td><td>15.17%</td><td>-36.79%</td><td><span class="pos">+0.421</span></td></tr>
-<tr><td>Combined CarryMom</td><td>+14.48%</td><td>18.30%</td><td>-21.99%</td><td><span class="pos">+0.791</span></td></tr>
-<tr><td>Value</td><td>+18.20%</td><td>20.65%</td><td>-33.90%</td><td><span class="pos">+0.881</span></td></tr>
-</tbody></table>
-<table><caption>Individual strategies, Value on F3 &mdash; R3: COVID Shock (2020-01-01 to 2021-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Momentum</td><td>+64.61%</td><td>31.82%</td><td>-38.64%</td><td><span class="pos">+2.031</span></td></tr>
-<tr><td>Combined Carry</td><td>+20.46%</td><td>21.25%</td><td>-51.56%</td><td><span class="pos">+0.963</span></td></tr>
-<tr><td>Combined CarryMom</td><td>+14.86%</td><td>24.60%</td><td>-33.42%</td><td><span class="pos">+0.604</span></td></tr>
-<tr><td>Value</td><td>-3.29%</td><td>33.16%</td><td>-72.31%</td><td><span class="neg">-0.099</span></td></tr>
-</tbody></table>
-<table><caption>Individual strategies, Value on F3 &mdash; R4: PostCOVID RussiaUkr (2022-01-01 to 2026-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Momentum</td><td>+14.17%</td><td>21.35%</td><td>-35.51%</td><td><span class="pos">+0.663</span></td></tr>
-<tr><td>Combined Carry</td><td>-1.38%</td><td>15.83%</td><td>-32.42%</td><td><span class="neg">-0.087</span></td></tr>
-<tr><td>Combined CarryMom</td><td>+22.02%</td><td>16.78%</td><td>-16.84%</td><td><span class="pos">+1.312</span></td></tr>
-<tr><td>Value</td><td>+22.81%</td><td>18.82%</td><td>-34.15%</td><td><span class="pos">+1.212</span></td></tr>
-</tbody></table>
-<h3>5.3 Individual strategies &mdash; expanding window</h3>
-<table><caption>Individual strategies, Value on F3 &mdash; Expanding window (cumulative-sample IR)</caption>
-<thead><tr><th>Strategy</th><th>Window A</th><th>Window B</th><th>Window C</th><th>Window D</th></tr></thead><tbody>
-<tr><td>Momentum</td><td><span class="pos">+1.122</span></td><td><span class="pos">+1.332</span></td><td><span class="pos">+1.483</span></td><td><span class="pos">+1.254</span></td></tr>
-<tr><td>Combined Carry</td><td><span class="pos">+0.884</span></td><td><span class="pos">+0.665</span></td><td><span class="pos">+0.728</span></td><td><span class="pos">+0.492</span></td></tr>
-<tr><td>Combined CarryMom</td><td><span class="pos">+0.463</span></td><td><span class="pos">+0.627</span></td><td><span class="pos">+0.610</span></td><td><span class="pos">+0.805</span></td></tr>
-<tr><td>Value</td><td><span class="neg">-1.086</span></td><td><span class="neg">-0.072</span></td><td><span class="neg">-0.077</span></td><td><span class="pos">+0.260</span></td></tr>
-</tbody></table>
-<p class="sub">Windows: Window A (2011-2015, thru R1); Window B (2011-2019, thru R2); Window C (2011-2021, thru R3); Window D (2011-latest, thru R4). Cumulative-sample snapshots of a fixed, ex-ante rule-based signal &mdash; nothing is refit between windows, so this is NOT a train/test split. Window D equals the full-sample table exactly.</p>
-<h3>5.4 Portfolio (4 combine methods) &mdash; full sample</h3>
-<table><caption>Portfolio combine methods, full sample &mdash; Value on F3</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Equal Weight</td><td>+13.77%</td><td>10.44%</td><td>-15.13%</td><td><span class="pos">+1.319</span></td></tr>
-<tr><td>Inverse Vol</td><td>+13.07%</td><td>10.37%</td><td>-19.33%</td><td><span class="pos">+1.260</span></td></tr>
-<tr><td>Risk Parity (ERC)</td><td>+10.90%</td><td>9.15%</td><td>-19.83%</td><td><span class="pos">+1.191</span></td></tr>
-<tr><td>Return-Tilt ERC (tilt=0.5)</td><td>+11.20%</td><td>9.13%</td><td>-18.33%</td><td><span class="pos">+1.226</span></td></tr>
-</tbody></table>
-<h3>5.5 Portfolio &mdash; regime table</h3>
-<table><caption>Portfolio combine methods, Value on F3 &mdash; Information Ratio by regime</caption>
-<thead><tr><th>Strategy</th><th>R1</th><th>R2</th><th>R3</th><th>R4</th><th>Full Sample</th></tr></thead><tbody>
-<tr><td>Equal Weight</td><td><span class="pos">+0.726</span></td><td><span class="pos">+1.597</span></td><td><span class="pos">+1.802</span></td><td><span class="pos">+1.335</span></td><td><b>+1.319</b></td></tr>
-<tr><td>Inverse Vol</td><td><span class="pos">+0.695</span></td><td><span class="pos">+1.460</span></td><td><span class="pos">+1.444</span></td><td><span class="pos">+1.372</span></td><td><b>+1.260</b></td></tr>
-<tr><td>Risk Parity (ERC)</td><td><span class="neg">-0.071</span></td><td><span class="pos">+1.557</span></td><td><span class="pos">+1.747</span></td><td><span class="pos">+1.521</span></td><td><b>+1.191</b></td></tr>
-<tr><td>Return-Tilt ERC (tilt=0.5)</td><td><span class="neg">-0.026</span></td><td><span class="pos">+1.538</span></td><td><span class="pos">+1.949</span></td><td><span class="pos">+1.517</span></td><td><b>+1.226</b></td></tr>
-</tbody></table>
-<table><caption>Portfolio combine methods, Value on F3 &mdash; R1: Supercycle Unwind (2011-01-01 to 2015-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Equal Weight</td><td>+5.51%</td><td>7.59%</td><td>-12.89%</td><td><span class="pos">+0.726</span></td></tr>
-<tr><td>Inverse Vol</td><td>+5.46%</td><td>7.85%</td><td>-12.80%</td><td><span class="pos">+0.695</span></td></tr>
-<tr><td>Risk Parity (ERC)</td><td>-0.42%</td><td>5.94%</td><td>-17.56%</td><td><span class="neg">-0.071</span></td></tr>
-<tr><td>Return-Tilt ERC (tilt=0.5)</td><td>-0.16%</td><td>5.93%</td><td>-15.98%</td><td><span class="neg">-0.026</span></td></tr>
-</tbody></table>
-<table><caption>Portfolio combine methods, Value on F3 &mdash; R2: Recovery Stabilization (2016-01-01 to 2019-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Equal Weight</td><td>+18.15%</td><td>11.36%</td><td>-14.42%</td><td><span class="pos">+1.597</span></td></tr>
-<tr><td>Inverse Vol</td><td>+15.61%</td><td>10.69%</td><td>-14.57%</td><td><span class="pos">+1.460</span></td></tr>
-<tr><td>Risk Parity (ERC)</td><td>+16.84%</td><td>10.82%</td><td>-15.03%</td><td><span class="pos">+1.557</span></td></tr>
-<tr><td>Return-Tilt ERC (tilt=0.5)</td><td>+16.54%</td><td>10.75%</td><td>-14.56%</td><td><span class="pos">+1.538</span></td></tr>
-</tbody></table>
-<table><caption>Portfolio combine methods, Value on F3 &mdash; R3: COVID Shock (2020-01-01 to 2021-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Equal Weight</td><td>+24.16%</td><td>13.41%</td><td>-15.13%</td><td><span class="pos">+1.802</span></td></tr>
-<tr><td>Inverse Vol</td><td>+19.47%</td><td>13.49%</td><td>-19.33%</td><td><span class="pos">+1.444</span></td></tr>
-<tr><td>Risk Parity (ERC)</td><td>+20.09%</td><td>11.50%</td><td>-13.77%</td><td><span class="pos">+1.747</span></td></tr>
-<tr><td>Return-Tilt ERC (tilt=0.5)</td><td>+22.60%</td><td>11.60%</td><td>-12.02%</td><td><span class="pos">+1.949</span></td></tr>
-</tbody></table>
-<table><caption>Portfolio combine methods, Value on F3 &mdash; R4: PostCOVID RussiaUkr (2022-01-01 to 2026-12-31)</caption>
-<thead><tr><th>Strategy</th><th>Ann. Return</th><th>Ann. Vol</th><th>Max Drawdown</th><th>IR (Sharpe)</th></tr></thead><tbody>
-<tr><td>Equal Weight</td><td>+14.40%</td><td>10.79%</td><td>-12.22%</td><td><span class="pos">+1.335</span></td></tr>
-<tr><td>Inverse Vol</td><td>+14.07%</td><td>10.25%</td><td>-12.18%</td><td><span class="pos">+1.372</span></td></tr>
-<tr><td>Risk Parity (ERC)</td><td>+14.08%</td><td>9.26%</td><td>-11.52%</td><td><span class="pos">+1.521</span></td></tr>
-<tr><td>Return-Tilt ERC (tilt=0.5)</td><td>+13.96%</td><td>9.20%</td><td>-12.03%</td><td><span class="pos">+1.517</span></td></tr>
-</tbody></table>
-<h3>5.6 Portfolio &mdash; expanding window</h3>
-<table><caption>Portfolio combine methods, Value on F3 &mdash; Expanding window (cumulative-sample IR)</caption>
-<thead><tr><th>Strategy</th><th>Window A</th><th>Window B</th><th>Window C</th><th>Window D</th></tr></thead><tbody>
-<tr><td>Equal Weight</td><td><span class="pos">+0.726</span></td><td><span class="pos">+1.177</span></td><td><span class="pos">+1.312</span></td><td><span class="pos">+1.319</span></td></tr>
-<tr><td>Inverse Vol</td><td><span class="pos">+0.695</span></td><td><span class="pos">+1.142</span></td><td><span class="pos">+1.209</span></td><td><span class="pos">+1.260</span></td></tr>
-<tr><td>Risk Parity (ERC)</td><td><span class="neg">-0.071</span></td><td><span class="pos">+0.856</span></td><td><span class="pos">+1.054</span></td><td><span class="pos">+1.191</span></td></tr>
-<tr><td>Return-Tilt ERC (tilt=0.5)</td><td><span class="neg">-0.026</span></td><td><span class="pos">+0.861</span></td><td><span class="pos">+1.106</span></td><td><span class="pos">+1.226</span></td></tr>
-</tbody></table>
-<p class="sub">Windows: Window A (2011-2015, thru R1); Window B (2011-2019, thru R2); Window C (2011-2021, thru R3); Window D (2011-latest, thru R4). Cumulative-sample snapshots of a fixed, ex-ante rule-based signal &mdash; nothing is refit between windows, so this is NOT a train/test split. Window D equals the full-sample table exactly.</p>
-<h3>5.7 Findings</h3>
-<div class="finding">
-<strong>Under the 4-row Combined Carry construction on F3, Momentum remains NGL's strongest individual sleeve</strong> (full-sample IR +1.254), followed by Combined CarryMom (+0.805), Value (+0.260), and Combined Carry (+0.492) &mdash; qualitatively the same ranking as the six-row version (Momentum &gt; CarryMom(F2-F14) &gt; CarryMom(F2-F4) &gt; Carry(F2-F14) &gt; Value &gt; Carry(F2-F4)), since averaging the two Carry tenor pairs together does not change which individual sleeves are strong or weak, only how they get weighted downstream. Combined Carry and Combined CarryMom are numerically identical to their six-row-report counterparts regardless of Value anchor, since neither depends on Value.
-</div>
-<div class="finding">
-<strong>Every combine method stays comfortably positive full-sample</strong>: Equal Weight is the strongest at +1.319, Risk Parity (ERC) the weakest at +1.191 &mdash; a real contrast with Metals, where every combine method under this same 4-row construction stays negative-to-flat. NGL's portfolio strength under the 4-row framing is still driven primarily by Momentum and Combined CarryMom, echoing the six-row report's own conclusion that Value's contract choice is a second-order lever for NGL rather than the main driver.
 </div>
 
 </body>

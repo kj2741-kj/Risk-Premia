@@ -171,7 +171,7 @@
       <h2><span class="badge badge-built">Built</span> Oil / Energy: WTI, Brent, RBOB, Heating Oil, Nat Gas</h2>
       <p class="note">Source: <code>data/06-30/Energy_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30, all five products aligned on this common window. Singapore Gasoil and Fuel Oil are excluded from this dashboard (2026-08-03, per decision); both remain in the underlying research config/engine and are unaffected there.</p>
 
-      <p class="note">Carry tenors: F1-F3 and F1-F12, both solid across all five products shown here. (The F1-F12, rather than F1-F13, choice was originally driven partly by Fuel Oil's weak long-leg liquidity -- Fuel Oil no longer appears in this dashboard, but the tenor pair itself is unchanged from the locked config.)</p>
+      <p class="note">Carry tenors: F1-F3 and F1-F13 (changed 2026-08-03 from F1-F12, to match Metals' convention). Both solid across all five products shown here. Fuel Oil -- the original reason F1-F12 was used instead of F1-F13 -- has no F13 column at all, but it is already excluded from this dashboard entirely, so that concern no longer applies to what's shown here. It still remains in the underlying research config's product list, where its Carry (F1-F13)/CarryMom (F1-F13) leg is silently flat/zero-contribution in that separate (unfiltered, 7-product) report, not in this dashboard's own numbers.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -191,7 +191,7 @@
       <h2><span class="badge badge-built">Built</span> Precious Metals: Gold, Silver, Copper (COMEX), Platinum, Palladium</h2>
       <p class="note">Prices: <code>data/06-30/Precious_Metals_Futures_Updated.xlsx</code>, 2006-01-03 to 2026-06-30.</p>
 
-      <p class="note">F1 and F2 are the most liquid contracts across the product set, with liquidity dropping off from F3 onwards, most sharply for Platinum and Palladium. On a conservative basis, F1-F2 is used as the Carry tenor for all Precious Metals products.</p>
+      <p class="note">Carry tenor: F1-F3 (changed 2026-08-03 from F1-F2, to match Metals/Energy's near-tenor convention). CAVEAT: a real-volume liquidity check found Platinum and Palladium only genuinely liquid (by days-actually-traded, not just quoted) through F1-F2 -- their F3 already fails that check at 87.0%/68.5% days traded, both below the >=90% bar Gold/Silver/Copper-COMEX clear. This change was flagged before being made; Platinum/Palladium's Carry (F1-F3) contribution should be read as resting on weaker liquidity than the other three products.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -209,9 +209,9 @@
   <div class="tab-panel" id="panel-ngl">
     <div class="card">
       <h2><span class="badge badge-built">Built</span> NGL: Ethane, Propane, Butane, Isobutane, Ethylene, Propylene</h2>
-      <p class="note">Source: <code>data/06-30/NGL_Futures_Updated.xlsx</code>, 2010-12-13 to 2026-06-30, all six products aligned on this common window (NGL's own history starts 2009-08, shorter than the other asset classes).</p>
+      <p class="note">Source: <code>data/06-30/NGL_Futures_Updated.xlsx</code>, 2010-12-13 to 2026-06-30, all six products aligned on this common window (NGL's own history starts 2009-08, shorter than the other asset classes). Note: Ethylene and Propylene are excluded from the live NGL dashboard's product selector and Portfolio tab (2026-08-03), but this research-pipeline report still covers all six products in cfg.PRODUCTS, unfiltered.</p>
 
-      <p class="note">Carry tenor: F4-F15, Bogorad's own convention (front-month prices are stale/index-settled for this asset class, unlike the other three).</p>
+      <p class="note">Carry tenor: NOW TWO tenor pairs as of 2026-08-03 -- F2-F4 (short-term, added same day for consistency with Metals'/Energy's two-tier structure) and F2-F14 (changed same day from F4-F15, for a clean 12-month span -- F4-F15 was 11 months). CAVEAT: F4 was originally chosen over F1/F2 specifically because NGL's near-tenor (F1-F2) roll yield is dominated by front-of-curve heating-season seasonality, found strongly negative-Sharpe historically. Both F2-F4 and F2-F14 move the near leg back into that same front-of-curve region; this was flagged before either change was made. A quick independent check (gross, full-history, F1-F2, not regime-matched) found this negative for 5 of 6 products but positive for Isobutane -- so "every ticker" was an overstatement, though directionally mostly right. Carry (F2-F4) is itself materially weaker than Carry (F2-F14) standalone (full-sample IR 0.272 vs 0.589) with a choppier regime pattern -- see the table below. Neither tenor pair has been re-verified for liquidity (the old F4-F15 quote-availability check doesn't carry over to either).</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -235,7 +235,7 @@
       </div>
       <div class="strategy-card">
         <h4>Carry: V1 Level + V2 Z-score composite</h4>
-        <p>Two views of the same curve slope (near tenor minus far tenor), averaged into one signal: V1 is the raw sign of the slope; V2 is that slope's z-score against its own 252-day rolling mean and standard deviation. Tenor pairs: F1-F3 and F1-F13 for Metals; F1-F2 for Precious Metals; F1-F3 and F1-F12 for Oil/Energy; F4-F15 for NGL (Bogorad's own convention).</p>
+        <p>Two views of the same curve slope (near tenor minus far tenor), averaged into one signal: V1 is the raw sign of the slope; V2 is that slope's z-score against its own 252-day rolling mean and standard deviation. Tenor pairs (as of 2026-08-03): F1-F3 and F1-F13 for Metals; F1-F3 for Precious Metals (changed from F1-F2); F1-F3 and F1-F13 for Oil/Energy (changed from F1-F12); F2-F14 for NGL (changed from F4-F15).</p>
       </div>
       <div class="strategy-card">
         <h4>Carry-Momentum: 20-day rate of change</h4>
@@ -260,7 +260,7 @@
 </div>
 
 <script>
-const LAST_UPDATED = "2026-08-03 (Value anchor contract changed from F8 to F3 uniformly across all four asset classes; StatArb sleeve removed from this dashboard; Singapore Gasoil and Fuel Oil removed from the Oil/Energy tab -- both remain in the underlying research config/engine, this is a dashboard-display-only change). Reporting window itself (2011-2026, four regimes) unchanged from the 2026-07-24 revision.";
+const LAST_UPDATED = "2026-08-03, third pass (NGL gained a second Carry tenor pair, F2-F4, added alongside F2-F14 -- NGL now has 6 strategies, matching Metals'/Energy's two-tier shape; Carry (F2-F4) is materially weaker standalone than F2-F14, see NGL tab's Carry note). Second pass, same day: Carry tenor pairs changed -- Oil/Energy F1-F12 -> F1-F13, Precious Metals F1-F2 -> F1-F3, NGL F4-F15 -> F2-F14 -- see each tab's Carry note for the liquidity/seasonality caveats disclosed for each change; Metals unchanged. First pass, same day: Value anchor contract changed from F8 to F3 uniformly across all four asset classes; StatArb sleeve removed from this dashboard; Singapore Gasoil and Fuel Oil removed from the Oil/Energy tab -- both remain in the underlying research config/engine, dashboard-display-only. Reporting window itself (2011-2026, four regimes) unchanged from the 2026-07-24 revision.";
 
 const METALS_COLUMNS = [
   {key:"full", label:"Full", years:"2011-2026"},
@@ -281,15 +281,17 @@ const REGIME_KEY_ROWS = [
 ];
 
 // Per-window (full sample + R1-R4 + 2026 YTD) {ret, vol, mdd, ir} grids,
-// regenerated 2026-08-03 via `python research/run_regime_table.py <asset_class>
-// --window-grid` after research/configs/*.py's VALUE_CONTRACT was changed from
-// F8 to F3 (see project memory). Energy's grid was generated from a one-off
-// script that filters cfg.PRODUCTS down to the 5 remaining products
-// (WTI/Brent/RBOB/HeatingOil/NatGas) in-process only -- research/configs/
-// energy.py's own PRODUCTS list is untouched, this dashboard simply doesn't
-// display SingaporeGasoil/FuelOil. Cross-checked against the F3 rows of the
-// four *_Value_Contract_Sensitivity.html reports built the same day -- Metals
-// Value full-sample IR 0.571, Precious 0.109, NGL 0.260 all match exactly.
+// generated via `python research/run_regime_table.py <asset_class>
+// --window-grid`. METALS_WINDOWS is UNCHANGED from the prior version of this
+// file (Metals' Carry tenor pairs, F1-F3/F1-F13, did not change today).
+// ENERGY_WINDOWS, PM_WINDOWS, and NGL_WINDOWS were regenerated 2026-08-03
+// (second pass) after three Carry tenor changes: Energy F1-F12->F1-F13,
+// Precious Metals F1-F2->F1-F3, NGL F4-F15->F2-F14 -- see each tab's note
+// above for the liquidity/seasonality caveats disclosed for each. Energy's
+// grid, as before, comes from a one-off script filtering cfg.PRODUCTS down
+// to the 5 dashboard-shown products (WTI/Brent/RBOB/HeatingOil/NatGas) in
+// process only -- research/configs/energy.py's own PRODUCTS list (7
+// products, unfiltered) is untouched.
 function ewBold(rows) { rows.forEach(r => { if (r.name.startsWith("EW")) r.bold = true; }); return rows; }
 
 const METALS_WINDOWS = {
@@ -353,45 +355,45 @@ const PM_COLUMNS = METALS_COLUMNS;
 const PM_WINDOWS = {
   full: ewBold([
     {name:"Momentum", ret:-7.02, vol:18.31, mdd:-150.10, ir:-0.383},
-    {name:"Carry (F1-F2)", ret:1.75, vol:13.10, mdd:-57.55, ir:0.134},
-    {name:"CarryMom (F1-F2)", ret:1.02, vol:13.84, mdd:-65.93, ir:0.074},
+    {name:"Carry (F1-F3)", ret:1.36, vol:13.42, mdd:-81.05, ir:0.101},
+    {name:"CarryMom (F1-F3)", ret:-0.83, vol:14.26, mdd:-92.09, ir:-0.058},
     {name:"Value", ret:1.80, vol:16.54, mdd:-56.36, ir:0.109},
-    {name:"EW PORT", ret:-0.61, vol:7.60, mdd:-47.18, ir:-0.081},
+    {name:"EW PORT", ret:-1.17, vol:7.89, mdd:-60.30, ir:-0.149},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:-5.77, vol:15.69, mdd:-48.99, ir:-0.367},
-    {name:"Carry (F1-F2)", ret:8.03, vol:12.15, mdd:-13.18, ir:0.661},
-    {name:"CarryMom (F1-F2)", ret:3.74, vol:10.92, mdd:-23.14, ir:0.342},
+    {name:"Carry (F1-F3)", ret:10.75, vol:13.04, mdd:-17.44, ir:0.824},
+    {name:"CarryMom (F1-F3)", ret:5.36, vol:11.69, mdd:-23.38, ir:0.458},
     {name:"Value", ret:1.39, vol:15.66, mdd:-33.22, ir:0.089},
-    {name:"EW PORT", ret:1.85, vol:8.57, mdd:-10.96, ir:0.216},
+    {name:"EW PORT", ret:2.93, vol:8.89, mdd:-11.67, ir:0.330},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:-2.34, vol:11.33, mdd:-37.87, ir:-0.207},
-    {name:"Carry (F1-F2)", ret:1.71, vol:10.03, mdd:-16.42, ir:0.170},
-    {name:"CarryMom (F1-F2)", ret:2.96, vol:9.37, mdd:-22.26, ir:0.316},
+    {name:"Carry (F1-F3)", ret:1.94, vol:9.95, mdd:-20.27, ir:0.195},
+    {name:"CarryMom (F1-F3)", ret:2.21, vol:9.18, mdd:-17.69, ir:0.241},
     {name:"Value", ret:0.65, vol:9.43, mdd:-18.76, ir:0.069},
-    {name:"EW PORT", ret:0.74, vol:4.65, mdd:-7.90, ir:0.160},
+    {name:"EW PORT", ret:0.61, vol:4.45, mdd:-7.38, ir:0.138},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:-15.58, vol:20.38, mdd:-42.56, ir:-0.764},
-    {name:"Carry (F1-F2)", ret:-6.90, vol:12.44, mdd:-22.07, ir:-0.555},
-    {name:"CarryMom (F1-F2)", ret:5.70, vol:18.78, mdd:-35.72, ir:0.303},
+    {name:"Carry (F1-F3)", ret:-12.70, vol:12.42, mdd:-33.61, ir:-1.023},
+    {name:"CarryMom (F1-F3)", ret:-3.48, vol:19.33, mdd:-36.99, ir:-0.180},
     {name:"Value", ret:4.20, vol:18.72, mdd:-29.11, ir:0.224},
-    {name:"EW PORT", ret:-3.15, vol:7.35, mdd:-13.13, ir:-0.428},
+    {name:"EW PORT", ret:-6.89, vol:7.30, mdd:-17.10, ir:-0.943},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:-8.76, vol:24.15, mdd:-85.48, ir:-0.363},
-    {name:"Carry (F1-F2)", ret:-1.34, vol:16.41, mdd:-55.40, ir:-0.082},
-    {name:"CarryMom (F1-F2)", ret:-5.83, vol:17.11, mdd:-65.93, ir:-0.341},
+    {name:"Carry (F1-F3)", ret:-3.32, vol:16.57, mdd:-64.93, ir:-0.201},
+    {name:"CarryMom (F1-F3)", ret:-9.27, vol:17.53, mdd:-75.94, ir:-0.529},
     {name:"Value", ret:2.20, vol:20.87, mdd:-56.36, ir:0.105},
-    {name:"EW PORT", ret:-3.43, vol:8.62, mdd:-41.94, ir:-0.398},
+    {name:"EW PORT", ret:-4.79, vol:9.22, mdd:-45.94, ir:-0.519},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:9.23, vol:45.46, mdd:-37.08, ir:0.203},
-    {name:"Carry (F1-F2)", ret:31.74, vol:16.48, mdd:-5.15, ir:1.926},
-    {name:"CarryMom (F1-F2)", ret:42.10, vol:31.91, mdd:-18.57, ir:1.319},
+    {name:"Carry (F1-F3)", ret:47.01, vol:19.73, mdd:-5.69, ir:2.383},
+    {name:"CarryMom (F1-F3)", ret:44.71, vol:33.57, mdd:-19.33, ir:1.332},
     {name:"Value", ret:34.80, vol:44.98, mdd:-24.07, ir:0.774},
-    {name:"EW PORT", ret:29.47, vol:13.27, mdd:-5.28, ir:2.221},
+    {name:"EW PORT", ret:33.94, vol:15.30, mdd:-5.51, ir:2.218},
   ]),
 };
 
@@ -400,56 +402,56 @@ const ENERGY_WINDOWS = {
   full: ewBold([
     {name:"Momentum", ret:12.16, vol:28.29, mdd:-85.85, ir:0.430},
     {name:"Carry (F1-F3)", ret:2.94, vol:22.41, mdd:-87.53, ir:0.131},
-    {name:"Carry (F1-F12)", ret:9.35, vol:24.30, mdd:-65.12, ir:0.385},
+    {name:"Carry (F1-F13)", ret:8.19, vol:24.99, mdd:-66.34, ir:0.328},
     {name:"CarryMom (F1-F3)", ret:7.68, vol:22.48, mdd:-55.60, ir:0.342},
-    {name:"CarryMom (F1-F12)", ret:13.95, vol:25.04, mdd:-57.83, ir:0.557},
+    {name:"CarryMom (F1-F13)", ret:16.14, vol:25.52, mdd:-52.63, ir:0.632},
     {name:"Value", ret:-2.16, vol:27.40, mdd:-129.97, ir:-0.079},
-    {name:"EW PORT", ret:7.32, vol:13.67, mdd:-23.45, ir:0.535},
+    {name:"EW PORT", ret:7.49, vol:13.84, mdd:-24.00, ir:0.541},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:13.17, vol:20.64, mdd:-37.28, ir:0.638},
     {name:"Carry (F1-F3)", ret:5.47, vol:12.55, mdd:-22.81, ir:0.436},
-    {name:"Carry (F1-F12)", ret:9.91, vol:16.71, mdd:-25.66, ir:0.593},
+    {name:"Carry (F1-F13)", ret:8.06, vol:17.14, mdd:-26.64, ir:0.470},
     {name:"CarryMom (F1-F3)", ret:5.82, vol:14.72, mdd:-38.35, ir:0.395},
-    {name:"CarryMom (F1-F12)", ret:11.25, vol:16.37, mdd:-26.14, ir:0.687},
+    {name:"CarryMom (F1-F13)", ret:8.52, vol:16.74, mdd:-23.94, ir:0.509},
     {name:"Value", ret:-17.03, vol:21.20, mdd:-93.60, ir:-0.804},
-    {name:"EW PORT", ret:4.76, vol:8.58, mdd:-17.19, ir:0.555},
+    {name:"EW PORT", ret:4.00, vol:8.69, mdd:-17.33, ir:0.460},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:-4.62, vol:23.45, mdd:-57.07, ir:-0.197},
     {name:"Carry (F1-F3)", ret:2.75, vol:16.32, mdd:-24.49, ir:0.169},
-    {name:"Carry (F1-F12)", ret:0.37, vol:18.92, mdd:-39.33, ir:0.020},
+    {name:"Carry (F1-F13)", ret:0.63, vol:19.85, mdd:-39.26, ir:0.032},
     {name:"CarryMom (F1-F3)", ret:7.87, vol:15.16, mdd:-16.64, ir:0.519},
-    {name:"CarryMom (F1-F12)", ret:-2.06, vol:18.44, mdd:-35.28, ir:-0.112},
+    {name:"CarryMom (F1-F13)", ret:3.25, vol:19.42, mdd:-32.53, ir:0.168},
     {name:"Value", ret:12.89, vol:21.43, mdd:-25.26, ir:0.601},
-    {name:"EW PORT", ret:2.87, vol:10.08, mdd:-13.74, ir:0.284},
+    {name:"EW PORT", ret:3.80, vol:10.28, mdd:-12.83, ir:0.369},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:58.80, vol:44.52, mdd:-38.39, ir:1.321},
     {name:"Carry (F1-F3)", ret:8.85, vol:39.74, mdd:-57.83, ir:0.223},
-    {name:"Carry (F1-F12)", ret:22.93, vol:41.68, mdd:-65.12, ir:0.550},
+    {name:"Carry (F1-F13)", ret:28.90, vol:42.87, mdd:-66.34, ir:0.674},
     {name:"CarryMom (F1-F3)", ret:-3.87, vol:38.52, mdd:-46.00, ir:-0.100},
-    {name:"CarryMom (F1-F12)", ret:58.27, vol:40.09, mdd:-23.20, ir:1.453},
+    {name:"CarryMom (F1-F13)", ret:60.35, vol:41.17, mdd:-20.99, ir:1.466},
     {name:"Value", ret:-12.27, vol:44.52, mdd:-91.46, ir:-0.276},
-    {name:"EW PORT", ret:22.12, vol:23.07, mdd:-17.17, ir:0.959},
+    {name:"EW PORT", ret:23.46, vol:23.11, mdd:-16.60, ir:1.015},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:5.11, vol:30.16, mdd:-85.85, ir:0.169},
     {name:"Carry (F1-F3)", ret:-2.38, vol:24.83, mdd:-66.98, ir:-0.096},
-    {name:"Carry (F1-F12)", ret:10.65, vol:25.17, mdd:-46.16, ir:0.423},
+    {name:"Carry (F1-F13)", ret:5.82, vol:25.66, mdd:-55.16, ir:0.227},
     {name:"CarryMom (F1-F3)", ret:14.77, vol:25.23, mdd:-35.91, ir:0.585},
-    {name:"CarryMom (F1-F12)", ret:11.42, vol:29.04, mdd:-57.83, ir:0.393},
+    {name:"CarryMom (F1-F13)", ret:16.36, vol:28.99, mdd:-52.63, ir:0.564},
     {name:"Value", ret:5.55, vol:28.23, mdd:-67.89, ir:0.197},
-    {name:"EW PORT", ret:7.52, vol:15.32, mdd:-23.45, ir:0.491},
+    {name:"EW PORT", ret:7.54, vol:15.62, mdd:-24.00, ir:0.482},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:89.28, vol:46.88, mdd:-16.80, ir:1.904},
     {name:"Carry (F1-F3)", ret:38.84, vol:42.72, mdd:-18.70, ir:0.909},
-    {name:"Carry (F1-F12)", ret:78.93, vol:44.31, mdd:-21.30, ir:1.781},
+    {name:"Carry (F1-F13)", ret:42.66, vol:46.55, mdd:-22.60, ir:0.916},
     {name:"CarryMom (F1-F3)", ret:86.10, vol:38.12, mdd:-10.53, ir:2.259},
-    {name:"CarryMom (F1-F12)", ret:47.48, vol:48.16, mdd:-16.16, ir:0.986},
+    {name:"CarryMom (F1-F13)", ret:79.83, vol:46.28, mdd:-10.53, ir:1.725},
     {name:"Value", ret:32.00, vol:39.24, mdd:-26.21, ir:0.816},
-    {name:"EW PORT", ret:62.11, vol:26.73, mdd:-7.54, ir:2.324},
+    {name:"EW PORT", ret:61.45, vol:27.33, mdd:-7.19, ir:2.249},
   ]),
 };
 
@@ -457,45 +459,57 @@ const NGL_COLUMNS = METALS_COLUMNS;
 const NGL_WINDOWS = {
   full: ewBold([
     {name:"Momentum", ret:27.83, vol:22.19, mdd:-38.64, ir:1.254},
-    {name:"Carry (F4-F15)", ret:7.94, vol:18.31, mdd:-87.77, ir:0.434},
-    {name:"CarryMom (F4-F15)", ret:17.92, vol:20.56, mdd:-43.08, ir:0.872},
+    {name:"Carry (F2-F4)", ret:4.80, vol:17.64, mdd:-66.10, ir:0.272},
+    {name:"Carry (F2-F14)", ret:10.75, vol:18.27, mdd:-49.92, ir:0.589},
+    {name:"CarryMom (F2-F4)", ret:10.20, vol:19.65, mdd:-53.18, ir:0.519},
+    {name:"CarryMom (F2-F14)", ret:17.89, vol:20.58, mdd:-36.23, ir:0.869},
     {name:"Value", ret:5.43, vol:20.84, mdd:-114.62, ir:0.260},
-    {name:"EW PORT", ret:14.78, vol:11.46, mdd:-18.04, ir:1.289},
+    {name:"EW PORT", ret:12.82, vol:11.29, mdd:-20.78, ir:1.135},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:20.73, vol:18.47, mdd:-21.59, ir:1.122},
-    {name:"Carry (F4-F15)", ret:16.74, vol:15.28, mdd:-13.86, ir:1.096},
-    {name:"CarryMom (F4-F15)", ret:14.40, vol:15.43, mdd:-13.12, ir:0.933},
+    {name:"Carry (F2-F4)", ret:9.10, vol:14.94, mdd:-16.59, ir:0.609},
+    {name:"Carry (F2-F14)", ret:14.92, vol:15.14, mdd:-14.93, ir:0.985},
+    {name:"CarryMom (F2-F4)", ret:1.89, vol:15.98, mdd:-40.27, ir:0.119},
+    {name:"CarryMom (F2-F14)", ret:10.53, vol:15.35, mdd:-17.38, ir:0.686},
     {name:"Value", ret:-16.91, vol:15.57, mdd:-102.31, ir:-1.086},
-    {name:"EW PORT", ret:8.74, vol:8.34, mdd:-8.99, ir:1.048},
+    {name:"EW PORT", ret:6.71, vol:8.56, mdd:-12.69, ir:0.783},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:33.53, vol:21.44, mdd:-21.61, ir:1.564},
-    {name:"Carry (F4-F15)", ret:6.00, vol:16.65, mdd:-41.01, ir:0.360},
-    {name:"CarryMom (F4-F15)", ret:12.17, vol:20.05, mdd:-42.98, ir:0.607},
+    {name:"Carry (F2-F4)", ret:2.50, vol:17.39, mdd:-62.12, ir:0.144},
+    {name:"Carry (F2-F14)", ret:10.28, vol:16.83, mdd:-22.88, ir:0.611},
+    {name:"CarryMom (F2-F4)", ret:12.08, vol:20.37, mdd:-43.98, ir:0.593},
+    {name:"CarryMom (F2-F14)", ret:16.87, vol:20.82, mdd:-24.68, ir:0.810},
     {name:"Value", ret:18.20, vol:20.65, mdd:-33.90, ir:0.881},
-    {name:"EW PORT", ret:17.47, vol:11.52, mdd:-16.42, ir:1.517},
+    {name:"EW PORT", ret:15.58, vol:11.89, mdd:-15.33, ir:1.311},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:64.61, vol:31.82, mdd:-38.64, ir:2.031},
-    {name:"Carry (F4-F15)", ret:44.44, vol:28.22, mdd:-39.52, ir:1.575},
-    {name:"CarryMom (F4-F15)", ret:44.14, vol:30.81, mdd:-32.72, ir:1.433},
+    {name:"Carry (F2-F4)", ret:-2.49, vol:23.69, mdd:-57.36, ir:-0.105},
+    {name:"Carry (F2-F14)", ret:43.41, vol:28.11, mdd:-49.82, ir:1.544},
+    {name:"CarryMom (F2-F4)", ret:1.57, vol:26.78, mdd:-41.30, ir:0.059},
+    {name:"CarryMom (F2-F14)", ret:28.14, vol:30.54, mdd:-36.23, ir:0.922},
     {name:"Value", ret:-3.29, vol:33.16, mdd:-72.31, ir:-0.099},
-    {name:"EW PORT", ret:37.48, vol:16.92, mdd:-18.04, ir:2.215},
+    {name:"EW PORT", ret:21.99, vol:14.91, mdd:-20.78, ir:1.475},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:14.17, vol:21.35, mdd:-35.51, ir:0.663},
-    {name:"Carry (F4-F15)", ret:-16.49, vol:17.03, mdd:-84.36, ir:-0.968},
-    {name:"CarryMom (F4-F15)", ret:15.23, vol:20.26, mdd:-43.08, ir:0.752},
+    {name:"Carry (F2-F4)", ret:5.34, vol:17.49, mdd:-29.16, ir:0.305},
+    {name:"Carry (F2-F14)", ret:-8.10, vol:16.98, mdd:-45.96, ir:-0.477},
+    {name:"CarryMom (F2-F4)", ret:21.63, vol:18.93, mdd:-18.64, ir:1.143},
+    {name:"CarryMom (F2-F14)", ret:22.41, vol:19.92, mdd:-27.53, ir:1.125},
     {name:"Value", ret:22.81, vol:18.82, mdd:-34.15, ir:1.212},
-    {name:"EW PORT", ret:8.93, vol:11.35, mdd:-16.38, ir:0.787},
+    {name:"EW PORT", ret:13.04, vol:11.54, mdd:-12.39, ir:1.130},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:31.66, vol:33.92, mdd:-17.09, ir:0.933},
-    {name:"Carry (F4-F15)", ret:-50.15, vol:34.02, mdd:-30.38, ir:-1.474},
-    {name:"CarryMom (F4-F15)", ret:68.30, vol:32.13, mdd:-11.34, ir:2.126},
+    {name:"Carry (F2-F4)", ret:-32.71, vol:26.59, mdd:-21.04, ir:-1.230},
+    {name:"Carry (F2-F14)", ret:-41.42, vol:34.73, mdd:-28.99, ir:-1.193},
+    {name:"CarryMom (F2-F4)", ret:43.65, vol:28.76, mdd:-15.08, ir:1.518},
+    {name:"CarryMom (F2-F14)", ret:62.06, vol:32.03, mdd:-13.92, ir:1.938},
     {name:"Value", ret:79.08, vol:27.71, mdd:-7.81, ir:2.854},
-    {name:"EW PORT", ret:32.22, vol:21.96, mdd:-7.55, ir:1.467},
+    {name:"EW PORT", ret:23.72, vol:21.97, mdd:-8.59, ir:1.080},
   ]),
 };
 

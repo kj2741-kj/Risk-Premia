@@ -144,8 +144,13 @@ def metrics(net: pd.Series) -> dict:
     a = net.dropna()
     if len(a) < 20 or a.std(ddof=1) == 0:
         return dict(ret=np.nan, vol=np.nan, mdd=np.nan, ir=np.nan)
-    ret = float(a.mean() * 252)
+    log_ret = float(a.mean() * 252)
     vol = float(a.std(ddof=1) * np.sqrt(252))
+    ir = (log_ret / vol) if vol > 0 else np.nan
+    # True compounded annual return, not log return -- see
+    # research/run_regime_table.py::_metrics for the full derivation. IR above
+    # stays computed from log_ret/vol (untouched, still a coherent Sharpe).
+    ret = (np.exp(log_ret) - 1) * 100
     # Max drawdown WITHIN this window (cumulative log-return reset to 0 at the
     # window's own start) -- same per-window convention as run_regime_table.py.
     # True value-based drawdown, not log-space peak-to-trough -- see
@@ -153,7 +158,7 @@ def metrics(net: pd.Series) -> dict:
     cum = a.cumsum()
     value = np.exp(cum)
     mdd = float((value / value.cummax() - 1).min()) * 100
-    return dict(ret=ret * 100, vol=vol * 100, mdd=mdd, ir=(ret / vol) if vol > 0 else np.nan)
+    return dict(ret=ret, vol=vol * 100, mdd=mdd, ir=ir)
 
 
 def _regime_row(name: str, net: pd.Series) -> dict:

@@ -385,7 +385,12 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
 
     g, n = _slice(gross), _slice(net)
     if len(n) > 20 and n.std(ddof=1) > 0:
-        ann = float(n.mean() * 252 * 100)
+        # True compounded annual return, not log return -- see
+        # research/run_regime_table.py::_metrics for the full derivation.
+        # _sharpe() above is computed independently from the raw series, not
+        # from this value, so it stays a coherent log-return Sharpe untouched.
+        log_ann = float(n.mean() * 252)
+        ann = float((np.exp(log_ann) - 1) * 100)
         vol = float(n.std(ddof=1) * np.sqrt(252) * 100)
     else:
         ann = vol = np.nan

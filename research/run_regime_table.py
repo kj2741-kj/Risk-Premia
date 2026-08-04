@@ -71,9 +71,17 @@ def _metrics(series: pd.Series) -> dict:
     s = series.dropna()
     if len(s) < 20 or s.std(ddof=1) == 0:
         return dict(ret=np.nan, vol=np.nan, mdd=np.nan, ir=np.nan)
-    ret = float(s.mean() * 252)
+    log_ret = float(s.mean() * 252)
     vol = float(s.std(ddof=1) * np.sqrt(252))
-    ir = float(ret / vol) if vol > 0 else np.nan
+    ir = float(log_ret / vol) if vol > 0 else np.nan
+    # TRUE compounded annual return (fixed 2026-08-04, was log_ret*100 before --
+    # same log-vs-value gap as MDD: log_ret is the continuously-compounded
+    # growth rate, not literally "% you make in a year". Converted the same
+    # way MDD was: true_ret = e^log_ret - 1. IR stays computed from log_ret/
+    # vol above (untouched) -- Sharpe/IR only remains coherent if return and
+    # vol stay in the same (log) units, so this conversion is display-only,
+    # not fed back into IR.
+    ret = (np.exp(log_ret) - 1) * 100
     # Max drawdown WITHIN this window: cumulative log-return reset to 0 at the
     # window's own start, same convention as ret/vol being independently
     # annualized per window rather than sliced off one continuous full-sample
@@ -91,7 +99,7 @@ def _metrics(series: pd.Series) -> dict:
     cum = s.cumsum()
     value = np.exp(cum)
     mdd = float((value / value.cummax() - 1).min()) * 100
-    return dict(ret=ret * 100, vol=vol * 100, mdd=mdd, ir=ir)
+    return dict(ret=ret, vol=vol * 100, mdd=mdd, ir=ir)
 
 
 def build_strategy_net_series(cfg) -> tuple[dict[str, pd.Series], pd.Timestamp, pd.Timestamp]:

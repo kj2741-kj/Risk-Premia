@@ -78,12 +78,18 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
         a = pnl[pos != 0].dropna()
         return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
 
+    # NOTE 2026-08-04: this function is DOLLAR PnL (gp = pos * f1c.diff(), a raw
+    # price level, not a log price -- see module docstring "Native dollar/unit
+    # terms"), NOT a log-return series. The log-space-vs-true-value conversion
+    # applied to MDD/ret in log_return_metrics() below and run_regime_table.py
+    # does not apply here: exp() of a cumulative dollar sum is meaningless.
+    # `cum`/`ann_pnl` stay in native dollar/unit terms, unconverted, matching
+    # the original (correct) convention.
     cum = net.fillna(0).cumsum()
-    value = np.exp(cum)
     ann_pnl = net.dropna().mean() * 252 if net.notna().any() else np.nan
     return dict(gross=_s(gp), net=_s(net),
                 ann=float(ann_pnl) if pd.notna(ann_pnl) else np.nan,
-                mdd=float((value / value.cummax() - 1).min()), nact=int((pos != 0).sum()),
+                mdd=float((cum - cum.cummax()).min()), nact=int((pos != 0).sum()),
                 flat_pct=float(100 * (pos == 0).sum() / len(pos)) if len(pos) else np.nan)
 
 
@@ -170,7 +176,12 @@ def log_return_metrics(pos: pd.Series, log_price: pd.Series, tc_bps: int = 5,
 
     cum = net.fillna(0).cumsum()
     value = np.exp(cum)
-    ann_ret = net.dropna().mean() * 252 if net.notna().any() else np.nan
+    log_ann_ret = net.dropna().mean() * 252 if net.notna().any() else np.nan
+    # True compounded annual return, not log return -- see
+    # research/run_regime_table.py::_metrics for the full derivation. `_s()`
+    # above is computed independently from the raw pnl series, so Sharpe
+    # stays a coherent log-return ratio, untouched by this conversion.
+    ann_ret = np.exp(log_ann_ret) - 1 if pd.notna(log_ann_ret) else np.nan
     return dict(gross=_s(gp), net=_s(net),
                 ann=float(ann_ret) if pd.notna(ann_ret) else np.nan,
                 mdd=float((value / value.cummax() - 1).min()), nact=int((pos != 0).sum()),

@@ -229,11 +229,14 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
         return ann, std, sh, so
 
     def _max_dd(pnl_series):
-        # True value-based drawdown, not log-space peak-to-trough -- see
-        # research/run_regime_table.py::_metrics for the full derivation.
+        # NOTE 2026-08-04: daily_pnl here is DOLLAR PnL (Position x delta
+        # F1_continuous -- see module docstring), NOT a log-return series. The
+        # log-space-vs-true-value conversion applied to MDD in
+        # run_regime_table.py::_metrics does not apply here: exp() of a
+        # cumulative dollar sum is meaningless. Stays in native dollar/unit
+        # terms, unconverted, matching the original (correct) convention.
         cum = pnl_series.fillna(0).cumsum()
-        value = np.exp(cum)
-        return float((value / value.cummax() - 1).min())
+        return float((cum - cum.cummax()).min())
 
     ann_pnl, ann_std, sharpe, sortino = _ratios(active_pnl)
     ann_pnl_net, ann_std_net, sharpe_net, sortino_net = _ratios(active_pnl_net)

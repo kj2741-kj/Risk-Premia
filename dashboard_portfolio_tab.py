@@ -269,17 +269,30 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
     raise ValueError(f"Unknown family {family!r}")
 
 
+def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Series:
+    """Pre-shift combined raw signal for one strategy family on one product --
+    the leg-combination step shared by _instance_product_returns, exposed
+    separately so a caller can combine this signal further with ANOTHER
+    instance's raw signal before a single execution shift is applied (e.g.
+    Combined Carry's across-tenor-pair combination, which must average two
+    tenor pairs' raw composite signals, shift ONCE, then compute PnL --
+    not average two tenor pairs' already-shifted PnL series)."""
+    if not instance["legs"]:
+        return pd.Series(dtype=float)
+    raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
+    raws = [r for r in raws if not r.empty]
+    if not raws:
+        return pd.Series(dtype=float)
+    return raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
+
+
 def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
     """Gross and net daily log-return contribution of one strategy family
     (a reference strategy or a draft sleeve) on one product."""
     empty = pd.Series(dtype=float)
-    if not instance["legs"]:
+    combo = _instance_product_raw_signal(instance, product_data)
+    if combo.empty:
         return empty, empty
-    raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
-    raws = [r for r in raws if not r.empty]
-    if not raws:
-        return empty, empty
-    combo = raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
     pos = exec_shift(combo, int(instance["shift_n"])).fillna(0)
     return log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
 
@@ -290,6 +303,37 @@ def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd
     grosses, nets = [], []
     for product_data in data.values():
         g, n = _instance_product_returns(instance, product_data, tc_bps)
+        if not n.empty:
+            grosses.append(g)
+            nets.append(n)
+    empty = pd.Series(dtype=float)
+    gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
+    net_agg = combine_returns(nets, "equal_weight") if nets else empty
+    return gross_agg, net_agg
+
+
+def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict],
+                                    data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+    """Signal-level Combined Carry / Combined CarryMom (Dimil's construction,
+    Methodology doc Section 7): for each product, equal-weight this asset
+    class's Carry tenor pairs' raw (pre-shift) composite signals into ONE
+    combined raw signal, apply the execution shift ONCE to that combined
+    result, then compute PnL -- NOT a return-level average of each tenor
+    pair's own already-shifted, already-PnL'd series (that was tonight's
+    earlier, incorrect version; this one is verified to reproduce Dimil's
+    real Metals numbers exactly). `tenor_instances` are this family's
+    per-tenor-pair reference instances (e.g. "Carry (F1-F3)", "Carry
+    (F1-F13)"), each contributing one raw composite signal per product."""
+    shift_n = cfg.CARRY_SHIFT_N if family == "Carry" else cfg.CARRY_MOMENTUM_SHIFT_N
+    grosses, nets = [], []
+    for product_data in data.values():
+        raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
+        raws = [r for r in raws if not r.empty]
+        if not raws:
+            continue
+        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
+        pos = exec_shift(combo, shift_n).fillna(0)
+        g, n = log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
         if not n.empty:
             grosses.append(g)
             nets.append(n)
@@ -381,6 +425,15 @@ def _render_reference_strategy(instance: dict) -> None:
         for leg in instance["legs"]:
             st.markdown(f"- {_describe_leg(instance['family'], leg)}")
         st.caption(f"Execution lag (shift_n): {instance['shift_n']}  |  Combine legs via: Equal Weight")
+
+
+def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str]], note: str) -> None:
+    """Read-only card for a Combined Carry / Combined CarryMom reference row --
+    equal-weight of the per-tenor-pair legs it's built from."""
+    with st.expander(label, expanded=False):
+        for near, far in tenor_pairs:
+            st.markdown(f"- {note} ({near}-{far})")
+        st.caption("Combine tenor pairs via: Equal Weight")
 
 
 # Leg rendering (shared by every editable leg list -- currently only the
@@ -684,9 +737,33 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     st.caption("The officially reported parameter set for this asset class, shown here for "
                "comparison. Read-only -- use Portfolio Construction below to combine them: "
                "switching a family on there pre-fills it with these exact same parameters.")
+
+    has_multi_tenor = len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2
+    separate_tenor_carry = False
+    if has_multi_tenor:
+        separate_tenor_carry = st.checkbox(
+            "Treat Carry / Carry-Momentum tenor pairs as separate strategies",
+            value=False, key=f"{key_prefix}_pf_separate_tenor",
+            help="Off (default): this asset class's two Carry tenor pairs are equal-weighted "
+                 "into one Combined Carry row, and the two CarryMom tenor pairs into one "
+                 "Combined CarryMom row -- four reference strategies total (Momentum, "
+                 "Combined Carry, Combined CarryMom, Value). This is Dimil's construction "
+                 "from Research_Dashboard_CombinedCarry.html. On: show each tenor pair as "
+                 "its own row instead -- six total (Momentum, Carry x2, CarryMom x2, Value) "
+                 "-- this project's original convention. Applies to the reference strategies "
+                 "below, the strategy pickers further down, and the reference-strategy "
+                 "portfolio aggregate.")
+
     reference_strategies = _build_reference_strategies(cfg)
-    for instance in reference_strategies:
-        _render_reference_strategy(instance)
+    if separate_tenor_carry or not has_multi_tenor:
+        for instance in reference_strategies:
+            _render_reference_strategy(instance)
+    else:
+        by_id = {inst["id"]: inst for inst in reference_strategies}
+        _render_reference_strategy(by_id["mom"])
+        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V1+V2 composite")
+        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry-Momentum")
+        _render_reference_strategy(by_id["value"])
 
     section_header("Portfolio construction")
     st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
@@ -771,7 +848,36 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             portfolios.pop(to_remove)
             st.rerun()
 
-    instance_gross, instance_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded_products)
+    raw_gross, raw_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded_products)
+
+    # "Combined Carry" alternative construction (added 2026-08-04, corrected to signal-level
+    # 2026-08-04): equal-weight this asset class's two Carry tenor pairs' raw signals into one
+    # Combined Carry row, and the two CarryMom tenor pairs' raw signals into one Combined
+    # CarryMom row, shifting once -- Dimil's construction from Research_Dashboard_CombinedCarry
+    # .html / Methodology doc Section 7, verified to reproduce his real Metals numbers exactly
+    # (see research/_validate_signal_combine.py). This is now the DEFAULT view (four reference
+    # strategies: Momentum, Combined Carry, Combined CarryMom, Value); the `separate_tenor_carry`
+    # checkbox above switches back to the original six-row breakdown. Only meaningful with >=2
+    # Carry tenor pairs, so this always falls through to the raw six-row set for Precious Metals
+    # (one pair only, nothing to combine).
+    if raw_net and has_multi_tenor and not separate_tenor_carry:
+        by_id = {inst["id"]: inst for inst in reference_strategies}
+        carry_tenor_instances = [by_id[f"carry_{near}{far}"] for near, far in cfg.CARRY_TENOR_PAIRS
+                                  if f"carry_{near}{far}" in by_id]
+        carrymom_tenor_instances = [by_id[f"carrymom_{near}{far}"] for near, far in cfg.CARRY_TENOR_PAIRS
+                                     if f"carrymom_{near}{far}" in by_id]
+        if len(carry_tenor_instances) == len(cfg.CARRY_TENOR_PAIRS) and \
+           len(carrymom_tenor_instances) == len(cfg.CARRY_TENOR_PAIRS):
+            cc_gross, cc_net = _combined_tenor_family_returns("Carry", cfg, carry_tenor_instances, data, tc_bps)
+            ccm_gross, ccm_net = _combined_tenor_family_returns("CarryMom", cfg, carrymom_tenor_instances, data, tc_bps)
+            instance_gross = {"Momentum": raw_gross["Momentum"], "Combined Carry": cc_gross,
+                               "Combined CarryMom": ccm_gross, "Value": raw_gross["Value"]}
+            instance_net = {"Momentum": raw_net["Momentum"], "Combined Carry": cc_net,
+                             "Combined CarryMom": ccm_net, "Value": raw_net["Value"]}
+        else:
+            instance_gross, instance_net = dict(raw_gross), dict(raw_net)
+    else:
+        instance_gross, instance_net = dict(raw_gross), dict(raw_net)
 
     if instance_net:
         agg_label = f"{combine_method} Portfolio (all reference strategies)"

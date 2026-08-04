@@ -456,42 +456,83 @@ def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
     before any weight (and therefore the combined series) is defined, on top of each leg's own
     burn-in.
 
-    Plain pandas addition (no reindex, no fillna) across the series, matching
-    run_regime_table.py's own build_table() exactly: each per-product `net` series is already
-    reindexed to ITS OWN calendar upstream (log_return_daily reindexes to log_price's index),
-    fixing internal burn-in gaps only -- the cross-series combine step here is a bare `+`, whose
-    ordinary pandas union-alignment semantics leave a date NaN whenever any one contributor
-    lacks it, later dropped by whatever computes the metrics. This matters in practice, not just
-    in principle: Energy mixes NYMEX (WTI/RBOB/HeatingOil/NatGas), ICE (Brent/SingaporeGasoil),
-    and Argus-style (FuelOil) calendars, which genuinely differ on which days they trade -- an
-    earlier version of this function reindexed onto the UNION of dates and filled gaps with
-    zero, silently treating "product X's exchange was closed" as "product X was flat that day",
-    which measurably changed several Energy reference-strategy numbers (confirmed against a
-    fresh run_regime_table.py run; Metals/Precious Metals were unaffected since every product in
-    those two asset classes shares one exchange calendar, so the two conventions coincide there).
+    When every input series already shares the exact same date index (true for every product
+    within Metals, Precious Metals, and NGL -- confirmed, no internal exchange split), this is
+    plain pandas addition (no reindex, no fillna), matching run_regime_table.py's historical
+    behavior exactly: each per-product `net` series is already reindexed to ITS OWN calendar
+    upstream (log_return_daily reindexes to log_price's index), fixing internal burn-in gaps
+    only, and summing series with identical indices needs no further alignment step.
+
+    When the input series' indices DIFFER (Energy: NYMEX (WTI/RBOB/HeatingOil/NatGas) vs ICE
+    (Brent/SingaporeGasoil) vs Argus-style (FuelOil); or any two strategies with different
+    burn-in lengths, e.g. Value's 1260-day lookback vs Momentum's shorter MAs, early in the
+    sample before both have burned in), this function no longer does bare summation-then-later-
+    dropna. FIXED 2026-08-04, propagated here from research/cross_asset_engine.py after a real
+    bug was found and worked through by hand (see that module's _combine_intersection for the
+    full derivation): summing already-computed daily returns and letting a mismatched date go
+    to NaN (later dropped by whatever computes metrics) silently DELETES a non-gapped member's
+    real, already-realized return on that date -- e.g. if Copper trades 3rd/4th/5th Jan but WTI
+    trades only 3rd/5th, naive sum-then-drop discards Copper's real 3rd->4th return entirely
+    (the 4th-Jan row goes to NaN because WTI has nothing there) while WTI's full 3rd->5th move
+    survives intact -- asymmetric and wrong. The fix: convert each series to a CUMULATIVE level
+    (cumsum of log-returns behaves exactly like a log-price -- same telescoping-sum math),
+    restrict to the intersected date set, then diff ACROSS those surviving dates. A dropped
+    date's move is then naturally absorbed into whichever surviving date comes next for EVERY
+    series independently -- nothing silently deleted, nothing double-counted. This is purely
+    backward-looking (cumsum then diff on an already-sorted, already-past index); no look-ahead
+    is introduced. When indices already match, this produces numerically IDENTICAL output to
+    the plain-sum path (nothing to absorb), which is why the plain-sum path stays as a fast-path
+    special case rather than being replaced outright -- most calls in this project (Metals,
+    Precious, NGL, same-burn-in strategy combinations) hit that fast path unchanged.
+
     This is also NOT the Excel tradebook generator's stricter day-INTERSECTION convention, which
     is specific to that formula-audit tool (see project_risk_premia_research_framework memory
-    #21) -- three different, each-correct-for-its-own-purpose conventions exist in this project;
-    this function must stay matched to run_regime_table.py's, since that is the one whose output
-    is the officially reported number.
+    #21) -- multiple, each-correct-for-its-own-purpose conventions exist in this project; this
+    function must stay matched to run_regime_table.py's, since that is the one whose output is
+    the officially reported number.
     """
     net_returns = [s for s in net_returns if not s.empty]
     if not net_returns:
         return pd.Series(dtype=float)
+
+    def _combine_aligned_or_intersected(series_list, weight_arr=None):
+        indices_match = all(s.index.equals(series_list[0].index) for s in series_list[1:])
+        if indices_match:
+            if weight_arr is None:
+                combined = series_list[0]
+                for s in series_list[1:]:
+                    combined = combined + s
+                return combined / len(series_list)
+            combined = series_list[0] * weight_arr[0]
+            for s, wi in zip(series_list[1:], weight_arr[1:]):
+                combined = combined + s * wi
+            return combined
+        # Indices differ -- cumulative-level intersect-then-diff, so a dropped date doesn't
+        # silently delete another member's real return (see docstring above).
+        cum_levels = [s.cumsum() for s in series_list]
+        idx = cum_levels[0].index
+        for c in cum_levels[1:]:
+            idx = idx.intersection(c.index)
+        idx = idx.sort_values()
+        aligned = [c.reindex(idx).diff() for c in cum_levels]
+        if weight_arr is None:
+            combined = aligned[0]
+            for a in aligned[1:]:
+                combined = combined + a
+            return combined / len(series_list)
+        combined = aligned[0] * weight_arr[0]
+        for a, wi in zip(aligned[1:], weight_arr[1:]):
+            combined = combined + a * wi
+        return combined
+
     if method == "equal_weight":
-        combined = net_returns[0]
-        for s in net_returns[1:]:
-            combined = combined + s
-        return combined / len(net_returns)
+        return _combine_aligned_or_intersected(net_returns)
     if method == "weighted":
         if weights is None or len(weights) != len(net_returns):
             raise ValueError("weighted combine requires exactly one weight per series")
         w = np.asarray(weights, dtype=float)
         w = w / w.sum()
-        combined = net_returns[0] * w[0]
-        for s, wi in zip(net_returns[1:], w[1:]):
-            combined = combined + s * wi
-        return combined
+        return _combine_aligned_or_intersected(net_returns, w)
     if method == "inverse_vol":
         if len(net_returns) == 1:
             return net_returns[0]

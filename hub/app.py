@@ -116,6 +116,17 @@ def _cached_cross_commodity_portfolio(tc_bps: int):
     return cae.cross_commodity_portfolio(tc_bps)
 
 
+@st.cache_data(ttl=3600, show_spinner="Computing Dynamic Risk Parity Cross-Commodity Portfolio...")
+def _cached_cross_commodity_drp(tc_bps: int):
+    # cross_commodity_portfolio() (above) is Dimil's own fixed EW+Risk Parity
+    # reference form, kept unmodified as the validated known-good baseline
+    # research/_validate_cross_asset_engine.py checks against -- Dynamic Risk
+    # Parity is computed separately via the generalized cross_commodity_dynamic()
+    # and merged in as an extra row, rather than editing that reference function.
+    _, n = cae.cross_commodity_dynamic(tc_bps, tuple(cae.ASSET_CLASSES), cae.STYLE_NAMES, "dynamic_risk_parity")
+    return n["Portfolio"]
+
+
 @st.cache_data(ttl=3600, show_spinner="Loading traditional-asset benchmark data...")
 def _cached_benchmark_returns():
     return benchmarks.load_benchmark_returns()
@@ -533,15 +544,17 @@ with tab_crossasset:
 
     section_header("Correlation vs Traditional Assets")
     st.caption(
-        "How the Cross-Commodity Portfolio's 6 strategy rows (Momentum/Carry/CarryMom/Value/"
-        "EW PORT/Risk Parity) correlate with Equity (S&P 500), Fixed Income (US Aggregate Bond), "
-        "a broad passive Commodity Index (DBC), Gold as a distinct safe-haven, and a traditional "
-        "60/40 stock-bond portfolio -- the standard \"does this add value beyond simple beta, "
-        "and does it diversify a traditional portfolio\" questions for any systematic commodity "
-        "strategy. Data: research/benchmarks.py (yfinance daily prices, cached locally)."
+        "How the Cross-Commodity Portfolio's strategy rows (Momentum/Carry/CarryMom/Value/"
+        "EW PORT/Risk Parity/Dynamic Risk Parity) correlate with Equity (S&P 500), Fixed Income "
+        "(US Aggregate Bond), a broad passive Commodity Index (DBC), Gold as a distinct "
+        "safe-haven, and a traditional 60/40 stock-bond portfolio -- the standard \"does this "
+        "add value beyond simple beta, and does it diversify a traditional portfolio\" questions "
+        "for any systematic commodity strategy. Data: research/benchmarks.py (yfinance daily "
+        "prices, cached locally)."
     )
 
-    corr_strategy_net = _cached_cross_commodity_portfolio(tc_bps)
+    corr_strategy_net = dict(_cached_cross_commodity_portfolio(tc_bps))
+    corr_strategy_net["Dynamic Risk Parity"] = _cached_cross_commodity_drp(tc_bps)
     corr_bench_returns = _cached_benchmark_returns()
 
     corr_all_years = []
@@ -552,53 +565,62 @@ with tab_crossasset:
     corr_min_year, corr_max_year = min(corr_all_years), max(corr_all_years)
     corr_default_start = max(corr_min_year, 2011)
 
-    corr_yr_start, corr_yr_end = st.slider(
-        "Year range", min_value=corr_min_year, max_value=corr_max_year,
-        value=(corr_default_start, corr_max_year), step=1, key="corr_years",
-        help="Restricts the correlation calculation to this sub-period -- a static "
-             "recomputation over whichever years you pick, not a rolling window. Compare "
-             "different historical regimes (e.g. 2015-2020 vs 2020-2026) to see whether a "
-             "correlation is stable or regime-dependent.",
-    )
+    corr_c1, corr_c2 = st.columns([2, 1])
+    with corr_c1:
+        corr_yr_start, corr_yr_end = st.slider(
+            "Year range", min_value=corr_min_year, max_value=corr_max_year,
+            value=(corr_default_start, corr_max_year), step=1, key="corr_years",
+            help="Restricts the correlation calculation to this sub-period -- a static "
+                 "recomputation over whichever years you pick, not a rolling window. Compare "
+                 "different historical regimes (e.g. 2015-2020 vs 2020-2026) to see whether a "
+                 "correlation is stable or regime-dependent.",
+        )
+    with corr_c2:
+        corr_strat_labels = st.multiselect(
+            "Strategies shown", list(corr_strategy_net.keys()),
+            default=list(corr_strategy_net.keys()), key="corr_strats_shown",
+        )
 
-    corr_strat_labels = list(corr_strategy_net.keys())
-    corr_bench_labels = list(corr_bench_returns.keys())
-    corr_z, corr_text = [], []
-    for strat_name in corr_strat_labels:
-        s = corr_strategy_net[strat_name]
-        s = s[(s.index.year >= corr_yr_start) & (s.index.year <= corr_yr_end)].dropna()
-        z_row, text_row = [], []
-        for bench_name in corr_bench_labels:
-            b = corr_bench_returns[bench_name]
-            b = b[(b.index.year >= corr_yr_start) & (b.index.year <= corr_yr_end)]
-            idx = s.index.intersection(b.index)
-            if len(idx) > 20:
-                c = float(s.loc[idx].corr(b.loc[idx]))
-                z_row.append(c)
-                text_row.append(f"{c:+.2f}")
-            else:
-                z_row.append(np.nan)
-                text_row.append("N/A")
-        corr_z.append(z_row)
-        corr_text.append(text_row)
+    if not corr_strat_labels:
+        st.warning("Pick at least 1 strategy to show.")
+    else:
+        corr_bench_labels = list(corr_bench_returns.keys())
+        corr_z, corr_text = [], []
+        for strat_name in corr_strat_labels:
+            s = corr_strategy_net[strat_name]
+            s = s[(s.index.year >= corr_yr_start) & (s.index.year <= corr_yr_end)].dropna()
+            z_row, text_row = [], []
+            for bench_name in corr_bench_labels:
+                b = corr_bench_returns[bench_name]
+                b = b[(b.index.year >= corr_yr_start) & (b.index.year <= corr_yr_end)]
+                idx = s.index.intersection(b.index)
+                if len(idx) > 20:
+                    c = float(s.loc[idx].corr(b.loc[idx]))
+                    z_row.append(c)
+                    text_row.append(f"{c:+.2f}")
+                else:
+                    z_row.append(np.nan)
+                    text_row.append("N/A")
+            corr_z.append(z_row)
+            corr_text.append(text_row)
 
-    # Diverging blue/red pair, neutral gray midpoint (dataviz skill's reference palette) --
-    # matches the blue-positive/red-negative convention already used in this project's
-    # Research_Dashboard_CombinedCarry.html Correlations tab.
-    corr_fig = go.Figure(data=go.Heatmap(
-        z=corr_z, x=corr_bench_labels, y=corr_strat_labels,
-        colorscale=[[0, "#e34948"], [0.5, "#f0efec"], [1, "#2a78d6"]],
-        zmin=-1, zmax=1, zmid=0,
-        text=corr_text, texttemplate="%{text}", textfont=dict(size=12, color="#111111"),
-        colorbar=dict(title="Correlation"),
-        hovertemplate="%{y} vs %{x}: %{z:+.3f}<extra></extra>",
-    ))
-    corr_layout = dict(CHART_LAYOUT)
-    corr_layout.pop("yaxis", None)
-    corr_fig.update_layout(**corr_layout,
-                            title=f"Correlation Matrix, {corr_yr_start} to {corr_yr_end}",
-                            height=380)
-    st.plotly_chart(corr_fig, use_container_width=True)
+        # Diverging blue/red pair, neutral gray midpoint (dataviz skill's reference palette) --
+        # matches the blue-positive/red-negative convention already used in this project's
+        # Research_Dashboard_CombinedCarry.html Correlations tab.
+        corr_fig = go.Figure(data=go.Heatmap(
+            z=corr_z, x=corr_bench_labels, y=corr_strat_labels,
+            colorscale=[[0, "#e34948"], [0.5, "#f0efec"], [1, "#2a78d6"]],
+            zmin=-1, zmax=1, zmid=0,
+            text=corr_text, texttemplate="%{text}", textfont=dict(size=12, color="#111111"),
+            colorbar=dict(title="Correlation"),
+            hovertemplate="%{y} vs %{x}: %{z:+.3f}<extra></extra>",
+        ))
+        corr_layout = dict(CHART_LAYOUT)
+        corr_layout.pop("yaxis", None)
+        corr_fig.update_layout(**corr_layout,
+                                title=f"Correlation Matrix, {corr_yr_start} to {corr_yr_end}",
+                                height=380)
+        st.plotly_chart(corr_fig, use_container_width=True)
 
     st.divider()
     st.caption(

@@ -19,43 +19,41 @@ isolated from what four live dashboards and the offline research pipeline
 currently depend on, until it's been reviewed and a decision is made about
 whether/how to fold it back in.
 
-Two calendar-alignment conventions, both real, both first-class (neither
-silently preferred) pending a decision on which becomes the reported
-default -- see the 2026-08-04 diagnostic (research/_calendar_diagnostic.py):
-strict intersection loses 4.35% of the union's days across the 4 asset
-classes, concentrated in Metals/Precious/NGL (Energy is never the missing
-one -- it has the fullest calendar of the four).
+Calendar alignment: FINALIZED 2026-08-04 as intersection-only (Mark
+Bogorad, "Risk Premia in Diversified Energy Portfolios", Dec 2025, Section
+4 Data, p.12: "we eliminate dates on which CME and ICE calendars do not
+overlap, retaining only trading days when all contracts in the universe
+are simultaneously open... Any omitted ICE return on these isolated dates
+is naturally incorporated into the next available trading day's price").
+Every asset class must have a genuine return for a date to count -- but
+critically, per that last sentence, a dropped date must NOT silently
+delete another member's real return on that date. Implemented (see
+_combine_intersection, fixed 2026-08-04 after a real bug was found via a
+worked example) by converting each series to a cumulative level,
+restricting to the intersected dates, and diffing ACROSS those surviving
+dates -- not by summing already-computed daily returns and dropping
+mismatched ones, which silently discarded real P&L for whichever member
+DIDN'T have the gap.
 
-- "intersection" (Mark Bogorad, "Risk Premia in Diversified Energy
-  Portfolios", Dec 2025, Section 4 Data, p.12: "we eliminate dates on which
-  CME and ICE calendars do not overlap, retaining only trading days when all
-  contracts in the universe are simultaneously open... Any omitted ICE
-  return on these isolated dates is naturally incorporated into the next
-  available trading day's price"). Every asset class must have a genuine
-  return for a date to count -- but critically, per that last sentence, a
-  dropped date must NOT silently delete another member's real return on
-  that date. Implemented (see _combine_intersection, fixed 2026-08-04 after
-  a real bug was found via a worked example) by converting each series to a
-  cumulative level, restricting to the intersected dates, and diffing
-  ACROSS those surviving dates -- not by summing already-computed daily
-  returns and dropping mismatched ones, which silently discarded real P&L
-  for whichever member DIDN'T have the gap. Worth knowing: this project's
-  own combine_returns() docstring documents that an EARLIER version of that
-  function used union+zero-fill and was deliberately moved away from it
-  after it measurably changed Energy's reference-strategy numbers -- Dimil's
-  zero-fill convention (below) reintroduces that same choice at the
-  cross-asset level, not necessarily wrong, but not new territory for this
-  project either.
-- "zero_fill" (Dimil Patel, commit 80d5f43 "Fix Energy's internal NYMEX/ICE
-  calendar mismatch", Methodology doc Section 8-9): union of dates; a non-
-  trading asset class gets an explicit 0.0 return that day at its normal
-  fixed weight, rather than being dropped. Note this is NOT calendar-neutral
-  for the Risk Parity leg specifically: a real return paired against an
-  injected zero on the same date is a real data point fed into the rolling
-  covariance estimate, which can bias correlation toward zero on exactly the
-  days it's least informative to do so. This flows through deliberately
-  (not specially handled) -- comparing how much it actually moves the ERC
-  weights in practice is part of the point of keeping both methods.
+This project previously carried a second convention, "zero_fill" (Dimil
+Patel's union + explicit-zero-on-non-trading-days), as an equally-weighted
+live UI toggle pending a decision. Removed 2026-08-04 (user's decision) in
+favor of intersection alone, for two documented reasons: (1) zero_fill
+systematically dilutes the equal-weight combine on any date one leg isn't
+trading (dividing by the full leg count including an artificial 0.0),
+mechanically suppressing volatility and inflating Sharpe/IR -- exactly what
+Bogorad's own paper cites intersection as preventing ("This strict calendar
+alignment prevents artificial suppression of volatility caused by
+asynchronous holiday gaps"); (2) for the Risk Parity leg specifically, a
+real return paired against an injected zero on the same date is a real data
+point fed into the rolling covariance estimate, which can bias correlation
+toward zero on exactly the days it's least informative to do so. A
+diagnostic (research/_calendar_diagnostic.py, 2026-08-04) found strict
+intersection loses 4.35% of the union's trading days across the 4 asset
+classes, concentrated in Metals/Precious/NGL (Energy is never the missing
+one) -- an accepted, known tradeoff of this convention, not eliminated by
+the bug fix above, just no longer compounded by a silent PnL deletion on
+top of it.
 
 Signal-level Carry / Carry-Momentum construction (Methodology doc Section 7,
 "the equal-weighting across tenors is applied to the raw signal, and the
@@ -148,14 +146,11 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
     (Precious Metals) just flows through combine_positions with one leg, a
     no-op sign(), identical to using it directly.
 
-    Deliberately does NOT take a calendar_method argument -- this is the
-    expensive step (Excel curve loading + signal computation across every
-    product), and it does not depend on how those products get combined
-    afterward. Callers combine this function's output via combine_cross_
-    asset(..., calendar_method) themselves (see asset_class_four_row below).
+    This is the expensive step (Excel curve loading + signal computation
+    across every product). Callers combine this function's output via
+    combine_cross_asset() themselves (see asset_class_four_row below).
     Splitting it out this way lets a caller cache this function's result
-    once per (asset_class, tc_bps) and reuse it across BOTH calendar
-    methods, instead of redoing the expensive part on every method switch."""
+    once per (asset_class, tc_bps) and reuse it freely."""
     cfg = _get_cfg(asset_class)
     tenor_pairs = cfg.CARRY_TENOR_PAIRS
     products = DASHBOARD_PRODUCTS.get(asset_class, cfg.PRODUCTS)
@@ -204,21 +199,20 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
     return out
 
 
-def asset_class_four_row(asset_class: str, calendar_method: str = "intersection",
-                          tc_bps: int = TC_BPS, styles: tuple[str, ...] | None = None,
+def asset_class_four_row(asset_class: str, tc_bps: int = TC_BPS, styles: tuple[str, ...] | None = None,
                           per_product_fetcher=per_product_four_row
                           ) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
     """Momentum / Combined Carry / Combined CarryMom / Value gross AND net
     daily log-return series for one asset class, combined across its
-    products. Returns (gross_dict, net_dict). `calendar_method` governs
-    that product-level combination (e.g. Energy's WTI/RBOB/HeatingOil/
-    NatGas on NYMEX vs Brent on ICE) -- the same choice, applied one level
-    down, as the cross-asset-level combination elsewhere in this module.
-    Verified this matters in practice, not just in principle: without
-    applying it here too, Energy's own numbers (the only asset class with a
-    real internal exchange split) sit ~0.01 IR off Dimil's real pushed
-    Cross-Commodity/Cross-Pair numbers even after everything else matches;
-    with zero_fill applied consistently at both levels, the gap closes.
+    products via the intersection convention (see module docstring).
+    Returns (gross_dict, net_dict).
+
+    Applying intersection at this per-product level matters in practice,
+    not just in principle: Energy is the only asset class with a real
+    internal exchange split (NYMEX vs ICE) -- without combining its
+    products this way, Energy's own numbers sit measurably off the
+    cross-commodity/cross-pair numbers that combine this function's output
+    one level up.
 
     `styles`, if given, restricts to a subset of the 4 (e.g. for a live UI
     toggle) -- default is all 4.
@@ -227,17 +221,17 @@ def asset_class_four_row(asset_class: str, calendar_method: str = "intersection"
     row() (this module deliberately stays Streamlit-free, so it can't cache
     directly itself) -- a caller running inside Streamlit should pass an
     st.cache_data-wrapped version so the expensive Excel-loading/signal step
-    is cached across calendar_method/styles/combine_method changes, which
-    don't affect its output at all. This is a dependency-injection seam,
-    not a behavior change: with the default fetcher, this function's output
-    is identical to before.
+    is cached across styles/combine_method changes, which don't affect its
+    output at all. This is a dependency-injection seam, not a behavior
+    change: with the default fetcher, this function's output is identical
+    to before.
 
     Thin wrapper around per_product_four_row() -- see that function's
     docstring for why the expensive part is split out separately."""
     per_product = per_product_fetcher(asset_class, tc_bps)
     wanted = styles if styles is not None else tuple(per_product.keys())
-    gross = {style: combine_cross_asset(per_product[style]["gross"], calendar_method) for style in wanted}
-    net = {style: combine_cross_asset(per_product[style]["net"], calendar_method) for style in wanted}
+    gross = {style: combine_cross_asset(per_product[style]["gross"]) for style in wanted}
+    net = {style: combine_cross_asset(per_product[style]["net"]) for style in wanted}
     return gross, net
 
 
@@ -245,19 +239,19 @@ def asset_class_ew_portfolio(gross_four_row: dict[str, pd.Series],
                               net_four_row: dict[str, pd.Series]) -> tuple[pd.Series, pd.Series]:
     """One asset class's own Equal Weight portfolio (Momentum + Combined
     Carry + Combined CarryMom + Value, or whichever subset was passed in),
-    gross and net. This 4-row-to-1 combine always uses plain equal_weight
-    regardless of calendar_method -- by the time asset_class_four_row() has
-    produced these series (using calendar_method consistently at the
-    product level), they already share one asset class's own calendar, so
-    there is no cross-calendar question left to answer at this step."""
+    gross and net. This 4-row-to-1 combine always uses plain equal_weight --
+    by the time asset_class_four_row() has produced these series, they
+    already share one asset class's own calendar, so there is no
+    cross-calendar question left to answer at this step."""
     return (combine_returns(list(gross_four_row.values()), "equal_weight"),
             combine_returns(list(net_four_row.values()), "equal_weight"))
 
 
-def _combine_intersection(series_list: list[pd.Series]) -> pd.Series:
-    """Bogorad-style: keep only dates where every series has a genuine
-    observation -- but a date being dropped for the group must NOT silently
-    delete another member's real, already-realized return on that date.
+def combine_cross_asset(series_list: list[pd.Series]) -> pd.Series:
+    """Bogorad-style intersection combine: keep only dates where every
+    series has a genuine observation -- but a date being dropped for the
+    group must NOT silently delete another member's real, already-realized
+    return on that date.
 
     FIXED 2026-08-04 (was a real bug, not just a theoretical concern -- see
     the worked 3-day example that found it): the original version summed
@@ -285,7 +279,12 @@ def _combine_intersection(series_list: list[pd.Series]) -> pd.Series:
     4th->5th leg the old version kept.
 
     This is purely backward-looking (cumsum then diff on an already-sorted,
-    already-past date index) -- no look-ahead is introduced."""
+    already-past date index) -- no look-ahead is introduced.
+
+    This is the ONLY calendar-alignment convention this module supports as
+    of 2026-08-04 -- a prior "zero_fill" (Dimil Patel's union + explicit
+    zero on non-trading days) alternative was removed by the user's
+    decision; see module docstring for the full rationale."""
     cum_levels = [s.cumsum() for s in series_list]
     idx = cum_levels[0].index
     for c in cum_levels[1:]:
@@ -298,31 +297,11 @@ def _combine_intersection(series_list: list[pd.Series]) -> pd.Series:
     return combined / len(series_list)
 
 
-def _combine_zero_fill(series_list: list[pd.Series]) -> pd.Series:
-    """Dimil-style: union of dates, a missing series gets an explicit 0.0
-    return that day (at equal fixed weight, matching the other legs)."""
-    idx = series_list[0].index
-    for s in series_list[1:]:
-        idx = idx.union(s.index)
-    filled = [s.reindex(idx).fillna(0.0) for s in series_list]
-    combined = filled[0]
-    for s in filled[1:]:
-        combined = combined + s
-    return combined / len(filled)
-
-
-def combine_cross_asset(series_list: list[pd.Series], calendar_method: str) -> pd.Series:
-    if calendar_method not in ("intersection", "zero_fill"):
-        raise ValueError(f"calendar_method must be 'intersection' or 'zero_fill', got {calendar_method!r}")
-    return (_combine_intersection(series_list) if calendar_method == "intersection"
-            else _combine_zero_fill(series_list))
-
-
 STYLE_NAMES = ("Momentum", "Combined Carry", "Combined CarryMom", "Value")
 STYLE_DISPLAY = {"Momentum": "Momentum", "Combined Carry": "Carry", "Combined CarryMom": "CarryMom", "Value": "Value"}
 
 
-def cross_commodity_dynamic(calendar_method: str, tc_bps: int = TC_BPS,
+def cross_commodity_dynamic(tc_bps: int = TC_BPS,
                              asset_classes: tuple[str, ...] = tuple(ASSET_CLASSES),
                              styles: tuple[str, ...] = STYLE_NAMES,
                              combine_method: str = "equal_weight",
@@ -348,28 +327,23 @@ def cross_commodity_dynamic(calendar_method: str, tc_bps: int = TC_BPS,
     if not styles:
         raise ValueError("cross_commodity_dynamic needs at least 1 style")
 
-    per_asset = {ac: asset_class_four_row(ac, calendar_method, tc_bps, styles, per_product_fetcher)
+    per_asset = {ac: asset_class_four_row(ac, tc_bps, styles, per_product_fetcher)
                  for ac in asset_classes}
 
     gross_styles, net_styles = {}, {}
     for style in styles:
         label = STYLE_DISPLAY[style]
-        gross_styles[label] = combine_cross_asset([per_asset[ac][0][style] for ac in asset_classes], calendar_method)
-        net_styles[label] = combine_cross_asset([per_asset[ac][1][style] for ac in asset_classes], calendar_method)
+        gross_styles[label] = combine_cross_asset([per_asset[ac][0][style] for ac in asset_classes])
+        net_styles[label] = combine_cross_asset([per_asset[ac][1][style] for ac in asset_classes])
 
     if len(styles) == 1:
         only = next(iter(gross_styles))
         return {**gross_styles, "Portfolio": gross_styles[only]}, {**net_styles, "Portfolio": net_styles[only]}
 
     if combine_method == "equal_weight":
-        g_port = combine_cross_asset(list(gross_styles.values()), calendar_method)
-        n_port = combine_cross_asset(list(net_styles.values()), calendar_method)
+        g_port = combine_cross_asset(list(gross_styles.values()))
+        n_port = combine_cross_asset(list(net_styles.values()))
     elif combine_method == "risk_parity":
-        # rolling_erc_combine does its own strict dropna(how="any") internally on whatever series
-        # it's given -- for zero_fill inputs, the injected zero-return days are real data points
-        # to its rolling covariance estimate (not re-filtered out here); for intersection inputs,
-        # its own dropna is redundant with (not a second, different filter from) what
-        # combine_cross_asset already did. Either way, no special-casing needed here.
         g_port, _ = rolling_erc_combine(gross_styles, tilt=0.0)
         n_port, _ = rolling_erc_combine(net_styles, tilt=0.0)
     else:
@@ -378,24 +352,23 @@ def cross_commodity_dynamic(calendar_method: str, tc_bps: int = TC_BPS,
     return {**gross_styles, "Portfolio": g_port}, {**net_styles, "Portfolio": n_port}
 
 
-def cross_commodity_portfolio(calendar_method: str, tc_bps: int = TC_BPS) -> dict[str, pd.Series]:
+def cross_commodity_portfolio(tc_bps: int = TC_BPS) -> dict[str, pd.Series]:
     """Dimil's exact construction (all 4 asset classes, all 4 styles, Equal
     Weight AND Risk Parity both computed) -- kept as the validated,
-    known-good reference form (see research/_validate_cross_asset_engine.py:
-    9 of 10 rows match his real pushed numbers to 3 decimal places under
-    zero_fill). cross_commodity_dynamic() above is the generalized version
-    the live UI actually drives; this one exists so that validation script
-    keeps working unchanged and there's always a fixed point to check new
+    known-good reference form (see research/_validate_cross_asset_engine.py).
+    cross_commodity_dynamic() above is the generalized version the live UI
+    actually drives; this one exists so that validation script keeps
+    working unchanged and there's always a fixed point to check new
     changes against."""
-    g_ew, n_ew = cross_commodity_dynamic(calendar_method, tc_bps, tuple(ASSET_CLASSES), STYLE_NAMES, "equal_weight")
-    _, n_rp = cross_commodity_dynamic(calendar_method, tc_bps, tuple(ASSET_CLASSES), STYLE_NAMES, "risk_parity")
+    g_ew, n_ew = cross_commodity_dynamic(tc_bps, tuple(ASSET_CLASSES), STYLE_NAMES, "equal_weight")
+    _, n_rp = cross_commodity_dynamic(tc_bps, tuple(ASSET_CLASSES), STYLE_NAMES, "risk_parity")
     out = {k: v for k, v in n_ew.items() if k != "Portfolio"}
     out["EW PORT"] = n_ew["Portfolio"]
     out["Risk Parity"] = n_rp["Portfolio"]
     return out
 
 
-def cross_n_portfolio(calendar_method: str, tc_bps: int = TC_BPS,
+def cross_n_portfolio(tc_bps: int = TC_BPS,
                        asset_classes: tuple[str, ...] = ("metals", "energy"),
                        per_product_fetcher=per_product_four_row
                        ) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
@@ -413,28 +386,28 @@ def cross_n_portfolio(calendar_method: str, tc_bps: int = TC_BPS,
         raise ValueError("cross_n_portfolio needs 1 to 4 asset classes")
     gross_by_class, net_by_class = {}, {}
     for ac in asset_classes:
-        g4, n4 = asset_class_four_row(ac, calendar_method, tc_bps, per_product_fetcher=per_product_fetcher)
+        g4, n4 = asset_class_four_row(ac, tc_bps, per_product_fetcher=per_product_fetcher)
         g_ew, n_ew = asset_class_ew_portfolio(g4, n4)
         gross_by_class[ASSET_CLASS_LABELS[ac]] = g_ew
         net_by_class[ASSET_CLASS_LABELS[ac]] = n_ew
     if len(asset_classes) == 1:
         only = next(iter(gross_by_class))
         return {**gross_by_class, "Portfolio": gross_by_class[only]}, {**net_by_class, "Portfolio": net_by_class[only]}
-    g_port = combine_cross_asset(list(gross_by_class.values()), calendar_method)
-    n_port = combine_cross_asset(list(net_by_class.values()), calendar_method)
+    g_port = combine_cross_asset(list(gross_by_class.values()))
+    n_port = combine_cross_asset(list(net_by_class.values()))
     return {**gross_by_class, "Portfolio": g_port}, {**net_by_class, "Portfolio": n_port}
 
 
-def cross_pair_portfolios(calendar_method: str, tc_bps: int = TC_BPS) -> dict[str, pd.Series]:
+def cross_pair_portfolios(tc_bps: int = TC_BPS) -> dict[str, pd.Series]:
     """Dimil's exact 4 Cross-Pair Portfolios (Methodology doc Section 9):
     50/50 combination of two asset classes' own Equal Weight portfolios,
     for the 4 least-correlated pairs (Metals-Precious and Energy-NGL
     excluded per Dimil's own note). Kept as the validated, known-good
     reference form -- cross_n_portfolio() above is the generalized version
-    (2-4 asset classes, user-selectable) the live UI actually drives."""
+    (1-4 asset classes, user-selectable) the live UI actually drives."""
     out = {}
     for a, b in CROSS_PAIRS:
-        _, n_dict = cross_n_portfolio(calendar_method, tc_bps, (a, b))
+        _, n_dict = cross_n_portfolio(tc_bps, (a, b))
         out[CROSS_PAIR_LABELS[(a, b)]] = n_dict["Portfolio"]
     return out
 
@@ -453,12 +426,11 @@ def windows_for(series: pd.Series) -> dict[str, dict]:
     return out
 
 
-def full_report(calendar_method: str, tc_bps: int = TC_BPS) -> dict:
-    """Everything needed to render one calendar method's tab: windowed
-    metrics for the Cross-Commodity Portfolio's 6 rows and the 4 Cross-Pair
-    Portfolios."""
-    cc = cross_commodity_portfolio(calendar_method, tc_bps)
-    cp = cross_pair_portfolios(calendar_method, tc_bps)
+def full_report(tc_bps: int = TC_BPS) -> dict:
+    """Everything needed to render the Cross-Asset tab: windowed metrics for
+    the Cross-Commodity Portfolio's 6 rows and the 4 Cross-Pair Portfolios."""
+    cc = cross_commodity_portfolio(tc_bps)
+    cp = cross_pair_portfolios(tc_bps)
     return {
         "cross_commodity": {name: windows_for(series) for name, series in cc.items()},
         "cross_pair": {name: windows_for(series) for name, series in cp.items()},

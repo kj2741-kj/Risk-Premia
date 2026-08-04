@@ -100,11 +100,11 @@ def _wti_inventory():
 #
 # Caching strategy: only the per-asset-class, per-product signal computation (Excel loading +
 # Momentum/Carry/CarryMom/Value math) is genuinely expensive and is cached here, per
-# (asset_class, tc_bps) -- NOT per calendar_method, since that choice only affects the cheap
-# combine step downstream. Passed into the engine via per_product_fetcher (a dependency-
-# injection seam cross_asset_engine.py exposes specifically so it can stay Streamlit-free while
-# still being cacheable at this layer). This is what makes switching calendar method, styles, or
-# asset-class selection near-instant after the first load of a given asset class.
+# (asset_class, tc_bps) -- the combine step downstream (intersection, the only convention this
+# module supports as of 2026-08-04) is cheap. Passed into the engine via per_product_fetcher (a
+# dependency-injection seam cross_asset_engine.py exposes specifically so it can stay
+# Streamlit-free while still being cacheable at this layer). This is what makes switching
+# styles or asset-class selection near-instant after the first load of a given asset class.
 @st.cache_data(ttl=3600, show_spinner="Loading curve data and computing signals...")
 def _cached_per_product_four_row(asset_class: str, tc_bps: int):
     return cae.per_product_four_row(asset_class, tc_bps)
@@ -433,30 +433,19 @@ with tab_crossasset:
     st.caption(
         "Combining asset classes into one book, per Dimil Patel's construction "
         "(Research_Methodology.docx Section 9 / Analysis/Research_Dashboard_CombinedCarry.html). "
-        "Analysis/decision stage, not yet a finalized single method -- pick calendar alignment "
-        "below and everything recomputes live."
+        "Calendar alignment: intersection (Mark Bogorad, \"Risk Premia in Diversified Energy "
+        "Portfolios\", Dec 2025, Section 4) -- a date where any selected asset class isn't "
+        "trading is dropped entirely, with a dropped date's move rolled into the next surviving "
+        "date so no leg's real return is lost. Finalized 2026-08-04 as this module's only "
+        "convention (a Zero-Fill alternative was evaluated and removed -- it systematically "
+        "suppressed volatility and inflated Sharpe/IR; see module docstring)."
     )
 
-    top1, top2 = st.columns([2, 1])
-    with top1:
-        calendar_choice = st.radio(
-            "Calendar alignment", ["Intersection (Bogorad)", "Zero-Fill (Dimil)"],
-            horizontal=True, key="ca_calendar_method",
-            help="Intersection (Mark Bogorad, \"Risk Premia in Diversified Energy Portfolios\", Dec "
-                 "2025, Section 4): a date where any selected asset class isn't trading is dropped "
-                 "entirely -- loses 4.35% of the union's trading days across all 4 asset classes "
-                 "(2026-08-04 diagnostic), concentrated in Metals/Precious/NGL. Zero-Fill (Dimil "
-                 "Patel): union of dates, a non-trading asset class gets an explicit 0.0 return that "
-                 "day. Verified to reproduce Dimil's real pushed numbers exactly under Zero-Fill (9 "
-                 "of 10 headline rows match to 3 decimal places).",
-        )
-    with top2:
-        tc_bps = st.slider(
-            "TC (bps, round-trip)", min_value=0, max_value=20, value=5, step=1, key="ca_tc_bps",
-            help="Applied at every level of this construction (product, asset-class, cross-asset). "
-                 "Default 5bps matches every other report in this project.",
-        )
-    calendar_method = "intersection" if calendar_choice.startswith("Intersection") else "zero_fill"
+    tc_bps = st.slider(
+        "TC (bps, round-trip)", min_value=0, max_value=20, value=5, step=1, key="ca_tc_bps",
+        help="Applied at every level of this construction (product, asset-class, cross-asset). "
+             "Default 5bps matches every other report in this project.",
+    )
 
     st.divider()
 
@@ -487,7 +476,7 @@ with tab_crossasset:
         cc_style_keys = tuple(STYLE_LABEL_TO_KEY[l] for l in cc_styles_labels)
         cc_combine_key = "equal_weight" if cc_combine == "Equal Weight" else "risk_parity"
         cc_gross, cc_net = cae.cross_commodity_dynamic(
-            calendar_method, tc_bps, cc_asset_keys, cc_style_keys, cc_combine_key,
+            tc_bps, cc_asset_keys, cc_style_keys, cc_combine_key,
             per_product_fetcher=_cached_per_product_four_row)
         _render_equity_and_metrics(cc_gross, cc_net, key_prefix="cc")
 
@@ -508,7 +497,7 @@ with tab_crossasset:
     else:
         cn_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cn_assets_labels)
         cn_gross, cn_net = cae.cross_n_portfolio(
-            calendar_method, tc_bps, cn_asset_keys, per_product_fetcher=_cached_per_product_four_row)
+            tc_bps, cn_asset_keys, per_product_fetcher=_cached_per_product_four_row)
         _render_equity_and_metrics(cn_gross, cn_net, key_prefix="cn")
 
     st.divider()

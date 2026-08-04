@@ -314,9 +314,9 @@
     <div class="card">
       <h2>Key patterns</h2>
       <p class="note"><strong>Energy and NGL are not independent books.</strong> Their cross-commodity correlation is the highest off-diagonal pair for 5 of 6 strategy types -- Value (0.53), Momentum (0.45), Risk Parity (0.31), EW PORT (0.28), Carry (0.23) -- confirming both trade on shared hydrocarbon-complex drivers. Sizing both asset classes up together should account for this shared exposure.</p>
-      <p class="note"><strong>Metals and Precious Metals show a smaller but consistent correlation</strong> across every strategy type (~0.30-0.36 for Momentum, Carry, Value, EW PORT, and Risk Parity) -- a real, if modest, shared-factor exposure despite very different fundamental drivers.</p>
+      <p class="note"><strong>Metals and Precious Metals show a smaller but consistent correlation</strong> across every strategy type (~0.30-0.37 for Momentum, Carry, Value, EW PORT, and Risk Parity) -- a real, if modest, shared-factor exposure despite very different fundamental drivers.</p>
       <p class="note"><strong>Carry-Momentum is the most diversifying strategy across commodities</strong> -- its cross-commodity correlations are the lowest of any strategy (mostly under 0.16 in magnitude), unlike Value and Momentum which both carry meaningful cross-commodity correlation.</p>
-      <p class="note"><strong>Value is the primary diversifier within each asset class,</strong> showing low or negative correlation to the Equal Weight portfolio (Metals 0.04, Energy -0.19, NGL -0.02; Precious Metals is the exception at 0.37). Risk Parity is consistently more correlated with the Equal Weight portfolio than any individual strategy (0.78-0.96 across all four asset classes), as expected given both are built from the same four underlying strategies.</p>
+      <p class="note"><strong>Value is the primary diversifier within each asset class,</strong> showing low or negative correlation to the Equal Weight portfolio (Metals 0.04, Energy -0.19, NGL -0.02; Precious Metals is the exception at 0.37). Risk Parity is consistently more correlated with the Equal Weight portfolio than any individual strategy (0.81-0.97 across all four asset classes), as expected given both are built from the same four underlying strategies.</p>
     </div>
   </div>
 
@@ -324,7 +324,7 @@
     <div class="card">
       <h2><span class="badge badge-built">Built</span> Cross-Commodity Portfolio: all 4 strategies, across all 4 asset classes</h2>
       <p class="note"><strong>Two-stage construction.</strong> First, each of the four base strategies (Momentum, Carry, Carry-Momentum, Value) is equal-weighted across the four asset classes, producing one cross-commodity series per strategy. Second, those four cross-commodity strategy series are combined into an Equal Weight portfolio and a Risk Parity portfolio (rolling Equal Risk Contribution, 252-day covariance window, ~21-day rebalance). This hierarchical approach -- equal-weighting within a strategy across commodities, then combining across strategies -- differs from a flat optimization over all sixteen underlying asset-class/strategy legs simultaneously.</p>
-      <p class="note">Computed on the intersection of trading dates across all four asset classes (n=3,828 days), since Metals (LME), Oil/Energy (NYMEX/ICE), Precious Metals (COMEX/NYMEX), and NGL (Argus OTC) trade on different calendars.</p>
+      <p class="note">Combined on the union of trading dates across all four asset classes; an asset class not trading on a given day is assigned a zero return for that day.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -342,7 +342,7 @@
     <div class="card">
       <h2><span class="badge badge-built">Built</span> Cross-Pair Portfolios</h2>
       <p class="note">Each row is a 50/50 equal-weight combination of two asset classes' Equal Weight portfolios. Four of the six possible pairs are shown -- Metals-Energy, Metals-NGL, Precious-Energy, Precious-NGL. Metals-Precious and Energy-NGL are excluded as the two most correlated pairs (Correlations tab), making them the weakest diversification candidates.</p>
-      <p class="note">Computed on the intersection of trading dates across the two asset classes in each pair.</p>
+      <p class="note">Combined on the union of trading dates across the two asset classes in each pair; a closed exchange is assigned a zero return for that day.</p>
 
       <div class="window-row">
         <h3>Performance by horizon</h3>
@@ -352,7 +352,7 @@
 
       <h3>Regime-conditional IR, by pair</h3>
       <div class="table-scroll"><table id="crosspair-table"></table></div>
-      <p class="note">Reporting starts 2011-01-01, same window as every other tab. <strong>Metals-NGL is the strongest pair full-sample (IR 0.945)</strong> -- pairing Metals' weak-to-flat standalone performance with NGL's strong, consistent performance benefits from NGL carrying the combination while Metals' low correlation to it smooths the ride. Precious-Energy is the weakest pair (IR 0.367), consistent with Precious Metals being the weakest individual sleeve in the whole dashboard regardless of partner.</p>
+      <p class="note">Reporting starts 2011-01-01, same window as every other tab. <strong>Metals-NGL is the strongest pair full-sample (IR 0.868)</strong> -- pairing Metals' weak-to-flat standalone performance with NGL's strong, consistent performance benefits from NGL carrying the combination while Metals' low correlation to it smooths the ride. Precious-Energy is the weakest pair (IR 0.373), consistent with Precious Metals being the weakest individual sleeve in the whole dashboard regardless of partner.</p>
     </div>
   </div>
 
@@ -395,7 +395,7 @@
 </div>
 
 <script>
-const LAST_UPDATED = "August 3, 2026";
+const LAST_UPDATED = "August 4, 2026";
 
 const METALS_COLUMNS = [
   {key:"full", label:"Full", years:"2011-2026"},
@@ -424,7 +424,7 @@ const METALS_WINDOWS = {
     {name:"CarryMom", ret:-1.01, vol:11.22, mdd:-87.79, ir:-0.090},
     {name:"Value", ret:6.26, vol:10.98, mdd:-30.55, ir:0.571},
     {name:"EW PORT", ret:-0.40, vol:6.48, mdd:-29.79, ir:-0.062},
-    {name:"Risk Parity (ERC, rolling)", ret:0.20, vol:5.72, mdd:-23.31, ir:0.035},
+    {name:"Risk Parity", ret:-0.30, vol:5.90, mdd:-24.96, ir:-0.050},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:-10.74, vol:17.57, mdd:-74.42, ir:-0.611},
@@ -432,7 +432,7 @@ const METALS_WINDOWS = {
     {name:"CarryMom", ret:8.53, vol:11.64, mdd:-26.84, ir:0.733},
     {name:"Value", ret:5.93, vol:10.65, mdd:-26.05, ir:0.557},
     {name:"EW PORT", ret:3.14, vol:7.07, mdd:-13.41, ir:0.444},
-    {name:"Risk Parity (ERC, rolling)", ret:3.83, vol:5.62, mdd:-7.16, ir:0.681},
+    {name:"Risk Parity", ret:2.54, vol:6.18, mdd:-11.12, ir:0.411},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:-8.47, vol:13.56, mdd:-40.18, ir:-0.624},
@@ -440,7 +440,7 @@ const METALS_WINDOWS = {
     {name:"CarryMom", ret:-8.28, vol:10.85, mdd:-48.11, ir:-0.763},
     {name:"Value", ret:7.46, vol:10.77, mdd:-13.00, ir:0.693},
     {name:"EW PORT", ret:-4.75, vol:6.30, mdd:-22.32, ir:-0.753},
-    {name:"Risk Parity (ERC, rolling)", ret:-3.56, vol:6.06, mdd:-18.52, ir:-0.588},
+    {name:"Risk Parity", ret:-3.65, vol:6.09, mdd:-18.78, ir:-0.600},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:12.62, vol:15.50, mdd:-15.93, ir:0.814},
@@ -448,7 +448,7 @@ const METALS_WINDOWS = {
     {name:"CarryMom", ret:1.12, vol:10.76, mdd:-14.19, ir:0.104},
     {name:"Value", ret:-6.79, vol:12.97, mdd:-23.57, ir:-0.523},
     {name:"EW PORT", ret:1.42, vol:5.08, mdd:-6.36, ir:0.279},
-    {name:"Risk Parity (ERC, rolling)", ret:-1.48, vol:3.93, mdd:-6.49, ir:-0.377},
+    {name:"Risk Parity", ret:-1.71, vol:3.91, mdd:-6.37, ir:-0.437},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:-9.41, vol:14.90, mdd:-76.69, ir:-0.631},
@@ -456,7 +456,7 @@ const METALS_WINDOWS = {
     {name:"CarryMom", ret:-6.12, vol:11.24, mdd:-49.21, ir:-0.544},
     {name:"Value", ret:11.40, vol:10.53, mdd:-17.51, ir:1.083},
     {name:"EW PORT", ret:-1.29, vol:6.51, mdd:-24.36, ir:-0.199},
-    {name:"Risk Parity (ERC, rolling)", ret:0.27, vol:6.16, mdd:-16.78, ir:0.044},
+    {name:"Risk Parity", ret:0.17, vol:6.15, mdd:-17.54, ir:0.027},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:13.75, vol:14.33, mdd:-5.56, ir:0.959},
@@ -464,27 +464,27 @@ const METALS_WINDOWS = {
     {name:"CarryMom", ret:19.27, vol:9.90, mdd:-3.87, ir:1.946},
     {name:"Value", ret:-5.43, vol:13.32, mdd:-10.02, ir:-0.407},
     {name:"EW PORT", ret:4.63, vol:5.11, mdd:-2.76, ir:0.907},
-    {name:"Risk Parity (ERC, rolling)", ret:2.13, vol:5.47, mdd:-2.91, ir:0.390},
+    {name:"Risk Parity", ret:2.98, vol:5.52, mdd:-2.89, ir:0.541},
   ]),
 };
 
 const PM_COLUMNS = METALS_COLUMNS;
 const PM_WINDOWS = {
   full: ewBold([
-    {name:"Momentum", ret:-7.02, vol:18.31, mdd:-150.10, ir:-0.383},
-    {name:"Carry", ret:1.36, vol:13.42, mdd:-81.05, ir:0.101},
-    {name:"CarryMom", ret:-0.83, vol:14.26, mdd:-92.09, ir:-0.058},
-    {name:"Value", ret:1.80, vol:16.54, mdd:-56.36, ir:0.109},
-    {name:"EW PORT", ret:-1.17, vol:7.89, mdd:-60.30, ir:-0.149},
-    {name:"Risk Parity (ERC, rolling)", ret:-2.21, vol:7.55, mdd:-64.84, ir:-0.293},
+    {name:"Momentum", ret:-7.02, vol:18.30, mdd:-150.10, ir:-0.383},
+    {name:"Carry", ret:1.36, vol:13.41, mdd:-81.05, ir:0.101},
+    {name:"CarryMom", ret:-0.83, vol:14.25, mdd:-92.09, ir:-0.058},
+    {name:"Value", ret:1.80, vol:16.53, mdd:-56.36, ir:0.109},
+    {name:"EW PORT", ret:-1.17, vol:7.88, mdd:-60.30, ir:-0.149},
+    {name:"Risk Parity", ret:-1.88, vol:7.61, mdd:-64.93, ir:-0.248},
   ]),
   r1: ewBold([
-    {name:"Momentum", ret:-5.77, vol:15.69, mdd:-48.99, ir:-0.367},
-    {name:"Carry", ret:10.75, vol:13.04, mdd:-17.44, ir:0.824},
-    {name:"CarryMom", ret:5.36, vol:11.69, mdd:-23.38, ir:0.458},
-    {name:"Value", ret:1.39, vol:15.66, mdd:-33.22, ir:0.089},
+    {name:"Momentum", ret:-5.76, vol:15.68, mdd:-48.99, ir:-0.367},
+    {name:"Carry", ret:10.73, vol:13.03, mdd:-17.44, ir:0.824},
+    {name:"CarryMom", ret:5.35, vol:11.68, mdd:-23.38, ir:0.458},
+    {name:"Value", ret:1.39, vol:15.65, mdd:-33.22, ir:0.089},
     {name:"EW PORT", ret:2.93, vol:8.89, mdd:-11.67, ir:0.330},
-    {name:"Risk Parity (ERC, rolling)", ret:1.33, vol:8.51, mdd:-13.02, ir:0.156},
+    {name:"Risk Parity", ret:2.08, vol:8.58, mdd:-11.58, ir:0.243},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:-2.34, vol:11.33, mdd:-37.87, ir:-0.207},
@@ -492,7 +492,7 @@ const PM_WINDOWS = {
     {name:"CarryMom", ret:2.21, vol:9.18, mdd:-17.69, ir:0.241},
     {name:"Value", ret:0.65, vol:9.43, mdd:-18.76, ir:0.069},
     {name:"EW PORT", ret:0.61, vol:4.45, mdd:-7.38, ir:0.138},
-    {name:"Risk Parity (ERC, rolling)", ret:-0.19, vol:3.99, mdd:-7.31, ir:-0.048},
+    {name:"Risk Parity", ret:-0.03, vol:4.01, mdd:-7.25, ir:-0.009},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:-15.58, vol:20.38, mdd:-42.56, ir:-0.764},
@@ -500,7 +500,7 @@ const PM_WINDOWS = {
     {name:"CarryMom", ret:-3.48, vol:19.33, mdd:-36.99, ir:-0.180},
     {name:"Value", ret:4.20, vol:18.72, mdd:-29.11, ir:0.224},
     {name:"EW PORT", ret:-6.89, vol:7.30, mdd:-17.10, ir:-0.943},
-    {name:"Risk Parity (ERC, rolling)", ret:-6.18, vol:6.59, mdd:-15.30, ir:-0.938},
+    {name:"Risk Parity", ret:-6.11, vol:6.64, mdd:-15.18, ir:-0.919},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:-8.76, vol:24.15, mdd:-85.48, ir:-0.363},
@@ -508,7 +508,7 @@ const PM_WINDOWS = {
     {name:"CarryMom", ret:-9.27, vol:17.53, mdd:-75.94, ir:-0.529},
     {name:"Value", ret:2.20, vol:20.87, mdd:-56.36, ir:0.105},
     {name:"EW PORT", ret:-4.79, vol:9.22, mdd:-45.94, ir:-0.519},
-    {name:"Risk Parity (ERC, rolling)", ret:-6.19, vol:9.08, mdd:-48.51, ir:-0.682},
+    {name:"Risk Parity", ret:-6.08, vol:9.16, mdd:-49.32, ir:-0.664},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:9.23, vol:45.46, mdd:-37.08, ir:0.203},
@@ -516,59 +516,59 @@ const PM_WINDOWS = {
     {name:"CarryMom", ret:44.71, vol:33.57, mdd:-19.33, ir:1.332},
     {name:"Value", ret:34.80, vol:44.98, mdd:-24.07, ir:0.774},
     {name:"EW PORT", ret:33.94, vol:15.30, mdd:-5.51, ir:2.218},
-    {name:"Risk Parity (ERC, rolling)", ret:29.70, vol:15.72, mdd:-6.78, ir:1.890},
+    {name:"Risk Parity", ret:30.75, vol:15.89, mdd:-6.79, ir:1.936},
   ]),
 };
 
 const ENERGY_COLUMNS = METALS_COLUMNS;
 const ENERGY_WINDOWS = {
   full: ewBold([
-    {name:"Momentum", ret:12.16, vol:28.29, mdd:-85.85, ir:0.430},
-    {name:"Carry", ret:5.26, vol:24.14, mdd:-68.42, ir:0.218},
-    {name:"CarryMom", ret:11.97, vol:21.17, mdd:-31.39, ir:0.566},
-    {name:"Value", ret:-2.16, vol:27.40, mdd:-129.97, ir:-0.079},
-    {name:"EW PORT", ret:6.81, vol:12.53, mdd:-21.66, ir:0.543},
-    {name:"Risk Parity (ERC, rolling)", ret:4.19, vol:9.70, mdd:-14.97, ir:0.432},
+    {name:"Momentum", ret:12.19, vol:27.93, mdd:-85.88, ir:0.436},
+    {name:"Carry", ret:5.38, vol:23.83, mdd:-68.68, ir:0.226},
+    {name:"CarryMom", ret:11.99, vol:20.90, mdd:-31.22, ir:0.574},
+    {name:"Value", ret:-2.41, vol:27.05, mdd:-135.22, ir:-0.089},
+    {name:"EW PORT", ret:6.79, vol:12.37, mdd:-21.74, ir:0.548},
+    {name:"Risk Parity", ret:4.45, vol:9.56, mdd:-15.75, ir:0.466},
   ]),
   r1: ewBold([
-    {name:"Momentum", ret:13.17, vol:20.64, mdd:-37.28, ir:0.638},
-    {name:"Carry", ret:5.49, vol:15.20, mdd:-23.98, ir:0.361},
-    {name:"CarryMom", ret:7.17, vol:13.98, mdd:-25.19, ir:0.513},
-    {name:"Value", ret:-17.03, vol:21.20, mdd:-93.60, ir:-0.804},
-    {name:"EW PORT", ret:2.20, vol:8.00, mdd:-13.92, ir:0.275},
-    {name:"Risk Parity (ERC, rolling)", ret:-1.32, vol:6.22, mdd:-12.84, ir:-0.212},
+    {name:"Momentum", ret:13.67, vol:20.42, mdd:-36.90, ir:0.670},
+    {name:"Carry", ret:5.93, vol:15.04, mdd:-23.40, ir:0.394},
+    {name:"CarryMom", ret:7.17, vol:13.84, mdd:-24.61, ir:0.518},
+    {name:"Value", ret:-17.40, vol:20.97, mdd:-97.50, ir:-0.830},
+    {name:"EW PORT", ret:2.34, vol:7.92, mdd:-13.61, ir:0.296},
+    {name:"Risk Parity", ret:-1.05, vol:6.26, mdd:-12.41, ir:-0.168},
   ]),
   r2: ewBold([
-    {name:"Momentum", ret:-4.62, vol:23.45, mdd:-57.07, ir:-0.197},
-    {name:"Carry", ret:2.99, vol:18.36, mdd:-29.42, ir:0.163},
-    {name:"CarryMom", ret:5.66, vol:15.16, mdd:-21.34, ir:0.373},
-    {name:"Value", ret:12.89, vol:21.43, mdd:-25.26, ir:0.601},
-    {name:"EW PORT", ret:4.23, vol:10.19, mdd:-12.26, ir:0.415},
-    {name:"Risk Parity (ERC, rolling)", ret:6.19, vol:8.62, mdd:-9.33, ir:0.719},
+    {name:"Momentum", ret:-4.11, vol:23.17, mdd:-56.85, ir:-0.177},
+    {name:"Carry", ret:3.11, vol:18.14, mdd:-29.41, ir:0.171},
+    {name:"CarryMom", ret:6.02, vol:14.98, mdd:-21.02, ir:0.402},
+    {name:"Value", ret:12.59, vol:21.17, mdd:-25.54, ir:0.594},
+    {name:"EW PORT", ret:4.40, vol:10.06, mdd:-11.84, ir:0.437},
+    {name:"Risk Parity", ret:6.56, vol:8.48, mdd:-9.16, ir:0.773},
   ]),
   r3: ewBold([
-    {name:"Momentum", ret:58.80, vol:44.52, mdd:-38.39, ir:1.321},
-    {name:"Carry", ret:21.60, vol:41.82, mdd:-68.42, ir:0.517},
-    {name:"CarryMom", ret:28.33, vol:34.83, mdd:-20.99, ir:0.813},
-    {name:"Value", ret:-12.27, vol:44.52, mdd:-91.46, ir:-0.276},
-    {name:"EW PORT", ret:24.12, vol:18.81, mdd:-11.91, ir:1.282},
-    {name:"Risk Parity (ERC, rolling)", ret:14.43, vol:11.25, mdd:-8.23, ir:1.283},
+    {name:"Momentum", ret:57.36, vol:43.92, mdd:-38.39, ir:1.306},
+    {name:"Carry", ret:21.10, vol:41.25, mdd:-68.68, ir:0.512},
+    {name:"CarryMom", ret:27.68, vol:34.36, mdd:-20.99, ir:0.806},
+    {name:"Value", ret:-12.22, vol:43.92, mdd:-91.46, ir:-0.278},
+    {name:"EW PORT", ret:23.48, vol:18.56, mdd:-11.91, ir:1.265},
+    {name:"Risk Parity", ret:14.85, vol:10.97, mdd:-6.46, ir:1.354},
   ]),
   r4: ewBold([
-    {name:"Momentum", ret:5.11, vol:30.16, mdd:-85.85, ir:0.169},
-    {name:"Carry", ret:-0.29, vol:25.96, mdd:-62.92, ir:-0.011},
-    {name:"CarryMom", ret:15.66, vol:24.15, mdd:-31.39, ir:0.648},
-    {name:"Value", ret:5.55, vol:28.23, mdd:-67.89, ir:0.197},
-    {name:"EW PORT", ret:6.51, vol:14.85, mdd:-21.66, ir:0.438},
-    {name:"Risk Parity (ERC, rolling)", ret:3.96, vol:12.61, mdd:-14.97, ir:0.314},
+    {name:"Momentum", ret:4.84, vol:29.72, mdd:-85.88, ir:0.163},
+    {name:"Carry", ret:-0.23, vol:25.57, mdd:-62.10, ir:-0.009},
+    {name:"CarryMom", ret:15.64, vol:23.80, mdd:-31.22, ir:0.657},
+    {name:"Value", ret:5.28, vol:27.81, mdd:-68.69, ir:0.190},
+    {name:"EW PORT", ret:6.38, vol:14.63, mdd:-21.74, ir:0.436},
+    {name:"Risk Parity", ret:4.04, vol:12.39, mdd:-15.43, ir:0.326},
   ]),
   y26: ewBold([
-    {name:"Momentum", ret:89.28, vol:46.88, mdd:-16.80, ir:1.904},
-    {name:"Carry", ret:35.92, vol:43.96, mdd:-21.66, ir:0.817},
-    {name:"CarryMom", ret:83.11, vol:39.59, mdd:-10.53, ir:2.099},
-    {name:"Value", ret:32.00, vol:39.24, mdd:-26.21, ir:0.816},
-    {name:"EW PORT", ret:60.08, vol:23.76, mdd:-5.88, ir:2.528},
-    {name:"Risk Parity (ERC, rolling)", ret:54.15, vol:19.27, mdd:-5.20, ir:2.810},
+    {name:"Momentum", ret:83.08, vol:46.03, mdd:-18.20, ir:1.805},
+    {name:"Carry", ret:32.15, vol:43.14, mdd:-23.06, ir:0.745},
+    {name:"CarryMom", ret:82.14, vol:38.85, mdd:-10.53, ir:2.114},
+    {name:"Value", ret:33.92, vol:38.50, mdd:-26.21, ir:0.881},
+    {name:"EW PORT", ret:57.82, vol:23.30, mdd:-5.88, ir:2.481},
+    {name:"Risk Parity", ret:54.60, vol:18.71, mdd:-5.31, ir:2.918},
   ]),
 };
 
@@ -580,7 +580,7 @@ const NGL_WINDOWS = {
     {name:"CarryMom", ret:10.56, vol:22.67, mdd:-42.85, ir:0.466},
     {name:"Value", ret:6.84, vol:26.85, mdd:-124.60, ir:0.255},
     {name:"EW PORT", ret:13.78, vol:13.44, mdd:-27.69, ir:1.025},
-    {name:"Risk Parity (ERC, rolling)", ret:11.95, vol:11.72, mdd:-21.14, ir:1.020},
+    {name:"Risk Parity", ret:11.75, vol:11.87, mdd:-21.09, ir:0.990},
   ]),
   r1: ewBold([
     {name:"Momentum", ret:17.24, vol:24.41, mdd:-30.78, ir:0.706},
@@ -588,7 +588,7 @@ const NGL_WINDOWS = {
     {name:"CarryMom", ret:8.04, vol:18.79, mdd:-22.96, ir:0.428},
     {name:"Value", ret:-19.01, vol:22.31, mdd:-111.14, ir:-0.852},
     {name:"EW PORT", ret:6.99, vol:10.59, mdd:-15.87, ir:0.660},
-    {name:"Risk Parity (ERC, rolling)", ret:0.25, vol:7.70, mdd:-19.75, ir:0.033},
+    {name:"Risk Parity", ret:0.33, vol:8.57, mdd:-18.66, ir:0.039},
   ]),
   r2: ewBold([
     {name:"Momentum", ret:36.29, vol:28.26, mdd:-32.40, ir:1.284},
@@ -596,7 +596,7 @@ const NGL_WINDOWS = {
     {name:"CarryMom", ret:12.25, vol:24.70, mdd:-30.93, ir:0.496},
     {name:"Value", ret:23.57, vol:26.89, mdd:-44.97, ir:0.877},
     {name:"EW PORT", ret:22.85, vol:14.98, mdd:-18.47, ir:1.526},
-    {name:"Risk Parity (ERC, rolling)", ret:22.25, vol:14.33, mdd:-19.06, ir:1.552},
+    {name:"Risk Parity", ret:21.94, vol:14.32, mdd:-18.95, ir:1.532},
   ]),
   r3: ewBold([
     {name:"Momentum", ret:54.27, vol:39.35, mdd:-62.15, ir:1.379},
@@ -604,7 +604,7 @@ const NGL_WINDOWS = {
     {name:"CarryMom", ret:15.73, vol:30.74, mdd:-42.85, ir:0.512},
     {name:"Value", ret:-1.20, vol:41.93, mdd:-82.66, ir:-0.029},
     {name:"EW PORT", ret:22.19, vol:16.95, mdd:-22.08, ir:1.309},
-    {name:"Risk Parity (ERC, rolling)", ret:19.87, vol:14.87, mdd:-13.24, ir:1.336},
+    {name:"Risk Parity", ret:18.81, vol:14.59, mdd:-13.27, ir:1.289},
   ]),
   r4: ewBold([
     {name:"Momentum", ret:2.17, vol:25.58, mdd:-90.27, ir:0.085},
@@ -612,7 +612,7 @@ const NGL_WINDOWS = {
     {name:"CarryMom", ret:9.56, vol:20.40, mdd:-41.15, ir:0.468},
     {name:"Value", ret:24.36, vol:22.39, mdd:-39.02, ir:1.088},
     {name:"EW PORT", ret:9.51, vol:13.06, mdd:-27.69, ir:0.728},
-    {name:"Risk Parity (ERC, rolling)", ret:12.28, vol:11.21, mdd:-21.14, ir:1.096},
+    {name:"Risk Parity", ret:12.26, vol:11.23, mdd:-21.09, ir:1.092},
   ]),
   y26: ewBold([
     {name:"Momentum", ret:22.29, vol:33.82, mdd:-23.08, ir:0.659},
@@ -620,104 +620,102 @@ const NGL_WINDOWS = {
     {name:"CarryMom", ret:38.71, vol:31.94, mdd:-18.20, ir:1.212},
     {name:"Value", ret:66.45, vol:27.17, mdd:-9.28, ir:2.446},
     {name:"EW PORT", ret:26.97, vol:20.58, mdd:-7.83, ir:1.310},
-    {name:"Risk Parity (ERC, rolling)", ret:32.76, vol:18.63, mdd:-7.51, ir:1.758},
+    {name:"Risk Parity", ret:32.65, vol:18.77, mdd:-7.49, ir:1.739},
   ]),
 };
 
 // Cross-Commodity Portfolio: each strategy equal-weighted across the 4 asset
-// classes, then combined into EW and Risk Parity portfolios. Computed on the
-// intersection of trading dates across all 4 asset classes (n=3,828).
+// classes, then combined into EW and Risk Parity portfolios.
 const CROSSCOMMODITY_COLUMNS = METALS_COLUMNS;
 const CROSSCOMMODITY_WINDOWS = {
   full: ewBold([
-    {name:"Momentum", ret:5.63, vol:14.85, mdd:-58.41, ir:0.379},
-    {name:"Carry", ret:6.08, vol:10.69, mdd:-33.58, ir:0.569},
-    {name:"CarryMom", ret:5.83, vol:9.59, mdd:-22.42, ir:0.608},
-    {name:"Value", ret:3.35, vol:14.08, mdd:-72.57, ir:0.238},
-    {name:"EW PORT", ret:5.22, vol:6.19, mdd:-16.71, ir:0.844},
-    {name:"Risk Parity", ret:4.47, vol:5.48, mdd:-11.73, ir:0.816},
+    {name:"Momentum", ret:5.19, vol:14.65, mdd:-55.67, ir:0.354},
+    {name:"Carry", ret:5.33, vol:10.56, mdd:-37.17, ir:0.505},
+    {name:"CarryMom", ret:5.12, vol:9.46, mdd:-26.51, ir:0.541},
+    {name:"Value", ret:3.03, vol:13.87, mdd:-69.40, ir:0.218},
+    {name:"EW PORT", ret:4.67, vol:6.11, mdd:-18.12, ir:0.764},
+    {name:"Risk Parity", ret:4.11, vol:5.40, mdd:-12.97, ir:0.760},
   ]),
   r1: ewBold([
-    {name:"Momentum", ret:4.51, vol:12.83, mdd:-25.74, ir:0.351},
-    {name:"Carry", ret:12.74, vol:9.36, mdd:-10.75, ir:1.361},
-    {name:"CarryMom", ret:7.78, vol:7.38, mdd:-8.28, ir:1.055},
-    {name:"Value", ret:-8.51, vol:11.71, mdd:-63.84, ir:-0.727},
-    {name:"EW PORT", ret:4.13, vol:5.01, mdd:-5.87, ir:0.825},
-    {name:"Risk Parity", ret:2.12, vol:4.53, mdd:-5.87, ir:0.468},
+    {name:"Momentum", ret:3.59, vol:12.67, mdd:-26.03, ir:0.283},
+    {name:"Carry", ret:11.55, vol:9.29, mdd:-10.36, ir:1.244},
+    {name:"CarryMom", ret:7.14, vol:7.30, mdd:-7.84, ir:0.978},
+    {name:"Value", ret:-7.19, vol:11.57, mdd:-60.75, ir:-0.622},
+    {name:"EW PORT", ret:3.77, vol:4.94, mdd:-5.60, ir:0.763},
+    {name:"Risk Parity", ret:1.99, vol:4.46, mdd:-5.60, ir:0.447},
   ]),
   r2: ewBold([
-    {name:"Momentum", ret:5.62, vol:12.63, mdd:-23.74, ir:0.445},
-    {name:"Carry", ret:3.83, vol:7.94, mdd:-13.33, ir:0.482},
-    {name:"CarryMom", ret:3.17, vol:8.65, mdd:-14.69, ir:0.366},
-    {name:"Value", ret:11.26, vol:11.95, mdd:-14.60, ir:0.942},
-    {name:"EW PORT", ret:5.97, vol:5.75, mdd:-7.16, ir:1.038},
-    {name:"Risk Parity", ret:5.52, vol:5.20, mdd:-6.06, ir:1.062},
+    {name:"Momentum", ret:5.18, vol:12.50, mdd:-23.44, ir:0.415},
+    {name:"Carry", ret:3.58, vol:7.86, mdd:-12.82, ir:0.455},
+    {name:"CarryMom", ret:3.00, vol:8.54, mdd:-13.19, ir:0.352},
+    {name:"Value", ret:10.88, vol:11.80, mdd:-14.44, ir:0.922},
+    {name:"EW PORT", ret:5.66, vol:5.71, mdd:-7.63, ir:0.992},
+    {name:"Risk Parity", ret:5.48, vol:5.17, mdd:-6.57, ir:1.060},
   ]),
   r3: ewBold([
-    {name:"Momentum", ret:29.93, vol:21.50, mdd:-17.16, ir:1.392},
-    {name:"Carry", ret:9.05, vol:15.72, mdd:-27.59, ir:0.575},
-    {name:"CarryMom", ret:11.06, vol:13.76, mdd:-11.32, ir:0.804},
-    {name:"Value", ret:-4.37, vol:21.68, mdd:-36.32, ir:-0.201},
-    {name:"EW PORT", ret:11.42, vol:7.61, mdd:-5.53, ir:1.500},
-    {name:"Risk Parity", ret:8.98, vol:5.52, mdd:-4.81, ir:1.625},
+    {name:"Momentum", ret:26.85, vol:21.14, mdd:-20.80, ir:1.270},
+    {name:"Carry", ret:6.73, vol:15.53, mdd:-30.75, ir:0.434},
+    {name:"CarryMom", ret:10.18, vol:13.58, mdd:-11.31, ir:0.750},
+    {name:"Value", ret:-3.98, vol:21.33, mdd:-36.25, ir:-0.187},
+    {name:"EW PORT", ret:9.95, vol:7.50, mdd:-6.11, ir:1.327},
+    {name:"Risk Parity", ret:8.13, vol:5.43, mdd:-5.25, ir:1.496},
   ]),
   r4: ewBold([
-    {name:"Momentum", ret:-3.99, vol:15.13, mdd:-58.41, ir:-0.264},
-    {name:"Carry", ret:-0.69, vol:11.42, mdd:-33.58, ir:-0.060},
-    {name:"CarryMom", ret:3.70, vol:10.28, mdd:-22.42, ir:0.359},
-    {name:"Value", ret:13.00, vol:13.90, mdd:-27.35, ir:0.935},
-    {name:"EW PORT", ret:3.00, vol:7.01, mdd:-16.71, ir:0.428},
-    {name:"Risk Parity", ret:4.12, vol:6.56, mdd:-11.73, ir:0.629},
+    {name:"Momentum", ret:-2.68, vol:14.92, mdd:-55.67, ir:-0.180},
+    {name:"Carry", ret:-0.65, vol:11.23, mdd:-37.17, ir:-0.057},
+    {name:"CarryMom", ret:2.49, vol:10.10, mdd:-26.51, ir:0.246},
+    {name:"Value", ret:10.55, vol:13.67, mdd:-28.68, ir:0.772},
+    {name:"EW PORT", ret:2.43, vol:6.90, mdd:-18.12, ir:0.352},
+    {name:"Risk Parity", ret:3.44, vol:6.45, mdd:-12.97, ir:0.533},
   ]),
   y26: ewBold([
-    {name:"Momentum", ret:30.25, vol:22.75, mdd:-9.57, ir:1.330},
-    {name:"Carry", ret:10.38, vol:19.15, mdd:-9.43, ir:0.542},
-    {name:"CarryMom", ret:48.54, vol:16.62, mdd:-5.92, ir:2.920},
-    {name:"Value", ret:33.02, vol:17.33, mdd:-8.64, ir:1.905},
-    {name:"EW PORT", ret:30.55, vol:11.55, mdd:-3.53, ir:2.644},
-    {name:"Risk Parity", ret:31.71, vol:10.70, mdd:-3.30, ir:2.965},
+    {name:"Momentum", ret:31.73, vol:22.31, mdd:-9.42, ir:1.423},
+    {name:"Carry", ret:12.49, vol:18.74, mdd:-8.75, ir:0.666},
+    {name:"CarryMom", ret:45.40, vol:16.22, mdd:-5.84, ir:2.799},
+    {name:"Value", ret:31.69, vol:16.87, mdd:-9.00, ir:1.878},
+    {name:"EW PORT", ret:30.33, vol:11.27, mdd:-3.61, ir:2.692},
+    {name:"Risk Parity", ret:31.21, vol:10.46, mdd:-3.45, ir:2.983},
   ]),
 };
 
 // Cross-Pair Portfolios: 50/50 combination of two asset classes' EW
-// portfolios, for the 4 least-correlated pairs. Combined on the
-// intersection of trading dates.
+// portfolios, for the 4 least-correlated pairs.
 const CROSSPAIR_COLUMNS = METALS_COLUMNS;
 const CROSSPAIR_WINDOWS = {
   full: ewBold([
-    {name:"Metals-Energy", ret:3.78, vol:7.26, mdd:-14.62, ir:0.521},
-    {name:"Metals-NGL", ret:7.20, vol:7.63, mdd:-16.76, ir:0.945},
-    {name:"Precious-Energy", ret:2.82, vol:7.67, mdd:-27.80, ir:0.367},
-    {name:"Precious-NGL", ret:6.31, vol:7.88, mdd:-25.25, ir:0.800},
+    {name:"Metals-Energy", ret:3.20, vol:7.15, mdd:-17.63, ir:0.447},
+    {name:"Metals-NGL", ret:6.55, vol:7.55, mdd:-17.48, ir:0.868},
+    {name:"Precious-Energy", ret:2.82, vol:7.57, mdd:-27.81, ir:0.373},
+    {name:"Precious-NGL", ret:6.30, vol:7.88, mdd:-25.25, ir:0.800},
   ]),
   r1: ewBold([
-    {name:"Metals-Energy", ret:2.88, vol:5.54, mdd:-8.69, ir:0.521},
-    {name:"Metals-NGL", ret:5.47, vol:6.23, mdd:-8.29, ir:0.878},
-    {name:"Precious-Energy", ret:2.57, vol:6.33, mdd:-8.94, ir:0.405},
-    {name:"Precious-NGL", ret:4.96, vol:6.81, mdd:-7.96, ir:0.729},
+    {name:"Metals-Energy", ret:2.71, vol:5.47, mdd:-8.97, ir:0.495},
+    {name:"Metals-NGL", ret:4.97, vol:6.18, mdd:-8.36, ir:0.804},
+    {name:"Precious-Energy", ret:2.60, vol:6.26, mdd:-9.11, ir:0.416},
+    {name:"Precious-NGL", ret:4.95, vol:6.81, mdd:-7.96, ir:0.728},
   ]),
   r2: ewBold([
-    {name:"Metals-Energy", ret:0.07, vol:6.05, mdd:-10.18, ir:0.011},
-    {name:"Metals-NGL", ret:9.18, vol:8.28, mdd:-10.96, ir:1.109},
-    {name:"Precious-Energy", ret:2.42, vol:5.72, mdd:-8.50, ir:0.423},
+    {name:"Metals-Energy", ret:-0.12, vol:6.01, mdd:-11.20, ir:-0.021},
+    {name:"Metals-NGL", ret:8.86, vol:8.21, mdd:-11.49, ir:1.079},
+    {name:"Precious-Energy", ret:2.50, vol:5.65, mdd:-8.30, ir:0.442},
     {name:"Precious-NGL", ret:11.73, vol:7.96, mdd:-10.01, ir:1.473},
   ]),
   r3: ewBold([
-    {name:"Metals-Energy", ret:13.90, vol:10.17, mdd:-5.92, ir:1.366},
-    {name:"Metals-NGL", ret:13.24, vol:9.21, mdd:-10.19, ir:1.437},
-    {name:"Precious-Energy", ret:8.61, vol:10.24, mdd:-9.65, ir:0.841},
+    {name:"Metals-Energy", ret:12.43, vol:9.97, mdd:-6.23, ir:1.247},
+    {name:"Metals-NGL", ret:11.55, vol:9.14, mdd:-12.19, ir:1.264},
+    {name:"Precious-Energy", ret:8.38, vol:10.10, mdd:-9.57, ir:0.830},
     {name:"Precious-NGL", ret:7.65, vol:8.91, mdd:-10.29, ir:0.859},
   ]),
   r4: ewBold([
-    {name:"Metals-Energy", ret:3.59, vol:8.31, mdd:-14.62, ir:0.432},
-    {name:"Metals-NGL", ret:4.66, vol:7.64, mdd:-16.76, ir:0.609},
-    {name:"Precious-Energy", ret:0.86, vol:9.08, mdd:-27.80, ir:0.094},
+    {name:"Metals-Energy", ret:2.56, vol:8.16, mdd:-17.63, ir:0.314},
+    {name:"Metals-NGL", ret:4.01, vol:7.52, mdd:-17.48, ir:0.533},
+    {name:"Precious-Energy", ret:0.86, vol:8.95, mdd:-27.81, ir:0.097},
     {name:"Precious-NGL", ret:2.36, vol:8.40, mdd:-25.25, ir:0.281},
   ]),
   y26: ewBold([
-    {name:"Metals-Energy", ret:31.96, vol:12.76, mdd:-3.10, ir:2.506},
-    {name:"Metals-NGL", ret:14.48, vol:11.40, mdd:-4.70, ir:1.270},
-    {name:"Precious-Energy", ret:47.15, vol:14.93, mdd:-4.44, ir:3.158},
+    {name:"Metals-Energy", ret:31.16, vol:12.40, mdd:-3.10, ir:2.512},
+    {name:"Metals-NGL", ret:15.43, vol:11.19, mdd:-4.48, ir:1.379},
+    {name:"Precious-Energy", ret:45.35, vol:14.64, mdd:-4.44, ir:3.097},
     {name:"Precious-NGL", ret:30.45, vol:13.86, mdd:-5.67, ir:2.197},
   ]),
 };
@@ -838,8 +836,8 @@ wireWindowSelect("crosspair-window-select", "crosspair-full-table", "crosspair")
 const CORR_ROW_LABELS = ["Momentum", "Carry", "CarryMom", "Value", "EW PORT", "Risk Parity"];
 const CORR_ASSET_ORDER = ["metals", "energy", "precious", "ngl"];
 const CORR_ASSET_DISPLAY = {metals: "Metals", energy: "Oil/Energy", precious: "Precious Metals", ngl: "NGL"};
-const CORR_WITHIN_TAB = {"metals": [[1.0, 0.256, 0.165, -0.472, 0.594, 0.347], [0.256, 1.0, 0.34, -0.186, 0.697, 0.543], [0.165, 0.34, 1.0, -0.024, 0.683, 0.594], [-0.472, -0.186, -0.024, 1.0, 0.041, 0.406], [0.594, 0.697, 0.683, 0.041, 1.0, 0.895], [0.347, 0.543, 0.594, 0.406, 0.895, 1.0]], "energy": [[1.0, 0.607, 0.557, -0.485, 0.826, 0.431], [0.607, 1.0, 0.454, -0.708, 0.628, 0.236], [0.557, 0.454, 1.0, -0.292, 0.795, 0.532], [-0.485, -0.708, -0.292, 1.0, -0.191, 0.356], [0.826, 0.628, 0.795, -0.191, 1.0, 0.776], [0.431, 0.236, 0.532, 0.356, 0.776, 1.0]], "precious": [[1.0, -0.011, 0.142, -0.395, 0.433, 0.363], [-0.011, 1.0, 0.237, 0.325, 0.697, 0.677], [0.142, 0.237, 1.0, -0.131, 0.567, 0.491], [-0.395, 0.325, -0.131, 1.0, 0.374, 0.465], [0.433, 0.697, 0.567, 0.374, 1.0, 0.965], [0.363, 0.677, 0.491, 0.465, 0.965, 1.0]], "ngl": [[1.0, 0.583, 0.514, -0.444, 0.765, 0.479], [0.583, 1.0, 0.432, -0.509, 0.657, 0.419], [0.514, 0.432, 1.0, -0.173, 0.788, 0.624], [-0.444, -0.509, -0.173, 1.0, -0.022, 0.362], [0.765, 0.657, 0.788, -0.022, 1.0, 0.872], [0.479, 0.419, 0.624, 0.362, 0.872, 1.0]]};
-const CORR_CROSS_COMMODITY = {"Momentum": [[1.0, 0.137, 0.36, 0.122], [0.137, 1.0, 0.11, 0.451], [0.36, 0.11, 1.0, 0.095], [0.122, 0.451, 0.095, 1.0]], "Carry": [[1.0, 0.043, 0.302, 0.07], [0.043, 1.0, -0.039, 0.231], [0.302, -0.039, 1.0, 0.001], [0.07, 0.231, 0.001, 1.0]], "CarryMom": [[1.0, -0.019, 0.052, 0.039], [-0.019, 1.0, 0.02, 0.163], [0.052, 0.02, 1.0, -0.028], [0.039, 0.163, -0.028, 1.0]], "Value": [[1.0, 0.196, 0.341, 0.172], [0.196, 1.0, 0.128, 0.534], [0.341, 0.128, 1.0, 0.061], [0.172, 0.534, 0.061, 1.0]], "EW PORT": [[1.0, 0.067, 0.35, 0.057], [0.067, 1.0, 0.079, 0.279], [0.35, 0.079, 1.0, 0.023], [0.057, 0.279, 0.023, 1.0]], "Risk Parity": [[1.0, 0.059, 0.337, 0.069], [0.059, 1.0, 0.069, 0.311], [0.337, 0.069, 1.0, 0.027], [0.069, 0.311, 0.027, 1.0]]};
+const CORR_WITHIN_TAB = {"metals": [[1.0, 0.256, 0.165, -0.472, 0.594, 0.4], [0.256, 1.0, 0.34, -0.186, 0.697, 0.582], [0.165, 0.34, 1.0, -0.024, 0.683, 0.586], [-0.472, -0.186, -0.024, 1.0, 0.041, 0.34], [0.594, 0.697, 0.683, 0.041, 1.0, 0.914], [0.4, 0.582, 0.586, 0.34, 0.914, 1.0]], "energy": [[1.0, 0.607, 0.556, -0.485, 0.826, 0.476], [0.607, 1.0, 0.453, -0.708, 0.628, 0.281], [0.556, 0.453, 1.0, -0.291, 0.795, 0.559], [-0.485, -0.708, -0.291, 1.0, -0.191, 0.314], [0.826, 0.628, 0.795, -0.191, 1.0, 0.812], [0.476, 0.281, 0.559, 0.314, 0.812, 1.0]], "precious": [[1.0, -0.011, 0.142, -0.395, 0.433, 0.348], [-0.011, 1.0, 0.237, 0.325, 0.697, 0.679], [0.142, 0.237, 1.0, -0.131, 0.567, 0.508], [-0.395, 0.325, -0.131, 1.0, 0.374, 0.471], [0.433, 0.697, 0.567, 0.374, 1.0, 0.968], [0.348, 0.679, 0.508, 0.471, 0.968, 1.0]], "ngl": [[1.0, 0.583, 0.514, -0.444, 0.765, 0.499], [0.583, 1.0, 0.432, -0.509, 0.657, 0.431], [0.514, 0.432, 1.0, -0.173, 0.788, 0.625], [-0.444, -0.509, -0.173, 1.0, -0.022, 0.357], [0.765, 0.657, 0.788, -0.022, 1.0, 0.885], [0.499, 0.431, 0.625, 0.357, 0.885, 1.0]]};
+const CORR_CROSS_COMMODITY = {"Momentum": [[1.0, 0.137, 0.36, 0.122], [0.137, 1.0, 0.11, 0.451], [0.36, 0.11, 1.0, 0.095], [0.122, 0.451, 0.095, 1.0]], "Carry": [[1.0, 0.043, 0.302, 0.07], [0.043, 1.0, -0.039, 0.231], [0.302, -0.039, 1.0, 0.001], [0.07, 0.231, 0.001, 1.0]], "CarryMom": [[1.0, -0.019, 0.052, 0.039], [-0.019, 1.0, 0.02, 0.163], [0.052, 0.02, 1.0, -0.028], [0.039, 0.163, -0.028, 1.0]], "Value": [[1.0, 0.196, 0.341, 0.172], [0.196, 1.0, 0.128, 0.534], [0.341, 0.128, 1.0, 0.061], [0.172, 0.534, 0.061, 1.0]], "EW PORT": [[1.0, 0.067, 0.35, 0.057], [0.067, 1.0, 0.079, 0.279], [0.35, 0.079, 1.0, 0.023], [0.057, 0.279, 0.023, 1.0]], "Risk Parity": [[1.0, 0.059, 0.368, 0.034], [0.059, 1.0, 0.073, 0.3], [0.368, 0.073, 1.0, 0.007], [0.034, 0.3, 0.007, 1.0]]};
 
 function corrColor(v) {
   const a = Math.min(Math.abs(v), 1.0);

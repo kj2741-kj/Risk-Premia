@@ -29,11 +29,18 @@ import streamlit as st
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
 
-from common_shared import inject_css, metric_card, section_header
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
+
+from common_shared import inject_css, metric_card, section_header, CHART_LAYOUT
 from ghr_spline_core import run_spline_analysis, DEFAULT_X_RANGE, DEFAULT_Y_RANGE
 import ghr_copper_inventory_spline as ghr_copper
 import ghr_wti_inventory_spline as ghr_wti
+import cross_asset_engine as cae
 
 st.set_page_config(
     page_title="Risk Premia - Hub",
@@ -86,7 +93,142 @@ def _wti_inventory():
     return ghr_wti.load_weekly_inventory()
 
 
-tab_overview, tab_fund = st.tabs(["🏠 Overview", "📊 Fundamental Analysis"])
+# Cross-Asset Portfolio tab (added 2026-08-04, rebuilt as a dynamic Portfolio Construction UI
+# 2026-08-04 after feedback that the first static-report version was slow and non-interactive).
+# cross_asset_engine.py is a new, isolated engine module -- see its own docstring for why it's
+# kept separate from common_engine.py/research/engine.py rather than folded into either.
+#
+# Caching strategy: only the per-asset-class, per-product signal computation (Excel loading +
+# Momentum/Carry/CarryMom/Value math) is genuinely expensive and is cached here, per
+# (asset_class, tc_bps) -- NOT per calendar_method, since that choice only affects the cheap
+# combine step downstream. Passed into the engine via per_product_fetcher (a dependency-
+# injection seam cross_asset_engine.py exposes specifically so it can stay Streamlit-free while
+# still being cacheable at this layer). This is what makes switching calendar method, styles, or
+# asset-class selection near-instant after the first load of a given asset class.
+@st.cache_data(ttl=3600, show_spinner="Loading curve data and computing signals...")
+def _cached_per_product_four_row(asset_class: str, tc_bps: int):
+    return cae.per_product_four_row(asset_class, tc_bps)
+
+
+PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
+           "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
+
+ASSET_LABEL_TO_KEY = {v: k for k, v in cae.ASSET_CLASS_LABELS.items()}
+STYLE_LABEL_TO_KEY = {"Momentum": "Momentum", "Carry": "Combined Carry",
+                       "CarryMom": "Combined CarryMom", "Value": "Value"}
+
+
+def _ca_fmt(x, fmt_spec: str) -> str:
+    return "N/A" if x is None or (isinstance(x, float) and np.isnan(x)) else fmt_spec.format(x)
+
+
+def _ca_window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int) -> dict:
+    """Same shape as dashboard_portfolio_tab.py's _window_metrics() -- Gross/Net Sharpe, Ann
+    Return, Ann Vol, Max DD over a year range -- so these metric cards read identically to the
+    per-asset-class dashboards' Portfolio tab."""
+    def _slice(s):
+        return s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
+
+    def _sharpe(s):
+        return float(s.mean() / s.std(ddof=1) * np.sqrt(252)) if len(s) > 20 and s.std(ddof=1) > 0 else np.nan
+
+    g, n = _slice(gross), _slice(net)
+    if len(n) > 20 and n.std(ddof=1) > 0:
+        # True compounded annual return, not log return -- see
+        # research/run_regime_table.py::_metrics for the full derivation.
+        # _sharpe() above is computed independently from the raw series, not
+        # from this value, so it stays a coherent log-return Sharpe untouched.
+        log_ann = float(n.mean() * 252)
+        ann = float((np.exp(log_ann) - 1) * 100)
+        vol = float(n.std(ddof=1) * np.sqrt(252) * 100)
+    else:
+        ann = vol = np.nan
+    # True value-based drawdown, not log-space peak-to-trough -- see
+    # research/run_regime_table.py::_metrics for the full derivation.
+    cum = n.cumsum()
+    value = np.exp(cum)
+    mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
+    return dict(gross=_sharpe(g), net=_sharpe(n), ann=ann, vol=vol, mdd=mdd)
+
+
+def _render_equity_and_metrics(gross_dict: dict, net_dict: dict, key_prefix: str,
+                                default_focus: str = "Portfolio") -> None:
+    """Metric cards + cumulative equity chart + per-line return/vol/IR table, matching
+    dashboard_portfolio_tab.py's own Portfolio tab pattern (year-range slider, strategy picker
+    for the metric cards, multiselect for which lines the chart shows)."""
+    labels = list(net_dict.keys())
+    nonempty = [s for s in net_dict.values() if not s.empty]
+    if not nonempty:
+        st.warning("No data for this selection.")
+        return
+    all_index = nonempty[0].index
+    for s in nonempty[1:]:
+        all_index = all_index.union(s.index)
+    min_year, max_year = int(all_index.min().year), int(all_index.max().year)
+    # Default to 2011 (REPORT_START), matching every other report in this project -- pre-2011
+    # history exists only to warm up long-lookback signals (e.g. Value's 1260-day MA), not to be
+    # read as part of the reported track record. Slider still allows going back further.
+    default_start = max(min_year, 2011)
+
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        focus = st.selectbox("Strategy (for metric cards)", labels,
+                              index=labels.index(default_focus) if default_focus in labels else 0,
+                              key=f"{key_prefix}_focus")
+    with c2:
+        yr_start, yr_end = st.slider("Year range", min_value=min_year, max_value=max_year,
+                                      value=(default_start, max_year), step=1, key=f"{key_prefix}_years")
+    shown = st.multiselect("Lines shown on chart", labels, default=labels, key=f"{key_prefix}_shown")
+
+    m = _ca_window_metrics(gross_dict[focus], net_dict[focus], yr_start, yr_end)
+    mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+    with mc1:
+        metric_card("Gross Sharpe", _ca_fmt(m["gross"], "{:+.2f}"))
+    with mc2:
+        metric_card("Net Sharpe", _ca_fmt(m["net"], "{:+.2f}"))
+    with mc3:
+        metric_card("Ann Return (Net)", _ca_fmt(m["ann"], "{:+.2f}"), unit="%")
+    with mc4:
+        metric_card("Ann Vol", _ca_fmt(m["vol"], "{:.2f}"), unit="%")
+    with mc5:
+        metric_card("Max DD (Net)", _ca_fmt(m["mdd"], "{:+.2f}"), unit="%")
+
+    section_header("Cumulative equity")
+    fig = go.Figure()
+    rows = []
+    for i, label in enumerate(shown):
+        s = net_dict[label]
+        window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
+        if window.empty:
+            continue
+        eq = window.cumsum() * 100
+        width = 2.6 if label == "Portfolio" else 1.4
+        dash = None if label == "Portfolio" else "solid"
+        fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
+                                  line=dict(color=PALETTE[i % len(PALETTE)], width=width, dash=dash)))
+        if len(window) > 20 and window.std(ddof=1) > 0:
+            ret = float(window.mean() * 252 * 100)
+            vol = float(window.std(ddof=1) * np.sqrt(252) * 100)
+            ir = ret / vol if vol > 0 else np.nan
+        else:
+            ret = vol = ir = np.nan
+        rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})
+
+    layout = dict(CHART_LAYOUT)
+    layout["yaxis_title"] = "Cumulative Log-Return (%)"
+    fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=440)
+    st.plotly_chart(fig, use_container_width=True)
+
+    if rows:
+        st.dataframe(
+            pd.DataFrame(rows).set_index("Strategy").style.format(
+                {"Return (%/yr)": "{:+.2f}", "Vol (%/yr)": "{:.2f}", "IR": "{:+.3f}"}),
+            use_container_width=True,
+        )
+
+
+tab_overview, tab_fund, tab_crossasset = st.tabs(
+    ["🏠 Overview", "📊 Fundamental Analysis", "🌐 Cross-Asset Portfolio"])
 
 # TAB 1: Overview
 with tab_overview:
@@ -284,3 +426,95 @@ with tab_fund:
             file_name=f"{commodity_label.lower().replace(' ', '_')}_basis_inventory_weekly_{basis_source}.csv",
             mime="text/csv",
         )
+
+# TAB 3: Cross-Asset Portfolio (Metals + Energy + Precious + NGL combined)
+with tab_crossasset:
+    st.markdown('<p class="main-title">🌐 Cross-Asset Portfolio</p>', unsafe_allow_html=True)
+    st.caption(
+        "Combining asset classes into one book, per Dimil Patel's construction "
+        "(Research_Methodology.docx Section 9 / Analysis/Research_Dashboard_CombinedCarry.html). "
+        "Analysis/decision stage, not yet a finalized single method -- pick calendar alignment "
+        "below and everything recomputes live."
+    )
+
+    top1, top2 = st.columns([2, 1])
+    with top1:
+        calendar_choice = st.radio(
+            "Calendar alignment", ["Intersection (Bogorad)", "Zero-Fill (Dimil)"],
+            horizontal=True, key="ca_calendar_method",
+            help="Intersection (Mark Bogorad, \"Risk Premia in Diversified Energy Portfolios\", Dec "
+                 "2025, Section 4): a date where any selected asset class isn't trading is dropped "
+                 "entirely -- loses 4.35% of the union's trading days across all 4 asset classes "
+                 "(2026-08-04 diagnostic), concentrated in Metals/Precious/NGL. Zero-Fill (Dimil "
+                 "Patel): union of dates, a non-trading asset class gets an explicit 0.0 return that "
+                 "day. Verified to reproduce Dimil's real pushed numbers exactly under Zero-Fill (9 "
+                 "of 10 headline rows match to 3 decimal places).",
+        )
+    with top2:
+        tc_bps = st.slider(
+            "TC (bps, round-trip)", min_value=0, max_value=20, value=5, step=1, key="ca_tc_bps",
+            help="Applied at every level of this construction (product, asset-class, cross-asset). "
+                 "Default 5bps matches every other report in this project.",
+        )
+    calendar_method = "intersection" if calendar_choice.startswith("Intersection") else "zero_fill"
+
+    st.divider()
+
+    section_header("Cross-Commodity Portfolio")
+    st.caption("Each selected style is first equal-weighted across the selected asset classes into "
+               "one cross-commodity series per style, then those style-level series are combined "
+               "into one portfolio -- a two-stage hierarchical construction (Methodology doc "
+               "Section 9), not a single flat optimization over every underlying leg.")
+
+    cc1, cc2, cc3 = st.columns(3)
+    with cc1:
+        cc_assets_labels = st.multiselect(
+            "Asset classes", list(cae.ASSET_CLASS_LABELS.values()),
+            default=list(cae.ASSET_CLASS_LABELS.values()), key="cc_assets")
+    with cc2:
+        cc_styles_labels = st.multiselect(
+            "Styles", ["Momentum", "Carry", "CarryMom", "Value"],
+            default=["Momentum", "Carry", "CarryMom", "Value"], key="cc_styles")
+    with cc3:
+        cc_combine = st.selectbox("Combine method", ["Equal Weight", "Risk Parity"], key="cc_combine")
+
+    if len(cc_assets_labels) < 2:
+        st.warning("Pick at least 2 asset classes.")
+    elif not cc_styles_labels:
+        st.warning("Pick at least 1 style.")
+    else:
+        cc_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cc_assets_labels)
+        cc_style_keys = tuple(STYLE_LABEL_TO_KEY[l] for l in cc_styles_labels)
+        cc_combine_key = "equal_weight" if cc_combine == "Equal Weight" else "risk_parity"
+        cc_gross, cc_net = cae.cross_commodity_dynamic(
+            calendar_method, tc_bps, cc_asset_keys, cc_style_keys, cc_combine_key,
+            per_product_fetcher=_cached_per_product_four_row)
+        _render_equity_and_metrics(cc_gross, cc_net, key_prefix="cc")
+
+    st.divider()
+
+    section_header("Cross-Asset-Class Portfolio")
+    st.caption("Equal-weight combination of 2-4 asset classes' own Equal Weight portfolios "
+               "(generalizes Dimil's 4 fixed Cross-Pairs to any 2-4 you pick).")
+
+    cn_assets_labels = st.multiselect(
+        "Asset classes (choose 2-4)", list(cae.ASSET_CLASS_LABELS.values()),
+        default=["Metals", "Energy"], key="cn_assets")
+
+    if not 2 <= len(cn_assets_labels) <= 4:
+        st.warning("Pick between 2 and 4 asset classes.")
+    else:
+        cn_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cn_assets_labels)
+        cn_gross, cn_net = cae.cross_n_portfolio(
+            calendar_method, tc_bps, cn_asset_keys, per_product_fetcher=_cached_per_product_four_row)
+        _render_equity_and_metrics(cn_gross, cn_net, key_prefix="cn")
+
+    st.divider()
+    st.caption(
+        "Engine: research/cross_asset_engine.py (new, isolated module -- does not modify "
+        "common_engine.py, research/engine.py, research/risk_parity.py, or any of the 4 live "
+        "asset-class dashboards). Signal-level Carry/Carry-Momentum combination across tenor "
+        "pairs (Methodology doc Section 7), not the return-level construction used in an earlier "
+        "static HTML report edit -- these numbers and those reports are not directly comparable "
+        "until the reports are regenerated to match."
+    )

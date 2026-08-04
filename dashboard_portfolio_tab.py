@@ -979,19 +979,23 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
         if window.empty:
             continue
-        eq = window.cumsum() * 100
+        # True cumulative %, not log-return % -- see research/run_regime_table.py::_metrics for
+        # the full derivation. Matches the metric cards above (ann/mdd already true %).
+        eq = (np.exp(window.cumsum()) - 1) * 100
         fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
                                   line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
         if len(window) > 20 and window.std(ddof=1) > 0:
-            ret = float(window.mean() * 252 * 100)
-            vol = float(window.std(ddof=1) * np.sqrt(252) * 100)
-            ir = ret / vol if vol > 0 else np.nan
+            log_ret = float(window.mean() * 252)
+            vol_raw = float(window.std(ddof=1) * np.sqrt(252))
+            ir = log_ret / vol_raw if vol_raw > 0 else np.nan
+            ret = (np.exp(log_ret) - 1) * 100
+            vol = vol_raw * 100
         else:
             ret = vol = ir = np.nan
         rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})
 
     layout = dict(CHART_LAYOUT)
-    layout["yaxis_title"] = "Cumulative Log-Return (%)"
+    layout["yaxis_title"] = "Cumulative Return (%)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=460)
     st.plotly_chart(fig, use_container_width=True)
 

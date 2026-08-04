@@ -33,9 +33,11 @@ widget keys. Nothing here is Metals-specific, so the remaining three
 dashboards can add the same tab later by importing their own config.
 
 Combine-method roadmap: Equal Weight, Inverse Vol (rolling, trailing-
-vol-window reweighting -- see combine_returns() in research/engine.py), and
+vol-window reweighting -- see combine_returns() in research/engine.py),
 Risk Parity (rolling Equal Risk Contribution over the full covariance
-matrix -- see research/risk_parity.py) are all exposed for portfolio-level
+matrix -- see research/risk_parity.py), and Dynamic Risk Parity (rolling
+EWMA-vol/EWMA-covariance inverse-vol weighting with shrinkage and a
+volatility target -- see research/drp.py) are all exposed for portfolio-level
 combination -- the reference-strategy aggregate and any custom Portfolio
 Construction entry, via one shared selector (_combine_sleeves() below).
 Leg-level combination within one strategy family (combine_positions())
@@ -66,8 +68,9 @@ from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E40
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_value)
 from risk_parity import rolling_erc_combine  # noqa: E402
+from drp import rolling_drp_combine  # noqa: E402
 
-COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)"]
+COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"]
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
 CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
@@ -636,15 +639,17 @@ def _combine_sleeves(gross_by_name: dict[str, pd.Series], net_by_name: dict[str,
                       tilt: float = 0.0) -> tuple[pd.Series, pd.Series]:
     """Combine several strategies' gross/net return series under the selected UI method.
 
-    Risk Parity solves weights on the tradeable NET series only, then applies that exact
-    schedule to gross via _apply_weight_schedule -- risk allocation should be decided on the
-    cost-inclusive series, not a second, independent solve on gross. Equal Weight is also the
-    fallback with fewer than two series, since none of the weighting schemes have anything to
-    weight in that case (matches each method's own single-series pass-through/fallback).
+    Risk Parity and Dynamic Risk Parity both solve weights on the tradeable NET series only,
+    then apply that exact schedule to gross via _apply_weight_schedule -- risk allocation
+    should be decided on the cost-inclusive series, not a second, independent solve on gross.
+    Equal Weight is also the fallback with fewer than two series, since none of the weighting
+    schemes have anything to weight in that case (matches each method's own single-series
+    pass-through/fallback).
 
     `tilt` only applies to Risk Parity (0 = pure ERC, the default; see
     risk_parity.sharpe_tilted_budget for what higher values do) and is ignored by the other
-    two methods."""
+    methods, including Dynamic Risk Parity, which has no tilt concept of its own (inverse-vol
+    weighting only, no risk-contribution solve to tilt)."""
     if len(net_by_name) < 2:
         return (combine_returns(list(gross_by_name.values()), "equal_weight"),
                 combine_returns(list(net_by_name.values()), "equal_weight"))
@@ -653,6 +658,10 @@ def _combine_sleeves(gross_by_name: dict[str, pd.Series], net_by_name: dict[str,
                 combine_returns(list(net_by_name.values()), "inverse_vol", vol_window=vol_window))
     if combine_method == "Risk Parity (ERC, rolling)":
         net_combined, weights_over_time = rolling_erc_combine(net_by_name, tilt=tilt)
+        gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
+        return gross_combined, net_combined
+    if combine_method == "Dynamic Risk Parity (DRP, rolling)":
+        net_combined, weights_over_time = rolling_drp_combine(net_by_name)
         gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
         return gross_combined, net_combined
     return (combine_returns(list(gross_by_name.values()), "equal_weight"),
@@ -722,8 +731,11 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
              "Inverse Vol: reweights every day using each strategy's own trailing realized vol "
              "(lower-vol strategies get more weight), ignoring correlation. Risk Parity (ERC): "
              "each strategy contributes equal RISK, solved from the full rolling covariance "
-             "matrix and rebalanced every ~21 trading days from the trailing 252 days. All three "
-             "are identical with only one strategy enabled.")
+             "matrix and rebalanced every ~21 trading days from the trailing 252 days. Dynamic "
+             "Risk Parity (DRP): inverse-EWMA-vol weighting (20-day half-life vol, 60-day "
+             "half-life covariance, correlations shrunk 50% toward zero), rescaled to match "
+             "Equal Weight's own full-sample volatility, rebalanced every ~21 trading days. All "
+             "four are identical with only one strategy enabled.")
     vol_window = 63
     if combine_method == "Inverse Vol":
         vol_window = st.number_input(
@@ -758,8 +770,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             help="Off (default): this asset class's two Carry tenor pairs are equal-weighted "
                  "into one Combined Carry row, and the two CarryMom tenor pairs into one "
                  "Combined CarryMom row -- four reference strategies total (Momentum, "
-                 "Combined Carry, Combined CarryMom, Value). This is Dimil's construction "
-                 "from Research_Dashboard_CombinedCarry.html. On: show each tenor pair as "
+                 "Combined Carry, Combined CarryMom, Value). On: show each tenor pair as "
                  "its own row instead -- six total (Momentum, Carry x2, CarryMom x2, Value) "
                  "-- this project's original convention. Applies to the reference strategies "
                  "below, the strategy pickers further down, and the reference-strategy "

@@ -130,7 +130,7 @@ with tab_portfolio:
                "which only affects the Momentum/Carry/Value/Comparison tabs. Singapore Gasoil and Fuel "
                "Oil are excluded here too (dashboard-only, see sidebar note); both still exist in "
                "research/configs/energy.py's own PRODUCTS list for the research pipeline. Does not "
-               "include the StatArb sleeve (Bogorad's 8-spread cross-asset book, shared with NGL) -- "
+               "include the StatArb sleeve (the 8-spread cross-asset book, shared with NGL) -- "
                "this tab covers Momentum, Carry, Carry-Momentum, and Value only.")
     render_portfolio_tab(energy_research_cfg, key_prefix="energy_portfolio",
                           excluded_products=ENERGY_PORTFOLIO_EXCLUDED)

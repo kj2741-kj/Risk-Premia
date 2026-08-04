@@ -446,14 +446,10 @@ with tab_fund:
 with tab_crossasset:
     st.markdown('<p class="main-title">🌐 Cross-Asset Portfolio</p>', unsafe_allow_html=True)
     st.caption(
-        "Combining asset classes into one book, per Dimil Patel's construction "
-        "(Research_Methodology.docx Section 9 / Analysis/Research_Dashboard_CombinedCarry.html). "
-        "Calendar alignment: intersection (Mark Bogorad, \"Risk Premia in Diversified Energy "
-        "Portfolios\", Dec 2025, Section 4) -- a date where any selected asset class isn't "
+        "Combining asset classes into one book (Research_Methodology.docx Section 9). "
+        "Calendar alignment: intersection -- a date where any selected asset class isn't "
         "trading is dropped entirely, with a dropped date's move rolled into the next surviving "
-        "date so no leg's real return is lost. Finalized 2026-08-04 as this module's only "
-        "convention (a Zero-Fill alternative was evaluated and removed -- it systematically "
-        "suppressed volatility and inflated Sharpe/IR; see module docstring)."
+        "date so no leg's real return is lost."
     )
 
     tc_bps = st.slider(
@@ -480,7 +476,13 @@ with tab_crossasset:
             "Styles", ["Momentum", "Carry", "CarryMom", "Value"],
             default=["Momentum", "Carry", "CarryMom", "Value"], key="cc_styles")
     with cc3:
-        cc_combine = st.selectbox("Combine method", ["Equal Weight", "Risk Parity"], key="cc_combine")
+        cc_combine = st.selectbox(
+            "Combine method", ["Equal Weight", "Risk Parity", "Dynamic Risk Parity"], key="cc_combine",
+            help="Equal Weight: fixed equal split across the selected styles. Risk Parity: rolling "
+                 "Equal Risk Contribution over the full covariance matrix (research/risk_parity.py). "
+                 "Dynamic Risk Parity: inverse-EWMA-vol weighting (20-day vol / 60-day covariance "
+                 "half-lives, correlations shrunk 50% toward zero), rescaled to match Equal Weight's "
+                 "own full-sample volatility (research/drp.py).")
 
     if len(cc_assets_labels) < 2:
         st.warning("Pick at least 2 asset classes.")
@@ -489,7 +491,8 @@ with tab_crossasset:
     else:
         cc_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cc_assets_labels)
         cc_style_keys = tuple(STYLE_LABEL_TO_KEY[l] for l in cc_styles_labels)
-        cc_combine_key = "equal_weight" if cc_combine == "Equal Weight" else "risk_parity"
+        cc_combine_key = {"Equal Weight": "equal_weight", "Risk Parity": "risk_parity",
+                           "Dynamic Risk Parity": "dynamic_risk_parity"}[cc_combine]
         cc_gross, cc_net = cae.cross_commodity_dynamic(
             tc_bps, cc_asset_keys, cc_style_keys, cc_combine_key,
             per_product_fetcher=_cached_per_product_four_row)
@@ -498,21 +501,32 @@ with tab_crossasset:
     st.divider()
 
     section_header("Cross-Asset-Class Portfolio")
-    st.caption("Equal-weight combination of 1-4 asset classes' own Equal Weight portfolios "
-               "(generalizes Dimil's 4 fixed Cross-Pairs to any 1-4 you pick). Pick just one "
-               "to see that asset class's own EW Portfolio number on its own, matching its "
+    st.caption("Combination of 1-4 asset classes' own Equal Weight portfolios (generalizes the "
+               "4 fixed Cross-Pairs shown on the static report to any 1-4 you pick). Pick just "
+               "one to see that asset class's own EW Portfolio number on its own, matching its "
                "individual dashboard's Portfolio tab.")
 
-    cn_assets_labels = st.multiselect(
-        "Asset classes (choose 1-4)", list(cae.ASSET_CLASS_LABELS.values()),
-        default=["Metals", "Energy"], key="cn_assets")
+    cn1, cn2 = st.columns([3, 1])
+    with cn1:
+        cn_assets_labels = st.multiselect(
+            "Asset classes (choose 1-4)", list(cae.ASSET_CLASS_LABELS.values()),
+            default=["Metals", "Energy"], key="cn_assets")
+    with cn2:
+        cn_combine = st.selectbox(
+            "Combine method", ["Equal Weight", "Dynamic Risk Parity"], key="cn_combine",
+            help="Equal Weight: fixed equal split across the selected asset classes' own EW "
+                 "portfolios. Dynamic Risk Parity: inverse-EWMA-vol weighting across those same "
+                 "asset-class portfolios, rescaled to match Equal Weight's own full-sample "
+                 "volatility (research/drp.py). No Risk Parity (ERC) option at this level.")
 
     if not 1 <= len(cn_assets_labels) <= 4:
         st.warning("Pick between 1 and 4 asset classes.")
     else:
         cn_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cn_assets_labels)
+        cn_combine_key = "equal_weight" if cn_combine == "Equal Weight" else "dynamic_risk_parity"
         cn_gross, cn_net = cae.cross_n_portfolio(
-            tc_bps, cn_asset_keys, per_product_fetcher=_cached_per_product_four_row)
+            tc_bps, cn_asset_keys, per_product_fetcher=_cached_per_product_four_row,
+            combine_method=cn_combine_key)
         _render_equity_and_metrics(cn_gross, cn_net, key_prefix="cn")
 
     st.divider()

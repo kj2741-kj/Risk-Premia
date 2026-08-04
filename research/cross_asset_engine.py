@@ -91,6 +91,7 @@ from engine import (raw_signal_carry_v1, raw_signal_carry_v2, raw_signal_carrymo
                      combine_positions, combine_returns, exec_shift, log_return_daily,
                      momentum_composite_position, value_v1_position)
 from risk_parity import rolling_erc_combine
+from drp import rolling_drp_combine
 from run_regime_table import _metrics
 from regimes import REGIMES, REPORT_START
 
@@ -136,11 +137,18 @@ def _carry_composite_raw(curve: pd.DataFrame, near: str, far: str, window: int) 
     return combine_positions([v1, v2], "equal_weight")
 
 
-def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, dict[str, list[pd.Series]]]:
+def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, dict[str, list]]:
     """Momentum / Combined Carry / Combined CarryMom / Value gross AND net
     daily log-return series PER PRODUCT (not yet combined across products)
     for one asset class, on the dashboard-filtered product universe.
-    Returns {style: {"gross": [...], "net": [...]}}. Signal-level Carry/
+    Returns {style: {"gross": [...], "net": [...], "names": [...]}} -- the
+    three lists stay index-aligned (out[style]["names"][i] is the product
+    that produced out[style]["gross"][i]/["net"][i]), which a product can
+    fail to contribute to (an empty net series is skipped, so list length
+    can be less than len(products) and differ by style). "names" added
+    2026-08-04 for dynamic_risk_parity combining (research/drp.py), which
+    needs a named dict, not a positional list -- purely additive, every
+    existing reader of "gross"/"net" is unaffected. Signal-level Carry/
     CarryMom combination across tenor pairs when the asset class has >=2
     (verified against Dimil's real Metals numbers); a single tenor pair
     (Precious Metals) just flows through combine_positions with one leg, a
@@ -148,13 +156,15 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
 
     This is the expensive step (Excel curve loading + signal computation
     across every product). Callers combine this function's output via
-    combine_cross_asset() themselves (see asset_class_four_row below).
-    Splitting it out this way lets a caller cache this function's result
-    once per (asset_class, tc_bps) and reuse it freely."""
+    combine_cross_asset() or rolling_drp_combine() themselves (see
+    asset_class_four_row below). Splitting it out this way lets a caller
+    cache this function's result once per (asset_class, tc_bps) and reuse
+    it freely."""
     cfg = _get_cfg(asset_class)
     tenor_pairs = cfg.CARRY_TENOR_PAIRS
     products = DASHBOARD_PRODUCTS.get(asset_class, cfg.PRODUCTS)
-    out = {style: {"gross": [], "net": []} for style in ("Momentum", "Combined Carry", "Combined CarryMom", "Value")}
+    out = {style: {"gross": [], "net": [], "names": []}
+           for style in ("Momentum", "Combined Carry", "Combined CarryMom", "Value")}
 
     for p in products:
         curve = cfg.load_curve(p)
@@ -166,6 +176,7 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
         if not n.empty:
             out["Momentum"]["gross"].append(g)
             out["Momentum"]["net"].append(n)
+            out["Momentum"]["names"].append(p)
 
         carry_raws = [_carry_composite_raw(curve, near, far, cfg.CARRY_ZSCORE_WINDOW)
                       for near, far in tenor_pairs]
@@ -177,6 +188,7 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
             if not n.empty:
                 out["Combined Carry"]["gross"].append(g)
                 out["Combined Carry"]["net"].append(n)
+                out["Combined Carry"]["names"].append(p)
 
         cm_raws = [raw_signal_carrymom(curve, near, far, cfg.CARRY_MOMENTUM_HORIZON)
                    for near, far in tenor_pairs]
@@ -188,6 +200,7 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
             if not n.empty:
                 out["Combined CarryMom"]["gross"].append(g)
                 out["Combined CarryMom"]["net"].append(n)
+                out["Combined CarryMom"]["names"].append(p)
 
         val_pos = value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS,
                                      cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N)
@@ -195,21 +208,36 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
         if not n.empty:
             out["Value"]["gross"].append(g)
             out["Value"]["net"].append(n)
+            out["Value"]["names"].append(p)
 
     return out
 
 
+PRODUCT_COMBINE_METHODS = ("equal_weight", "dynamic_risk_parity")
+
+
 def asset_class_four_row(asset_class: str, tc_bps: int = TC_BPS, styles: tuple[str, ...] | None = None,
-                          per_product_fetcher=per_product_four_row
+                          per_product_fetcher=per_product_four_row, combine_method: str = "equal_weight"
                           ) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
     """Momentum / Combined Carry / Combined CarryMom / Value gross AND net
     daily log-return series for one asset class, combined across its
-    products via the intersection convention (see module docstring).
-    Returns (gross_dict, net_dict).
+    products. Returns (gross_dict, net_dict).
 
-    Applying intersection at this per-product level matters in practice,
-    not just in principle: Energy is the only asset class with a real
-    internal exchange split (NYMEX vs ICE) -- without combining its
+    `combine_method`: "equal_weight" (default, UNCHANGED behavior) combines
+    products via combine_cross_asset()'s intersection convention (see
+    module docstring). "dynamic_risk_parity" (2026-08-04, Phase 2) instead
+    risk-weights products via research/drp.py's rolling_drp_combine() --
+    Bogorad's Section 6.2 EWMA-vol/EWMA-cov/shrinkage/inverse-vol/vol-target
+    recipe -- applied at the PRODUCT level per style, matching where the
+    paper's own mechanism actually operates (asset/commodity level, not
+    strategy/style level; see the style-level counterpart in
+    asset_class_ew_portfolio below). Requires per_product_fetcher's output
+    to include "names" (added alongside "gross"/"net" in per_product_four_
+    row -- present on every code path as of 2026-08-04).
+
+    Applying intersection (or DRP) at this per-product level matters in
+    practice, not just in principle: Energy is the only asset class with a
+    real internal exchange split (NYMEX vs ICE) -- without combining its
     products this way, Energy's own numbers sit measurably off the
     cross-commodity/cross-pair numbers that combine this function's output
     one level up.
@@ -223,28 +251,71 @@ def asset_class_four_row(asset_class: str, tc_bps: int = TC_BPS, styles: tuple[s
     st.cache_data-wrapped version so the expensive Excel-loading/signal step
     is cached across styles/combine_method changes, which don't affect its
     output at all. This is a dependency-injection seam, not a behavior
-    change: with the default fetcher, this function's output is identical
-    to before.
+    change: with the default fetcher and combine_method, this function's
+    output is identical to before Phase 2.
 
     Thin wrapper around per_product_four_row() -- see that function's
     docstring for why the expensive part is split out separately."""
+    if combine_method not in PRODUCT_COMBINE_METHODS:
+        raise ValueError(f"combine_method must be one of {PRODUCT_COMBINE_METHODS}, got {combine_method!r}")
     per_product = per_product_fetcher(asset_class, tc_bps)
     wanted = styles if styles is not None else tuple(per_product.keys())
-    gross = {style: combine_cross_asset(per_product[style]["gross"]) for style in wanted}
-    net = {style: combine_cross_asset(per_product[style]["net"]) for style in wanted}
+
+    if combine_method == "equal_weight":
+        gross = {style: combine_cross_asset(per_product[style]["gross"]) for style in wanted}
+        net = {style: combine_cross_asset(per_product[style]["net"]) for style in wanted}
+    else:  # "dynamic_risk_parity"
+        gross = {style: rolling_drp_combine(dict(zip(per_product[style]["names"],
+                                                       per_product[style]["gross"])))[0]
+                  for style in wanted}
+        net = {style: rolling_drp_combine(dict(zip(per_product[style]["names"],
+                                                     per_product[style]["net"])))[0]
+                for style in wanted}
     return gross, net
 
 
-def asset_class_ew_portfolio(gross_four_row: dict[str, pd.Series],
-                              net_four_row: dict[str, pd.Series]) -> tuple[pd.Series, pd.Series]:
-    """One asset class's own Equal Weight portfolio (Momentum + Combined
+STYLE_COMBINE_METHODS = ("equal_weight", "risk_parity", "dynamic_risk_parity")
+
+
+def asset_class_ew_portfolio(gross_four_row: dict[str, pd.Series], net_four_row: dict[str, pd.Series],
+                              combine_method: str = "equal_weight") -> tuple[pd.Series, pd.Series]:
+    """One asset class's own style-level portfolio (Momentum + Combined
     Carry + Combined CarryMom + Value, or whichever subset was passed in),
-    gross and net. This 4-row-to-1 combine always uses plain equal_weight --
-    by the time asset_class_four_row() has produced these series, they
+    gross and net.
+
+    `combine_method`: "equal_weight" (default, UNCHANGED behavior) -- by
+    the time asset_class_four_row() has produced these series, they
     already share one asset class's own calendar, so there is no
-    cross-calendar question left to answer at this step."""
-    return (combine_returns(list(gross_four_row.values()), "equal_weight"),
-            combine_returns(list(net_four_row.values()), "equal_weight"))
+    cross-calendar question left to answer at this step; combine_returns()
+    is used directly (not combine_cross_asset(), which would additionally
+    NaN the very first row via its cumsum-diff mechanism -- unnecessary
+    and behavior-changing when every input already shares one index).
+    "risk_parity" (2026-08-04, Phase 4) risk-weights the 4 styles via
+    research/risk_parity.py's rolling_erc_combine() (tilt=0.0, pure ERC) --
+    added to regenerate the dashboard's existing per-asset-class "Risk
+    Parity (ERC, rolling)" row, which previously had no home in this module
+    (only the cross-asset-class level had an ERC option, via
+    cross_commodity_dynamic). "dynamic_risk_parity" (2026-08-04, Phase 2)
+    instead risk-weights the 4 STYLES against each other via
+    research/drp.py's rolling_drp_combine() -- the naming keeps this
+    distinct from asset_class_four_row's own dynamic_risk_parity option
+    above, which risk-weights PRODUCTS within a style instead; the two are
+    independent layers and can be mixed freely by the caller (e.g.
+    product-level DRP feeding into a style-level EW combine, or vice
+    versa)."""
+    if combine_method not in STYLE_COMBINE_METHODS:
+        raise ValueError(f"combine_method must be one of {STYLE_COMBINE_METHODS}, got {combine_method!r}")
+    if combine_method == "equal_weight":
+        return (combine_returns(list(gross_four_row.values()), "equal_weight"),
+                combine_returns(list(net_four_row.values()), "equal_weight"))
+    elif combine_method == "risk_parity":
+        g_port, _ = rolling_erc_combine(gross_four_row, tilt=0.0)
+        n_port, _ = rolling_erc_combine(net_four_row, tilt=0.0)
+        return g_port, n_port
+    else:  # "dynamic_risk_parity"
+        g_port, _ = rolling_drp_combine(gross_four_row)
+        n_port, _ = rolling_drp_combine(net_four_row)
+        return g_port, n_port
 
 
 def combine_cross_asset(series_list: list[pd.Series]) -> pd.Series:
@@ -299,6 +370,7 @@ def combine_cross_asset(series_list: list[pd.Series]) -> pd.Series:
 
 STYLE_NAMES = ("Momentum", "Combined Carry", "Combined CarryMom", "Value")
 STYLE_DISPLAY = {"Momentum": "Momentum", "Combined Carry": "Carry", "Combined CarryMom": "CarryMom", "Value": "Value"}
+CROSS_COMMODITY_COMBINE_METHODS = ("equal_weight", "risk_parity", "dynamic_risk_parity")
 
 
 def cross_commodity_dynamic(tc_bps: int = TC_BPS,
@@ -311,11 +383,16 @@ def cross_commodity_dynamic(tc_bps: int = TC_BPS,
     Section 9), generalized for a live UI: first equal-weight each selected
     style across the SELECTED asset classes (Momentum/Carry/CarryMom/Value
     -> one cross-commodity series each), then combine those style-level
-    series into one portfolio via `combine_method` ("equal_weight" or
-    "risk_parity"). NOT a single flat optimization over every underlying
-    leg. Dimil's own construction is the default (all 4 asset classes, all
-    4 styles, equal_weight) -- see cross_commodity_portfolio() below for the
-    exact-match validated form this generalizes from.
+    series into one portfolio via `combine_method` -- "equal_weight",
+    "risk_parity" (ERC, research/risk_parity.py), or "dynamic_risk_parity"
+    (Bogorad's Section 6.2 EWMA/shrinkage/vol-target recipe,
+    research/drp.py; added 2026-08-04, Phase 3 -- the direct analog of the
+    paper's own "DRP PORT" in Table 6, here risk-weighting the 4 STYLES
+    across all selected asset classes at once). NOT a single flat
+    optimization over every underlying leg. Dimil's own construction is the
+    default (all 4 asset classes, all 4 styles, equal_weight) -- see
+    cross_commodity_portfolio() below for the exact-match validated form
+    this generalizes from.
 
     Returns (gross_dict, net_dict), each keyed by style display name
     ("Momentum"/"Carry"/"CarryMom"/"Value" -- NOT "Combined Carry", matching
@@ -326,6 +403,9 @@ def cross_commodity_dynamic(tc_bps: int = TC_BPS,
         raise ValueError("cross_commodity_dynamic needs at least 2 asset classes")
     if not styles:
         raise ValueError("cross_commodity_dynamic needs at least 1 style")
+    if combine_method not in CROSS_COMMODITY_COMBINE_METHODS:
+        raise ValueError(f"combine_method must be one of {CROSS_COMMODITY_COMBINE_METHODS}, "
+                          f"got {combine_method!r}")
 
     per_asset = {ac: asset_class_four_row(ac, tc_bps, styles, per_product_fetcher)
                  for ac in asset_classes}
@@ -346,8 +426,9 @@ def cross_commodity_dynamic(tc_bps: int = TC_BPS,
     elif combine_method == "risk_parity":
         g_port, _ = rolling_erc_combine(gross_styles, tilt=0.0)
         n_port, _ = rolling_erc_combine(net_styles, tilt=0.0)
-    else:
-        raise ValueError(f"combine_method must be 'equal_weight' or 'risk_parity', got {combine_method!r}")
+    else:  # "dynamic_risk_parity"
+        g_port, _ = rolling_drp_combine(gross_styles)
+        n_port, _ = rolling_drp_combine(net_styles)
 
     return {**gross_styles, "Portfolio": g_port}, {**net_styles, "Portfolio": n_port}
 
@@ -368,22 +449,44 @@ def cross_commodity_portfolio(tc_bps: int = TC_BPS) -> dict[str, pd.Series]:
     return out
 
 
+CROSS_N_COMBINE_METHODS = ("equal_weight", "dynamic_risk_parity")
+
+
 def cross_n_portfolio(tc_bps: int = TC_BPS,
                        asset_classes: tuple[str, ...] = ("metals", "energy"),
-                       per_product_fetcher=per_product_four_row
+                       per_product_fetcher=per_product_four_row,
+                       combine_method: str = "equal_weight",
                        ) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
-    """Generalized Cross-Pair -> Cross-N: equal-weight combination of 1-4
-    asset classes' own Equal Weight portfolios (Methodology doc Section 9's
-    Cross-Pair construction, generalized from exactly-2 to 1-4). Returns
-    (gross_dict, net_dict) keyed by asset class label plus "Portfolio" for
-    the final N-way combination. With exactly 1 asset class, "Portfolio" is
-    identical to that one asset class's own EW portfolio (nothing to
-    combine) -- this is also each asset class's own individual result,
-    letting a user drop down to a single asset class and see its number on
-    its own, matching the same single-item convention already used for
-    styles in cross_commodity_dynamic() above."""
+    """Generalized Cross-Pair -> Cross-N: combination of 1-4 asset classes'
+    own Equal Weight portfolios (Methodology doc Section 9's Cross-Pair
+    construction, generalized from exactly-2 to 1-4). Returns (gross_dict,
+    net_dict) keyed by asset class label plus "Portfolio" for the final
+    N-way combination. With exactly 1 asset class, "Portfolio" is identical
+    to that one asset class's own EW portfolio (nothing to combine) --
+    this is also each asset class's own individual result, letting a user
+    drop down to a single asset class and see its number on its own,
+    matching the same single-item convention already used for styles in
+    cross_commodity_dynamic() above.
+
+    `combine_method` (2026-08-04, Phase 3): "equal_weight" (default,
+    UNCHANGED behavior) combines the N asset classes' own EW portfolios via
+    combine_cross_asset(). "dynamic_risk_parity" instead risk-weights them
+    via research/drp.py's rolling_drp_combine() -- the direct analog of the
+    paper's own "DRP PORT" in Table 6, here risk-weighting whole ASSET
+    CLASSES (Metals/Energy/Precious/NGL) against each other instead of the
+    paper's 5 strategy sleeves. Each asset class's OWN portfolio is still
+    built via asset_class_ew_portfolio()'s default equal_weight regardless
+    of this parameter -- this function only controls the top-level combine
+    across asset classes, not how each one's own 4 styles get combined
+    (that's asset_class_ew_portfolio's own combine_method, Phase 2, a
+    separate, independent decision a caller can make by building
+    gross_by_class/net_by_class itself instead of calling this function).
+    No "risk_parity" (ERC) option here -- not requested for this level;
+    cross_commodity_dynamic above has it if needed at the style level."""
     if not 1 <= len(asset_classes) <= 4:
         raise ValueError("cross_n_portfolio needs 1 to 4 asset classes")
+    if combine_method not in CROSS_N_COMBINE_METHODS:
+        raise ValueError(f"combine_method must be one of {CROSS_N_COMBINE_METHODS}, got {combine_method!r}")
     gross_by_class, net_by_class = {}, {}
     for ac in asset_classes:
         g4, n4 = asset_class_four_row(ac, tc_bps, per_product_fetcher=per_product_fetcher)
@@ -393,8 +496,12 @@ def cross_n_portfolio(tc_bps: int = TC_BPS,
     if len(asset_classes) == 1:
         only = next(iter(gross_by_class))
         return {**gross_by_class, "Portfolio": gross_by_class[only]}, {**net_by_class, "Portfolio": net_by_class[only]}
-    g_port = combine_cross_asset(list(gross_by_class.values()))
-    n_port = combine_cross_asset(list(net_by_class.values()))
+    if combine_method == "equal_weight":
+        g_port = combine_cross_asset(list(gross_by_class.values()))
+        n_port = combine_cross_asset(list(net_by_class.values()))
+    else:  # "dynamic_risk_parity"
+        g_port, _ = rolling_drp_combine(gross_by_class)
+        n_port, _ = rolling_drp_combine(net_by_class)
     return {**gross_by_class, "Portfolio": g_port}, {**net_by_class, "Portfolio": n_port}
 
 

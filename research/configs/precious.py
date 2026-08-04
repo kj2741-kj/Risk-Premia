@@ -103,7 +103,9 @@ CARRY_MOMENTUM_SHIFT_N = 1
 VALUE_CONTRACT = "F3"
 VALUE_LOOKBACK_DAYS = 1260
 VALUE_THRESHOLD = 0.10
-VALUE_SHIFT_N = 2
+VALUE_SHIFT_N = 1  # changed from 2, user's decision 2026-08-04: shift_n=1 (Lag-1) is now the
+# locked default for every strategy family, project-wide -- see research/configs/metals.py's
+# comment for the full rationale. Do not change back without the user explicitly asking.
 
 # StatArb: NOT used -- tested rigorously (full 10-pair grid, incl.
 # Gold-Silver and Platinum-Palladium), genuine null. See

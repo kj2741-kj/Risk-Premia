@@ -102,7 +102,12 @@ CARRY_MOMENTUM_SHIFT_N = 1
 VALUE_CONTRACT = "F3"
 VALUE_LOOKBACK_DAYS = 1260  # ~5yr trading days
 VALUE_THRESHOLD = 0.10
-VALUE_SHIFT_N = 2
+VALUE_SHIFT_N = 1  # changed from 2, user's decision 2026-08-04: shift_n=1 (Lag-1) is now the
+# locked default for every strategy family, project-wide -- matches Momentum/Carry/CarryMom,
+# which already used shift_n=1. Position[t] = Signal[t-2]: a signal from today's close first
+# earns PnL from tomorrow-to-day-after-tomorrow's price change (see common_engine.py's
+# exec_shift() docstring for the full mechanics). Do not change back without the user
+# explicitly asking -- this is a deliberate, confirmed decision, not a placeholder.
 
 # StatArb: NOT used for Metals -- tested rigorously (4 specifications: raw
 # levels full-sample, log-prices full-sample, raw-levels regime-split,

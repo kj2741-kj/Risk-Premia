@@ -895,7 +895,10 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_val_tc")
         tc_bps = tc_map[tc_label]
     with timing_col:
-        timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=2, key=f"{key_prefix}_val_timing")
+        # Default index=1 ("Lag-1 (Shift-1)"), changed from 2 -- user's decision 2026-08-04:
+        # shift_n=1 is now the locked default for every strategy family, project-wide. See
+        # research/configs/metals.py's VALUE_SHIFT_N comment for the full rationale.
+        timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_val_timing")
         shift_n = TIMING_SHIFT[timing]
         if shift_n == 0:
             st.caption("ℹ️ Same Day (Shift-0) enters at Position[t] = Signal[t−1], the earliest a position "

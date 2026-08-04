@@ -74,7 +74,10 @@ CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
 
 FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value"]
 FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value"}
-DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 2}
+# "Value": 1, changed from 2 -- user's decision 2026-08-04: shift_n=1 is now the locked
+# default for every strategy family, project-wide. See research/configs/metals.py's
+# VALUE_SHIFT_N comment for the full rationale.
+DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 1}
 
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
            "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]

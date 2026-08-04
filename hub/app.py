@@ -41,6 +41,7 @@ from ghr_spline_core import run_spline_analysis, DEFAULT_X_RANGE, DEFAULT_Y_RANG
 import ghr_copper_inventory_spline as ghr_copper
 import ghr_wti_inventory_spline as ghr_wti
 import cross_asset_engine as cae
+import benchmarks
 
 st.set_page_config(
     page_title="Risk Premia - Hub",
@@ -108,6 +109,16 @@ def _wti_inventory():
 @st.cache_data(ttl=3600, show_spinner="Loading curve data and computing signals...")
 def _cached_per_product_four_row(asset_class: str, tc_bps: int):
     return cae.per_product_four_row(asset_class, tc_bps)
+
+
+@st.cache_data(ttl=3600, show_spinner="Computing Cross-Commodity Portfolio (Momentum/Carry/CarryMom/Value/EW/Risk Parity)...")
+def _cached_cross_commodity_portfolio(tc_bps: int):
+    return cae.cross_commodity_portfolio(tc_bps)
+
+
+@st.cache_data(ttl=3600, show_spinner="Loading traditional-asset benchmark data...")
+def _cached_benchmark_returns():
+    return benchmarks.load_benchmark_returns()
 
 
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
@@ -503,6 +514,77 @@ with tab_crossasset:
         cn_gross, cn_net = cae.cross_n_portfolio(
             tc_bps, cn_asset_keys, per_product_fetcher=_cached_per_product_four_row)
         _render_equity_and_metrics(cn_gross, cn_net, key_prefix="cn")
+
+    st.divider()
+
+    section_header("Correlation vs Traditional Assets")
+    st.caption(
+        "How the Cross-Commodity Portfolio's 6 strategy rows (Momentum/Carry/CarryMom/Value/"
+        "EW PORT/Risk Parity) correlate with Equity (S&P 500), Fixed Income (US Aggregate Bond), "
+        "a broad passive Commodity Index (DBC), Gold as a distinct safe-haven, and a traditional "
+        "60/40 stock-bond portfolio -- the standard \"does this add value beyond simple beta, "
+        "and does it diversify a traditional portfolio\" questions for any systematic commodity "
+        "strategy. Data: research/benchmarks.py (yfinance daily prices, cached locally)."
+    )
+
+    corr_strategy_net = _cached_cross_commodity_portfolio(tc_bps)
+    corr_bench_returns = _cached_benchmark_returns()
+
+    corr_all_years = []
+    for _s in list(corr_strategy_net.values()) + list(corr_bench_returns.values()):
+        if not _s.empty:
+            corr_all_years.append(int(_s.index.min().year))
+            corr_all_years.append(int(_s.index.max().year))
+    corr_min_year, corr_max_year = min(corr_all_years), max(corr_all_years)
+    corr_default_start = max(corr_min_year, 2011)
+
+    corr_yr_start, corr_yr_end = st.slider(
+        "Year range", min_value=corr_min_year, max_value=corr_max_year,
+        value=(corr_default_start, corr_max_year), step=1, key="corr_years",
+        help="Restricts the correlation calculation to this sub-period -- a static "
+             "recomputation over whichever years you pick, not a rolling window. Compare "
+             "different historical regimes (e.g. 2015-2020 vs 2020-2026) to see whether a "
+             "correlation is stable or regime-dependent.",
+    )
+
+    corr_strat_labels = list(corr_strategy_net.keys())
+    corr_bench_labels = list(corr_bench_returns.keys())
+    corr_z, corr_text = [], []
+    for strat_name in corr_strat_labels:
+        s = corr_strategy_net[strat_name]
+        s = s[(s.index.year >= corr_yr_start) & (s.index.year <= corr_yr_end)].dropna()
+        z_row, text_row = [], []
+        for bench_name in corr_bench_labels:
+            b = corr_bench_returns[bench_name]
+            b = b[(b.index.year >= corr_yr_start) & (b.index.year <= corr_yr_end)]
+            idx = s.index.intersection(b.index)
+            if len(idx) > 20:
+                c = float(s.loc[idx].corr(b.loc[idx]))
+                z_row.append(c)
+                text_row.append(f"{c:+.2f}")
+            else:
+                z_row.append(np.nan)
+                text_row.append("N/A")
+        corr_z.append(z_row)
+        corr_text.append(text_row)
+
+    # Diverging blue/red pair, neutral gray midpoint (dataviz skill's reference palette) --
+    # matches the blue-positive/red-negative convention already used in this project's
+    # Research_Dashboard_CombinedCarry.html Correlations tab.
+    corr_fig = go.Figure(data=go.Heatmap(
+        z=corr_z, x=corr_bench_labels, y=corr_strat_labels,
+        colorscale=[[0, "#e34948"], [0.5, "#f0efec"], [1, "#2a78d6"]],
+        zmin=-1, zmax=1, zmid=0,
+        text=corr_text, texttemplate="%{text}", textfont=dict(size=12, color="#111111"),
+        colorbar=dict(title="Correlation"),
+        hovertemplate="%{y} vs %{x}: %{z:+.3f}<extra></extra>",
+    ))
+    corr_layout = dict(CHART_LAYOUT)
+    corr_layout.pop("yaxis", None)
+    corr_fig.update_layout(**corr_layout,
+                            title=f"Correlation Matrix, {corr_yr_start} to {corr_yr_end}",
+                            height=380)
+    st.plotly_chart(corr_fig, use_container_width=True)
 
     st.divider()
     st.caption(

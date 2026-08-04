@@ -399,19 +399,27 @@ def cross_n_portfolio(calendar_method: str, tc_bps: int = TC_BPS,
                        asset_classes: tuple[str, ...] = ("metals", "energy"),
                        per_product_fetcher=per_product_four_row
                        ) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
-    """Generalized Cross-Pair -> Cross-N: equal-weight combination of 2-4
+    """Generalized Cross-Pair -> Cross-N: equal-weight combination of 1-4
     asset classes' own Equal Weight portfolios (Methodology doc Section 9's
-    Cross-Pair construction, generalized from exactly-2 to 2-4). Returns
+    Cross-Pair construction, generalized from exactly-2 to 1-4). Returns
     (gross_dict, net_dict) keyed by asset class label plus "Portfolio" for
-    the final N-way combination."""
-    if not 2 <= len(asset_classes) <= 4:
-        raise ValueError("cross_n_portfolio needs 2 to 4 asset classes")
+    the final N-way combination. With exactly 1 asset class, "Portfolio" is
+    identical to that one asset class's own EW portfolio (nothing to
+    combine) -- this is also each asset class's own individual result,
+    letting a user drop down to a single asset class and see its number on
+    its own, matching the same single-item convention already used for
+    styles in cross_commodity_dynamic() above."""
+    if not 1 <= len(asset_classes) <= 4:
+        raise ValueError("cross_n_portfolio needs 1 to 4 asset classes")
     gross_by_class, net_by_class = {}, {}
     for ac in asset_classes:
         g4, n4 = asset_class_four_row(ac, calendar_method, tc_bps, per_product_fetcher=per_product_fetcher)
         g_ew, n_ew = asset_class_ew_portfolio(g4, n4)
         gross_by_class[ASSET_CLASS_LABELS[ac]] = g_ew
         net_by_class[ASSET_CLASS_LABELS[ac]] = n_ew
+    if len(asset_classes) == 1:
+        only = next(iter(gross_by_class))
+        return {**gross_by_class, "Portfolio": gross_by_class[only]}, {**net_by_class, "Portfolio": net_by_class[only]}
     g_port = combine_cross_asset(list(gross_by_class.values()), calendar_method)
     n_port = combine_cross_asset(list(net_by_class.values()), calendar_method)
     return {**gross_by_class, "Portfolio": g_port}, {**net_by_class, "Portfolio": n_port}

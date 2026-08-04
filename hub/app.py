@@ -494,15 +494,17 @@ with tab_crossasset:
     st.divider()
 
     section_header("Cross-Asset-Class Portfolio")
-    st.caption("Equal-weight combination of 2-4 asset classes' own Equal Weight portfolios "
-               "(generalizes Dimil's 4 fixed Cross-Pairs to any 2-4 you pick).")
+    st.caption("Equal-weight combination of 1-4 asset classes' own Equal Weight portfolios "
+               "(generalizes Dimil's 4 fixed Cross-Pairs to any 1-4 you pick). Pick just one "
+               "to see that asset class's own EW Portfolio number on its own, matching its "
+               "individual dashboard's Portfolio tab.")
 
     cn_assets_labels = st.multiselect(
-        "Asset classes (choose 2-4)", list(cae.ASSET_CLASS_LABELS.values()),
+        "Asset classes (choose 1-4)", list(cae.ASSET_CLASS_LABELS.values()),
         default=["Metals", "Energy"], key="cn_assets")
 
-    if not 2 <= len(cn_assets_labels) <= 4:
-        st.warning("Pick between 2 and 4 asset classes.")
+    if not 1 <= len(cn_assets_labels) <= 4:
+        st.warning("Pick between 1 and 4 asset classes.")
     else:
         cn_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cn_assets_labels)
         cn_gross, cn_net = cae.cross_n_portfolio(

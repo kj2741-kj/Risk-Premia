@@ -345,7 +345,7 @@
   <div class="tab-panel" id="panel-crosspair">
     <div class="card">
       <h2><span class="badge badge-built">Built</span> Cross-Pair Portfolios</h2>
-      <p class="note">Each row is a combination of two asset classes' own portfolios -- Equal Weight (a fixed 50/50 split) or Dynamic Risk Parity (inverse-EWMA-vol weighted, rescaled to a volatility target -- see the strategy definitions below). Four of the six possible pairs are shown -- Metals-Energy, Metals-NGL, Precious-Energy, Precious-NGL. Metals-Precious and Energy-NGL are excluded as the two most correlated pairs (Correlations tab), making them the weakest diversification candidates.</p>
+      <p class="note">Each row is a combination of two asset classes' own portfolios -- Equal Weight (a fixed 50/50 split) or Dynamic Risk Parity (inverse-EWMA-vol weighted, rescaled to a volatility target -- see the strategy definitions below). All six possible pairs are shown. Metals-Precious and Energy-NGL are the two most correlated pairs (Correlations tab) -- shown here rather than assumed to be the weakest diversification candidates, since correlation alone does not predict combined performance (see the note below the table).</p>
       <p class="note">Combined on the intersection of trading dates across the two asset classes in each pair; a date is included only if both asset classes traded, and a dropped date's move rolls into the next surviving date for both series independently.</p>
 
       <div class="window-row">
@@ -360,7 +360,7 @@
 
       <h3>Regime-conditional IR, by pair</h3>
       <div class="table-scroll"><table id="crosspair-table"></table></div>
-      <p class="note">Reporting starts 2011-01-01, same window as every other tab. Under Equal Weight, <strong>Metals-NGL is the strongest pair full-sample (IR 0.864)</strong> -- pairing Metals' weak-to-flat standalone performance with NGL's strong, consistent performance benefits from NGL carrying the combination while Metals' low correlation to it smooths the ride. Precious-Energy is the weakest pair (IR 0.379), consistent with Precious Metals being the weakest individual sleeve in the whole dashboard regardless of partner.</p>
+      <p class="note">Reporting starts 2011-01-01, same window as every other tab. Under Equal Weight, <strong>Energy-NGL is the strongest pair full-sample (IR 1.01)</strong>, ahead of Metals-NGL (0.86) and Precious-NGL (0.79) -- despite being one of the two most correlated pairs in the Correlations tab, both legs are individually strong sleeves, so the high correlation doesn't cost as much as it does elsewhere. <strong>Metals-Precious is the weakest pair by a wide margin (IR -0.12, the only negative full-sample result on this tab)</strong> -- the other highly correlated pair, but here high correlation compounds with both legs being comparatively weak standalone sleeves rather than offsetting it. High correlation between two asset classes is therefore not a reliable predictor of a bad combination on its own -- whether the combination works depends on the strength of each leg individually as much as how correlated they are.</p>
     </div>
   </div>
 
@@ -730,36 +730,48 @@ const CROSSPAIR_WINDOWS = {
       {name:"Metals-NGL", ret:6.67, vol:7.72, mdd:-17.45, ir:0.864},
       {name:"Precious-Energy", ret:2.99, vol:7.89, mdd:-26.92, ir:0.379},
       {name:"Precious-NGL", ret:6.4, vol:8.13, mdd:-24.58, ir:0.788},
+      {name:"Metals-Precious", ret:-0.72, vol:6.14, mdd:-35.02, ir:-0.117},
+      {name:"Energy-NGL", ret:10.51, vol:10.38, mdd:-19.89, ir:1.013},
     ]),
     r1: ewBold([
       {name:"Metals-Energy", ret:2.89, vol:5.51, mdd:-8.65, ir:0.525},
       {name:"Metals-NGL", ret:5.08, vol:6.3, mdd:-8.02, ir:0.806},
       {name:"Precious-Energy", ret:2.86, vol:6.68, mdd:-9.21, ir:0.428},
       {name:"Precious-NGL", ret:5.0, vol:7.15, mdd:-8.23, ir:0.699},
+      {name:"Metals-Precious", ret:3.05, vol:7.22, mdd:-9.87, ir:0.423},
+      {name:"Energy-NGL", ret:4.84, vol:6.97, mdd:-7.76, ir:0.695},
     ]),
     r2: ewBold([
       {name:"Metals-Energy", ret:-0.05, vol:6.14, mdd:-10.72, ir:-0.008},
       {name:"Metals-NGL", ret:9.36, vol:8.42, mdd:-10.53, ir:1.112},
       {name:"Precious-Energy", ret:3.17, vol:5.81, mdd:-7.39, ir:0.545},
       {name:"Precious-NGL", ret:12.71, vol:8.03, mdd:-8.68, ir:1.583},
+      {name:"Metals-Precious", ret:-1.55, vol:4.5, mdd:-11.8, ir:-0.344},
+      {name:"Energy-NGL", ret:14.4, vol:10.3, mdd:-11.45, ir:1.398},
     ]),
     r3: ewBold([
       {name:"Metals-Energy", ret:13.74, vol:10.26, mdd:-5.95, ir:1.339},
       {name:"Metals-NGL", ret:12.77, vol:9.43, mdd:-11.47, ir:1.355},
       {name:"Precious-Energy", ret:8.54, vol:10.4, mdd:-10.05, ir:0.821},
       {name:"Precious-NGL", ret:7.61, vol:9.1, mdd:-9.9, ir:0.836},
+      {name:"Metals-Precious", ret:-2.89, vol:4.82, mdd:-8.37, ir:-0.6},
+      {name:"Energy-NGL", ret:25.7, vol:14.17, mdd:-10.75, ir:1.813},
     ]),
     r4: ewBold([
       {name:"Metals-Energy", ret:1.92, vol:8.27, mdd:-18.12, ir:0.233},
       {name:"Metals-NGL", ret:3.46, vol:7.64, mdd:-17.45, ir:0.453},
       {name:"Precious-Energy", ret:0.58, vol:9.32, mdd:-26.92, ir:0.062},
       {name:"Precious-NGL", ret:2.06, vol:8.75, mdd:-24.58, ir:0.235},
+      {name:"Metals-Precious", ret:-3.11, vol:6.62, mdd:-29.14, ir:-0.469},
+      {name:"Energy-NGL", ret:7.26, vol:11.54, mdd:-19.89, ir:0.629},
     ]),
     y26: ewBold([
       {name:"Metals-Energy", ret:38.53, vol:12.63, mdd:-3.05, ir:3.05},
       {name:"Metals-NGL", ret:17.27, vol:11.43, mdd:-4.44, ir:1.511},
       {name:"Precious-Energy", ret:65.23, vol:15.49, mdd:-4.21, ir:4.211},
       {name:"Precious-NGL", ret:39.87, vol:14.79, mdd:-6.01, ir:2.695},
+      {name:"Metals-Precious", ret:25.94, vol:9.62, mdd:-3.63, ir:2.697},
+      {name:"Energy-NGL", ret:54.03, vol:19.26, mdd:-5.81, ir:2.806},
     ]),
   },
   drp: {
@@ -768,36 +780,48 @@ const CROSSPAIR_WINDOWS = {
       {name:"Metals-NGL", ret:6.84, vol:8.1, mdd:-25.61, ir:0.844},
       {name:"Precious-Energy", ret:3.12, vol:8.78, mdd:-33.28, ir:0.355},
       {name:"Precious-NGL", ret:5.31, vol:8.7, mdd:-36.27, ir:0.611},
+      {name:"Metals-Precious", ret:-0.17, vol:7.04, mdd:-36.27, ir:-0.024},
+      {name:"Energy-NGL", ret:12.72, vol:11.81, mdd:-27.94, ir:1.077},
     ]),
     r1: ewBold([
       {name:"Metals-Energy", ret:8.03, vol:8.04, mdd:-10.34, ir:0.998},
       {name:"Metals-NGL", ret:9.62, vol:7.75, mdd:-6.98, ir:1.241},
       {name:"Precious-Energy", ret:5.41, vol:8.61, mdd:-13.87, ir:0.629},
       {name:"Precious-NGL", ret:7.35, vol:8.55, mdd:-11.8, ir:0.86},
+      {name:"Metals-Precious", ret:5.2, vol:7.02, mdd:-10.14, ir:0.741},
+      {name:"Energy-NGL", ret:11.41, vol:11.51, mdd:-12.06, ir:0.991},
     ]),
     r2: ewBold([
       {name:"Metals-Energy", ret:-0.5, vol:8.06, mdd:-17.2, ir:-0.062},
       {name:"Metals-NGL", ret:7.85, vol:8.24, mdd:-12.22, ir:0.953},
       {name:"Precious-Energy", ret:5.43, vol:8.04, mdd:-9.4, ir:0.675},
       {name:"Precious-NGL", ret:13.51, vol:8.53, mdd:-9.12, ir:1.584},
+      {name:"Metals-Precious", ret:-2.1, vol:6.97, mdd:-17.3, ir:-0.301},
+      {name:"Energy-NGL", ret:18.7, vol:11.35, mdd:-9.42, ir:1.647},
     ]),
     r3: ewBold([
       {name:"Metals-Energy", ret:15.83, vol:9.83, mdd:-8.17, ir:1.61},
       {name:"Metals-NGL", ret:11.81, vol:8.36, mdd:-7.61, ir:1.412},
       {name:"Precious-Energy", ret:6.06, vol:9.83, mdd:-7.81, ir:0.617},
       {name:"Precious-NGL", ret:4.07, vol:8.34, mdd:-9.02, ir:0.488},
+      {name:"Metals-Precious", ret:-1.59, vol:7.37, mdd:-11.25, ir:-0.216},
+      {name:"Energy-NGL", ret:24.72, vol:12.43, mdd:-8.13, ir:1.988},
     ]),
     r4: ewBold([
       {name:"Metals-Energy", ret:1.63, vol:8.49, mdd:-19.47, ir:0.192},
       {name:"Metals-NGL", ret:0.86, vol:8.24, mdd:-25.61, ir:0.105},
       {name:"Precious-Energy", ret:-2.61, vol:9.11, mdd:-33.28, ir:-0.286},
       {name:"Precious-NGL", ret:-3.06, vol:9.16, mdd:-36.27, ir:-0.334},
+      {name:"Metals-Precious", ret:-3.57, vol:6.97, mdd:-29.6, ir:-0.513},
+      {name:"Energy-NGL", ret:4.22, vol:12.25, mdd:-27.94, ir:0.345},
     ]),
     y26: ewBold([
       {name:"Metals-Energy", ret:25.59, vol:11.52, mdd:-3.25, ir:2.222},
       {name:"Metals-NGL", ret:13.86, vol:11.85, mdd:-5.55, ir:1.17},
       {name:"Precious-Energy", ret:50.82, vol:13.02, mdd:-3.8, ir:3.904},
       {name:"Precious-NGL", ret:30.38, vol:13.95, mdd:-5.79, ir:2.179},
+      {name:"Metals-Precious", ret:18.24, vol:8.61, mdd:-3.7, ir:2.119},
+      {name:"Energy-NGL", ret:39.9, vol:17.87, mdd:-5.0, ir:2.233},
     ]),
   },
 };

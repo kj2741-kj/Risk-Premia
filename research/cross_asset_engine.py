@@ -112,12 +112,15 @@ DASHBOARD_PRODUCTS = {
     "ngl": ["Ethane", "Propane", "Butane", "Isobutane"],
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],
 }
-# Metals-Precious and Energy-NGL deliberately excluded (Dimil's dashboard note: the two most
-# correlated pairs, weakest diversification candidates).
-CROSS_PAIRS = [("metals", "energy"), ("metals", "ngl"), ("precious", "energy"), ("precious", "ngl")]
+# All 6 possible pairs across the 4 asset classes. Metals-Precious and Energy-NGL are the two
+# most correlated pairs (Correlations tab) -- included here too (2026-08-05) so that's visible
+# directly in the Cross-Pair Portfolios numbers rather than assumed from the correlation tab alone.
+CROSS_PAIRS = [("metals", "energy"), ("metals", "ngl"), ("precious", "energy"), ("precious", "ngl"),
+               ("metals", "precious"), ("energy", "ngl")]
 CROSS_PAIR_LABELS = {
     ("metals", "energy"): "Metals-Energy", ("metals", "ngl"): "Metals-NGL",
     ("precious", "energy"): "Precious-Energy", ("precious", "ngl"): "Precious-NGL",
+    ("metals", "precious"): "Metals-Precious", ("energy", "ngl"): "Energy-NGL",
 }
 TC_BPS = 5
 

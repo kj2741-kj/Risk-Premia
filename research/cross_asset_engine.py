@@ -98,16 +98,19 @@ from regimes import REGIMES, REPORT_START
 ASSET_CLASSES = ["metals", "energy", "precious", "ngl"]
 ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "precious": "Precious", "ngl": "NGL"}
 # Dashboard-visible product lists (CLAUDE.md's documented exclusion: research configs' PRODUCTS
-# is NOT what the live dashboard, or Dimil's cross-asset numbers, are built on -- Energy excludes
-# Singapore Gasoil + Fuel Oil, NGL excludes Ethylene + Propylene; Metals/Precious unfiltered).
-# Confirmed empirically: cfg.PRODUCTS (7-product) Energy Momentum full-sample IR=0.586 vs this
-# filtered (5-product) basis IR=0.430, and Dimil's real pushed number is IR=0.436 -- close to the
-# filtered basis, nowhere near the unfiltered one. Using cfg.PRODUCTS here would silently pull in
-# Singapore Gasoil/Fuel Oil and Ethylene/Propylene, which the cross-asset methodology (following
-# Dimil's own convention) should not.
+# is NOT what the live dashboard, or the cross-asset numbers, are built on -- Energy excludes
+# Singapore Gasoil + Fuel Oil, NGL excludes Ethylene + Propylene, Precious excludes Copper
+# (COMEX); Metals unfiltered). Confirmed empirically: cfg.PRODUCTS (7-product) Energy Momentum
+# full-sample IR=0.586 vs this filtered (5-product) basis IR=0.430, matching the real pushed
+# number of IR=0.436 -- close to the filtered basis, nowhere near the unfiltered one. Using
+# cfg.PRODUCTS here would silently pull in Singapore Gasoil/Fuel Oil, Ethylene/Propylene, and
+# Copper (COMEX), which the cross-asset methodology should not.
+# Copper (COMEX) removed from Precious 2026-08-05: miscategorized originally -- Copper is an
+# industrial metal already covered by the Metals asset class (LME), not a precious metal.
 DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
     "ngl": ["Ethane", "Propane", "Butane", "Isobutane"],
+    "precious": ["Gold", "Silver", "Platinum", "Palladium"],
 }
 # Metals-Precious and Energy-NGL deliberately excluded (Dimil's dashboard note: the two most
 # correlated pairs, weakest diversification candidates).

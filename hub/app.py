@@ -59,7 +59,7 @@ DASHBOARD_LINKS = {
     "Energy":         {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
                         "desc": "WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil. Momentum, Carry, Value."},
     "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
-                        "desc": "Gold, Silver, Copper (CME), Platinum, Palladium. Momentum, Carry, Value."},
+                        "desc": "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value."},
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
                         "desc": "Ethane, Propane, Butane, Isobutane, Ethylene, Propylene. Momentum, Carry, Value."},
 }

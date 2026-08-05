@@ -151,26 +151,31 @@ def _ca_window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: 
     def _slice(s):
         return s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
 
-    def _sharpe(s):
-        return float(s.mean() / s.std(ddof=1) * np.sqrt(252)) if len(s) > 20 and s.std(ddof=1) > 0 else np.nan
+    def _true_ann_vol(s):
+        """True compounded annual return and true annualized volatility of
+        SIMPLE returns, not log-return figures -- see research/
+        run_regime_table.py::_metrics for the full derivation of both."""
+        if len(s) > 20 and s.std(ddof=1) > 0:
+            log_ann = float(s.mean() * 252)
+            ann = float((np.exp(log_ann) - 1) * 100)
+            vol = float(np.expm1(s).std(ddof=1) * np.sqrt(252) * 100)
+            return ann, vol
+        return np.nan, np.nan
+
+    def _sharpe(ann_pct, vol_pct):
+        """IR from the SAME true-% ann/vol (same units) -- see
+        research/run_regime_table.py::_metrics for the full rationale."""
+        return float(ann_pct / vol_pct) if pd.notna(vol_pct) and vol_pct > 0 else np.nan
 
     g, n = _slice(gross), _slice(net)
-    if len(n) > 20 and n.std(ddof=1) > 0:
-        # True compounded annual return, not log return -- see
-        # research/run_regime_table.py::_metrics for the full derivation.
-        # _sharpe() above is computed independently from the raw series, not
-        # from this value, so it stays a coherent log-return Sharpe untouched.
-        log_ann = float(n.mean() * 252)
-        ann = float((np.exp(log_ann) - 1) * 100)
-        vol = float(n.std(ddof=1) * np.sqrt(252) * 100)
-    else:
-        ann = vol = np.nan
+    gross_ann, gross_vol = _true_ann_vol(g)
+    ann, vol = _true_ann_vol(n)
     # True value-based drawdown, not log-space peak-to-trough -- see
     # research/run_regime_table.py::_metrics for the full derivation.
     cum = n.cumsum()
     value = np.exp(cum)
     mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
-    return dict(gross=_sharpe(g), net=_sharpe(n), ann=ann, vol=vol, mdd=mdd)
+    return dict(gross=_sharpe(gross_ann, gross_vol), net=_sharpe(ann, vol), ann=ann, vol=vol, mdd=mdd)
 
 
 def _render_equity_and_metrics(gross_dict: dict, net_dict: dict, key_prefix: str,
@@ -232,10 +237,14 @@ def _render_equity_and_metrics(gross_dict: dict, net_dict: dict, key_prefix: str
                                   line=dict(color=PALETTE[i % len(PALETTE)], width=width, dash=dash)))
         if len(window) > 20 and window.std(ddof=1) > 0:
             log_ret = float(window.mean() * 252)
-            vol_raw = float(window.std(ddof=1) * np.sqrt(252))
-            ir = log_ret / vol_raw if vol_raw > 0 else np.nan
             ret = (np.exp(log_ret) - 1) * 100
-            vol = vol_raw * 100
+            # True annualized volatility of simple returns, not the log-return
+            # distribution's spread -- see research/run_regime_table.py::
+            # _metrics for the full derivation.
+            vol = float(np.expm1(window).std(ddof=1) * np.sqrt(252) * 100)
+            # IR from the SAME true-% ret/vol above (same units) -- see
+            # research/run_regime_table.py::_metrics for the full rationale.
+            ir = ret / vol if vol > 0 else np.nan
         else:
             ret = vol = ir = np.nan
         rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})

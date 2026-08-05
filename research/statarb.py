@@ -145,12 +145,18 @@ def metrics(net: pd.Series) -> dict:
     if len(a) < 20 or a.std(ddof=1) == 0:
         return dict(ret=np.nan, vol=np.nan, mdd=np.nan, ir=np.nan)
     log_ret = float(a.mean() * 252)
-    vol = float(a.std(ddof=1) * np.sqrt(252))
-    ir = (log_ret / vol) if vol > 0 else np.nan
+    log_vol = float(a.std(ddof=1) * np.sqrt(252))
     # True compounded annual return, not log return -- see
-    # research/run_regime_table.py::_metrics for the full derivation. IR above
-    # stays computed from log_ret/vol (untouched, still a coherent Sharpe).
+    # research/run_regime_table.py::_metrics for the full derivation.
     ret = (np.exp(log_ret) - 1) * 100
+    # True annualized volatility of the underlying SIMPLE returns, not the
+    # log-return distribution's spread -- see research/run_regime_table.py::
+    # _metrics for the full derivation (empirical, no distributional
+    # assumption).
+    vol = float(np.expm1(a).std(ddof=1) * np.sqrt(252)) * 100
+    # IR computed from the SAME true-% ret/vol above (same units) -- see
+    # research/run_regime_table.py::_metrics for the full rationale.
+    ir = (ret / vol) if vol > 0 else np.nan
     # Max drawdown WITHIN this window (cumulative log-return reset to 0 at the
     # window's own start) -- same per-window convention as run_regime_table.py.
     # True value-based drawdown, not log-space peak-to-trough -- see
@@ -158,7 +164,7 @@ def metrics(net: pd.Series) -> dict:
     cum = a.cumsum()
     value = np.exp(cum)
     mdd = float((value / value.cummax() - 1).min()) * 100
-    return dict(ret=ret, vol=vol * 100, mdd=mdd, ir=ir)
+    return dict(ret=ret, vol=vol, mdd=mdd, ir=ir)
 
 
 def _regime_row(name: str, net: pd.Series) -> dict:

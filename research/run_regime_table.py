@@ -72,16 +72,35 @@ def _metrics(series: pd.Series) -> dict:
     if len(s) < 20 or s.std(ddof=1) == 0:
         return dict(ret=np.nan, vol=np.nan, mdd=np.nan, ir=np.nan)
     log_ret = float(s.mean() * 252)
-    vol = float(s.std(ddof=1) * np.sqrt(252))
-    ir = float(log_ret / vol) if vol > 0 else np.nan
+    log_vol = float(s.std(ddof=1) * np.sqrt(252))
     # TRUE compounded annual return (fixed 2026-08-04, was log_ret*100 before --
     # same log-vs-value gap as MDD: log_ret is the continuously-compounded
     # growth rate, not literally "% you make in a year". Converted the same
-    # way MDD was: true_ret = e^log_ret - 1. IR stays computed from log_ret/
-    # vol above (untouched) -- Sharpe/IR only remains coherent if return and
-    # vol stay in the same (log) units, so this conversion is display-only,
-    # not fed back into IR.
+    # way MDD was: true_ret = e^log_ret - 1.
     ret = (np.exp(log_ret) - 1) * 100
+    # TRUE annualized volatility (fixed 2026-08-04, same family of fix):
+    # log_vol describes the spread of the LOG-return distribution, not the
+    # volatility of TRUE (simple) returns -- unlike ret/mdd, there's no exact
+    # exp()-based identity here (volatility is a distribution's spread, not a
+    # level), and a theoretical log-normal correction would require assuming
+    # log returns are normally distributed, an assumption this project
+    # doesn't otherwise make (these are fat-tailed commodity series). Instead,
+    # computed directly and empirically from the SAME realized data: convert
+    # each day's REALIZED log return to its REALIZED simple return
+    # (exp(r)-1, exact, no distributional assumption), then take the std of
+    # those and annualize by sqrt(252) -- the standard market convention,
+    # applied to true returns instead of log returns.
+    vol = float(np.expm1(s).std(ddof=1) * np.sqrt(252)) * 100
+    # IR (fixed 2026-08-04, user's explicit instruction): computed from the
+    # SAME true-% ret/vol above, not log_ret/log_vol -- same units in
+    # numerator and denominator, so IR = ret/vol holds exactly against the
+    # two displayed numbers (previously IR was kept on log_ret/log_vol
+    # specifically to preserve the industry-standard log-return Sharpe
+    # convention, which is defensible on its own, but it meant the displayed
+    # ret and vol no longer divided to give the displayed IR once both were
+    # converted to true % -- a real, valid consistency complaint since a
+    # reader can and did check that division by eye).
+    ir = float(ret / vol) if vol > 0 else np.nan
     # Max drawdown WITHIN this window: cumulative log-return reset to 0 at the
     # window's own start, same convention as ret/vol being independently
     # annualized per window rather than sliced off one continuous full-sample
@@ -99,7 +118,7 @@ def _metrics(series: pd.Series) -> dict:
     cum = s.cumsum()
     value = np.exp(cum)
     mdd = float((value / value.cummax() - 1).min()) * 100
-    return dict(ret=ret, vol=vol * 100, mdd=mdd, ir=ir)
+    return dict(ret=ret, vol=vol, mdd=mdd, ir=ir)
 
 
 def build_strategy_net_series(cfg) -> tuple[dict[str, pd.Series], pd.Timestamp, pd.Timestamp]:

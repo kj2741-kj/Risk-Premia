@@ -907,11 +907,27 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         instance_gross, instance_net = dict(raw_gross), dict(raw_net)
 
     if instance_net:
-        agg_label = f"{combine_method} Portfolio (all reference strategies)"
+        # Stable key, deliberately NOT combine_method-dependent (was
+        # f"{combine_method} Portfolio (all reference strategies)" until
+        # 2026-09-23): that made switching the "Combine strategies via"
+        # dropdown mint a brand-new dict key every time, so the sticky
+        # `applied` selection state below (which only updates on "Refresh
+        # Results") silently fell back to metric_labels[0] ("Momentum") for
+        # the metric cards and dropped the aggregate row out of `shown`
+        # entirely -- the dropdown recomputed DRP/ERC correctly under the
+        # hood, but the chart and cards kept showing whatever unaffected
+        # individual strategy happened to still match the stale sticky
+        # state, silently reverting instead of erroring. Keeping this key
+        # fixed lets `applied["metric_strategy"]`/`applied["shown"]` keep
+        # pointing at the SAME row across a combine_method switch, so the
+        # existing selection just updates in place.
+        agg_label = "Portfolio (all reference strategies)"
         agg_gross, agg_net = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
                                                tilt=return_tilt)
         instance_gross[agg_label] = agg_gross
         instance_net[agg_label] = agg_net
+        st.caption(f"\"{agg_label}\" below is currently combined via **{combine_method}** "
+                   f"(change it with the \"Combine strategies via\" dropdown above).")
 
     for p in portfolios:
         instance_gross[p["label"]] = p["gross"]

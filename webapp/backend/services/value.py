@@ -47,7 +47,7 @@ def _combo_label(c: dict) -> str:
 def get_value(
     asset_class: str, product: str, *,
     roll_method: str = "ltd", roll_n: int = 5,
-    tc_bps: int = 5, shift_n: int = 2,
+    tc_bps: int = 5, shift_n: int = 1,
     combos: list[dict] | None = None,
     skip_front_contract: bool = False,
     metrics_year_start: int | None = None, metrics_year_end: int | None = None,
@@ -163,7 +163,7 @@ def get_value(
 def get_value_heatmap(
     asset_class: str, product: str, *,
     roll_method: str = "ltd", roll_n: int = 5,
-    tc_bps: int = 5, shift_n: int = 2,
+    tc_bps: int = 5, shift_n: int = 1,
     skip_front_contract: bool = False,
     threshold: float = 0.10,
     year_start: int | None = None, year_end: int | None = None,

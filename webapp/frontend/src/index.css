@@ -185,3 +185,50 @@ h1 {
 
 .caption { color: var(--text-muted); font-size: 0.85rem; }
 .error { color: var(--red); }
+
+.pill-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.year-slider { min-width: 260px; flex: 1 1 260px; padding-bottom: 6px; }
+.year-slider-label {
+  font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase;
+  letter-spacing: 0.05em; margin-bottom: 8px;
+}
+.year-slider-track { position: relative; height: 22px; }
+.year-slider-track::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 4px;
+  background: var(--panel-border); border-radius: 2px;
+}
+.year-slider-fill { position: absolute; top: 9px; height: 4px; background: var(--accent); border-radius: 2px; }
+.year-slider-track input[type="range"] {
+  position: absolute; left: 0; width: 100%; top: 0; margin: 0; height: 22px;
+  background: none; pointer-events: none; -webkit-appearance: none; appearance: none;
+}
+.year-slider-track input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; pointer-events: auto;
+  width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+}
+.year-slider-track input[type="range"]::-moz-range-thumb {
+  pointer-events: auto; width: 12px; height: 12px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--bg); cursor: pointer;
+}
+.year-slider-track input[type="range"]::-webkit-slider-runnable-track { background: none; }
+.year-slider-track input[type="range"]::-moz-range-track { background: none; }
+.year-slider-values { position: relative; height: 18px; font-family: "IBM Plex Mono", monospace; font-size: 0.8rem; color: var(--accent); }
+.year-slider-values span { position: absolute; transform: translateX(-50%); }
+
+.stat-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.stat-table th { text-align: left; color: var(--text-muted); font-size: 0.78rem; text-transform: uppercase; padding: 4px 8px; }
+.stat-table td { padding: 4px 8px; border-top: 1px solid var(--panel-border); font-family: "IBM Plex Mono", monospace; font-size: 0.9rem; }
+.stat-table td:first-child { font-family: inherit; }
+
+.divider { border: none; border-top: 1px solid var(--panel-border); margin: 28px 0 8px; }
+.warning-box {
+  background: rgba(201, 168, 76, 0.1); border: 1px solid var(--accent-2); color: var(--accent-2);
+  border-radius: 4px; padding: 10px 14px; margin: 8px 0 16px; font-size: 0.9rem;
+}

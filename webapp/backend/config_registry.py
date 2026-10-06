@@ -60,10 +60,12 @@ PRECIOUS = {
     "rolling_config": rc.PRECIOUS_CONFIG,
     "futures_file": rc.PRECIOUS_FUTURES_FILE,
     "calendar_file": rc.PRECIOUS_CALENDAR_FILE,
+    # Copper (CME/HG) removed 2026-08-05 (matching precious_metals_dashboard/app.py) -- remains in
+    # research/configs/precious.py's PRODUCTS; excluded from the portfolio route via
+    # portfolio.EXCLUDED_PRODUCTS.
     "products": {
         "Gold": {"code": "GC", "unit": "/oz"},
         "Silver": {"code": "SI", "unit": "/oz"},
-        "Copper (CME)": {"code": "HG", "unit": "/lb"},
         "Platinum": {"code": "PL", "unit": "/oz"},
         "Palladium": {"code": "PA", "unit": "/oz"},
     },

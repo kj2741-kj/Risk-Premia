@@ -27,6 +27,7 @@ from common_shared import CHART_LAYOUT
 from engine import (combine_positions, combine_returns, exec_shift, log_return_daily,
                      raw_signal_carry_v1, raw_signal_carry_v2, raw_signal_carrymom,
                      raw_signal_momentum, raw_signal_value)
+from drp import rolling_drp_combine
 from risk_parity import rolling_erc_combine
 
 from services.momentum import _clean, _fig_to_json
@@ -46,6 +47,7 @@ _CONFIG_MODULES = {"metals": "metals", "energy": "energy", "precious": "precious
 EXCLUDED_PRODUCTS: dict[str, tuple[str, ...]] = {
     "energy": ("SingaporeGasoil", "FuelOil"),
     "ngl": ("Ethylene", "Propylene"),
+    "precious": ("Copper_COMEX",),
 }
 
 
@@ -117,15 +119,23 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
     raise ValueError(f"Unknown family {family!r}")
 
 
-def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
-    empty = pd.Series(dtype=float)
+def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Series:
+    """Pre-shift combined raw signal for one strategy family on one product
+    (mirrors dashboard_portfolio_tab.py's helper of the same name)."""
     if not instance["legs"]:
-        return empty, empty
+        return pd.Series(dtype=float)
     raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
     raws = [r for r in raws if not r.empty]
     if not raws:
+        return pd.Series(dtype=float)
+    return raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
+
+
+def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+    empty = pd.Series(dtype=float)
+    combo = _instance_product_raw_signal(instance, product_data)
+    if combo.empty:
         return empty, empty
-    combo = raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
     pos = exec_shift(combo, int(instance["shift_n"])).fillna(0)
     return log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
 
@@ -134,6 +144,31 @@ def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd
     grosses, nets = [], []
     for product_data in data.values():
         g, n = _instance_product_returns(instance, product_data, tc_bps)
+        if not n.empty:
+            grosses.append(g)
+            nets.append(n)
+    empty = pd.Series(dtype=float)
+    gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
+    net_agg = combine_returns(nets, "equal_weight") if nets else empty
+    return gross_agg, net_agg
+
+
+def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict],
+                                    data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+    """Signal-level Combined Carry / Combined CarryMom (mirrors
+    dashboard_portfolio_tab.py): equal-weight the raw (pre-shift) composite
+    signals of this asset class's Carry tenor pairs per product, shift ONCE,
+    then compute PnL."""
+    shift_n = cfg.CARRY_SHIFT_N if family == "Carry" else cfg.CARRY_MOMENTUM_SHIFT_N
+    grosses, nets = [], []
+    for product_data in data.values():
+        raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
+        raws = [r for r in raws if not r.empty]
+        if not raws:
+            continue
+        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
+        pos = exec_shift(combo, shift_n).fillna(0)
+        g, n = log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
         if not n.empty:
             grosses.append(g)
             nets.append(n)
@@ -210,6 +245,29 @@ def _compute_reference_returns(asset_class: str, tc_bps: int) -> tuple[dict, dic
     return gross, net
 
 
+def _has_multi_tenor(cfg) -> bool:
+    return len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2
+
+
+@functools.lru_cache(maxsize=32)
+def _compute_combined_tenor_returns(asset_class: str, tc_bps: int) -> tuple[dict, dict]:
+    """Combined Carry / Combined CarryMom gross+net, or ({}, {}) when this
+    asset class has fewer than two Carry tenor pairs."""
+    cfg = get_cfg(asset_class)
+    if not _has_multi_tenor(cfg):
+        return {}, {}
+    by_id = {inst["id"]: inst for inst in _build_reference_strategies(cfg)}
+    carry_inst = [by_id[f"carry_{n}{f}"] for n, f in cfg.CARRY_TENOR_PAIRS if f"carry_{n}{f}" in by_id]
+    cm_inst = [by_id[f"carrymom_{n}{f}"] for n, f in cfg.CARRY_TENOR_PAIRS if f"carrymom_{n}{f}" in by_id]
+    if len(carry_inst) != len(cfg.CARRY_TENOR_PAIRS) or len(cm_inst) != len(cfg.CARRY_TENOR_PAIRS):
+        return {}, {}
+    data, _, _ = _load_products(asset_class)
+    cc_g, cc_n = _combined_tenor_family_returns("Carry", cfg, carry_inst, data, tc_bps)
+    ccm_g, ccm_n = _combined_tenor_family_returns("CarryMom", cfg, cm_inst, data, tc_bps)
+    return ({"Combined Carry": cc_g, "Combined CarryMom": ccm_g},
+            {"Combined Carry": cc_n, "Combined CarryMom": ccm_n})
+
+
 def _apply_weight_schedule(returns_by_name: dict, weights_over_time: pd.DataFrame) -> pd.Series:
     names = list(weights_over_time.columns)
     aligned = pd.concat([returns_by_name[k].reindex(weights_over_time.index).fillna(0.0)
@@ -229,6 +287,10 @@ def _combine_sleeves(gross_by_name: dict, net_by_name: dict, combine_method: str
         net_combined, weights_over_time = rolling_erc_combine(net_by_name, tilt=tilt)
         gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
         return gross_combined, net_combined
+    if combine_method == "Dynamic Risk Parity (DRP, rolling)":
+        net_combined, weights_over_time = rolling_drp_combine(net_by_name)
+        gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
+        return gross_combined, net_combined
     return (combine_returns(list(gross_by_name.values()), "equal_weight"),
             combine_returns(list(net_by_name.values()), "equal_weight"))
 
@@ -237,24 +299,43 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
     def _slice(s):
         return s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
 
-    def _sharpe(s):
-        return float(s.mean() / s.std(ddof=1) * np.sqrt(252)) if len(s) > 20 and s.std(ddof=1) > 0 else np.nan
+    def _true_ann_vol(s):
+        """True compounded annual return and true annualized volatility of
+        SIMPLE returns, not log-return figures."""
+        if len(s) > 20 and s.std(ddof=1) > 0:
+            log_ann = float(s.mean() * 252)
+            ann = float((np.exp(log_ann) - 1) * 100)
+            vol = float(np.expm1(s).std(ddof=1) * np.sqrt(252) * 100)
+            return ann, vol
+        return np.nan, np.nan
+
+    def _sharpe(ann_pct, vol_pct):
+        return float(ann_pct / vol_pct) if pd.notna(vol_pct) and vol_pct > 0 else np.nan
 
     g, n = _slice(gross), _slice(net)
-    if len(n) > 20 and n.std(ddof=1) > 0:
-        ann = float(n.mean() * 252 * 100)
-        vol = float(n.std(ddof=1) * np.sqrt(252) * 100)
-    else:
-        ann = vol = np.nan
+    gross_ann, gross_vol = _true_ann_vol(g)
+    ann, vol = _true_ann_vol(n)
     cum = n.cumsum()
-    mdd = float((cum - cum.cummax()).min() * 100) if len(cum) else np.nan
-    return dict(gross=_sharpe(g), net=_sharpe(n), ann=ann, vol=vol, mdd=mdd)
+    value = np.exp(cum)
+    mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
+    return dict(gross=_sharpe(gross_ann, gross_vol), net=_sharpe(ann, vol), ann=ann, vol=vol, mdd=mdd)
 
 
 def get_reference_strategies(asset_class: str) -> dict:
     cfg = get_cfg(asset_class)
     instances = _build_reference_strategies(cfg)
+    multi = _has_multi_tenor(cfg)
+    combined = []
+    if multi:
+        combined = [
+            {"label": "Combined Carry", "note": "Carry V1+V2 composite",
+             "tenor_pairs": [list(p) for p in cfg.CARRY_TENOR_PAIRS]},
+            {"label": "Combined CarryMom", "note": "Carry-Momentum",
+             "tenor_pairs": [list(p) for p in cfg.CARRY_TENOR_PAIRS]},
+        ]
     return {
+        "has_multi_tenor": multi,
+        "combined": combined,
         "strategies": [
             {
                 "id": inst["id"], "label": inst["label"], "family": inst["family"], "shift_n": inst["shift_n"],
@@ -272,6 +353,7 @@ def get_results(
     custom_portfolios: list[dict] | None = None,
     yr_start: int | None = None, yr_end: int | None = None,
     metric_strategy: str | None = None, shown: list[str] | None = None,
+    separate_tenor_carry: bool = False,
 ) -> dict:
     data, common_start, common_end = _load_products(asset_class)
     min_year, max_year = int(common_start.year), int(common_end.year)
@@ -280,8 +362,21 @@ def get_results(
     ref_gross, ref_net = _compute_reference_returns(asset_class, tc_bps)
     instance_gross, instance_net = dict(ref_gross), dict(ref_net)  # copy: cached dicts must not be mutated
 
+    # Default view (matches Streamlit): four reference strategies -- Momentum, Combined Carry,
+    # Combined CarryMom, Value -- when the asset class has >=2 Carry tenor pairs. The
+    # separate_tenor_carry toggle restores the original six-row breakdown.
+    if ref_net and _has_multi_tenor(get_cfg(asset_class)) and not separate_tenor_carry:
+        comb_gross, comb_net = _compute_combined_tenor_returns(asset_class, tc_bps)
+        if comb_net:
+            instance_gross = {"Momentum": ref_gross["Momentum"], "Combined Carry": comb_gross["Combined Carry"],
+                               "Combined CarryMom": comb_gross["Combined CarryMom"], "Value": ref_gross["Value"]}
+            instance_net = {"Momentum": ref_net["Momentum"], "Combined Carry": comb_net["Combined Carry"],
+                             "Combined CarryMom": comb_net["Combined CarryMom"], "Value": ref_net["Value"]}
+
+    agg_label = None
     if instance_net:
-        agg_label = f"{combine_method} Portfolio (all reference strategies)"
+        # Stable key, deliberately NOT combine_method-dependent (matches Streamlit 2026-09-23 fix).
+        agg_label = "Portfolio (all reference strategies)"
         agg_gross, agg_net = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window, tilt=return_tilt)
         instance_gross[agg_label] = agg_gross
         instance_net[agg_label] = agg_net
@@ -320,25 +415,29 @@ def get_results(
         window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
         if window.empty:
             continue
-        eq = window.cumsum() * 100
+        # True cumulative %, not log-return %.
+        eq = (np.exp(window.cumsum()) - 1) * 100
         fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
                                   line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
         if len(window) > 20 and window.std(ddof=1) > 0:
-            ret = float(window.mean() * 252 * 100)
-            vol = float(window.std(ddof=1) * np.sqrt(252) * 100)
+            ret = (np.exp(float(window.mean() * 252)) - 1) * 100
+            vol = float(np.expm1(window).std(ddof=1) * np.sqrt(252) * 100)
             ir = ret / vol if vol > 0 else float("nan")
         else:
             ret = vol = ir = float("nan")
         rows.append({"strategy": label, "return": _clean(ret), "vol": _clean(vol), "ir": _clean(ir)})
 
     layout = dict(CHART_LAYOUT)
-    layout["yaxis_title"] = "Cumulative Log-Return (%)"
+    layout["yaxis_title"] = "Cumulative Return (%)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=460)
 
     return {
         "common_start": str(common_start.date()), "common_end": str(common_end.date()),
         "min_year": min_year, "max_year": max_year,
         "metric_labels": metric_labels,
+        "n_products": len(data),
+        "agg_label": agg_label,
+        "combine_method": combine_method,
         "metrics": metrics,
         "equity_fig": _fig_to_json(fig),
         "table_rows": rows,

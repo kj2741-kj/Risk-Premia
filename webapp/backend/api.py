@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from config_registry import get_asset_config
 from services import comparison as comparison_service
 from services import carry as carry_service
+from services import crossasset as crossasset_service
 from services import fundamental as fundamental_service
 from services import momentum as momentum_service
 from services import portfolio as portfolio_service
@@ -161,7 +162,7 @@ class ValueRequest(BaseModel):
     roll_method: str = "ltd"
     roll_n: int = 5
     tc_bps: int = 5
-    shift_n: int = 2
+    shift_n: int = 1
     combos: list[ValueCombo] | None = None
     metrics_year_start: int | None = None
     metrics_year_end: int | None = None
@@ -196,7 +197,7 @@ def value_heatmap_endpoint(
     roll_method: str = Query("ltd", pattern="^(ltd|5td)$"),
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
-    shift_n: int = Query(2, ge=0, le=2),
+    shift_n: int = Query(1, ge=0, le=2),
     threshold: float = Query(0.10),
     year_start: int | None = None,
     year_end: int | None = None,
@@ -296,6 +297,7 @@ class PortfolioResultsRequest(BaseModel):
     yr_end: int | None = None
     metric_strategy: str | None = None
     shown: list[str] | None = None
+    separate_tenor_carry: bool = False
 
 
 @router.post("/{asset_class}/portfolio/results")
@@ -320,6 +322,7 @@ def portfolio_results(asset_class: str, body: PortfolioResultsRequest):
             ],
             yr_start=body.yr_start, yr_end=body.yr_end,
             metric_strategy=body.metric_strategy, shown=body.shown,
+            separate_tenor_carry=body.separate_tenor_carry,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -354,3 +357,58 @@ def fundamental(
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# ── Cross-Asset Portfolio (hub/app.py's third tab) ──────────────────────────
+# Asset-class-agnostic: combines Metals/Energy/Precious/NGL via
+# research/cross_asset_engine.py. Declared before /{asset_class}/... routes
+# would matter only for GETs with matching shapes; these paths are distinct
+# ("crossasset" is never a valid asset_class, which would 404 there).
+
+@router.get("/crossasset/meta")
+def crossasset_meta():
+    return crossasset_service.get_meta()
+
+
+class CrossAssetRequest(BaseModel):
+    tc_bps: int = 5
+    assets: list[str]
+    styles: list[str] = []
+    combine: str = "Equal Weight"
+    yr_start: int | None = None
+    yr_end: int | None = None
+    focus: str | None = None
+    hidden: list[str] | None = None
+
+
+@router.post("/crossasset/commodity")
+def crossasset_commodity(body: CrossAssetRequest):
+    try:
+        return crossasset_service.get_cross_commodity(
+            tc_bps=body.tc_bps, assets=body.assets, styles=body.styles, combine=body.combine,
+            yr_start=body.yr_start, yr_end=body.yr_end, focus=body.focus, hidden=body.hidden)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/crossasset/crossn")
+def crossasset_crossn(body: CrossAssetRequest):
+    try:
+        return crossasset_service.get_cross_n(
+            tc_bps=body.tc_bps, assets=body.assets, combine=body.combine,
+            yr_start=body.yr_start, yr_end=body.yr_end, focus=body.focus, hidden=body.hidden)
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class CorrelationRequest(BaseModel):
+    tc_bps: int = 5
+    yr_start: int | None = None
+    yr_end: int | None = None
+    strategies: list[str] | None = None
+
+
+@router.post("/crossasset/correlation")
+def crossasset_correlation(body: CorrelationRequest):
+    return crossasset_service.get_correlation(
+        tc_bps=body.tc_bps, yr_start=body.yr_start, yr_end=body.yr_end, strategies=body.strategies)

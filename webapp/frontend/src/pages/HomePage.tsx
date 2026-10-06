@@ -4,7 +4,7 @@ import MetricCard from "../components/MetricCard";
 const DASHBOARD_LINKS = [
   { to: "/metals", name: "Metals", desc: "LME Copper, Aluminium, Lead, and Zinc. Momentum, Carry, and Value strategies." },
   { to: "/energy", name: "Energy", desc: "WTI, Brent, RBOB, Heating Oil, Nat Gas. Momentum, Carry, Value." },
-  { to: "/precious", name: "Precious Metals", desc: "Gold, Silver, Copper (CME), Platinum, Palladium. Momentum, Carry, Value." },
+  { to: "/precious", name: "Precious Metals", desc: "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value." },
   { to: "/ngl", name: "NGL / Refined", desc: "Ethane, Propane, Butane, Isobutane. Momentum, Carry, Value." },
 ];
 
@@ -52,6 +52,12 @@ export default function HomePage() {
         look-ahead bias in either case. Which convention performs better is strategy-specific and is re-checked
         for every asset class rather than assumed.
       </p>
+
+      <div className="section-header">Headline Findings</div>
+      <div className="warning-box" style={{ background: "rgba(42,120,214,0.08)", borderColor: "#2a78d6", color: "var(--text)" }}>
+        Coming soon. Consolidated headline findings across Metals, Energy, Precious Metals, and NGL will be
+        published here once results from all four asset classes are finalized.
+      </div>
 
       <div className="section-header">Conclusion</div>
       <p className="tab-caption">

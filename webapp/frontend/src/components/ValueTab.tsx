@@ -4,6 +4,7 @@ import { fetchValue, fetchValueHeatmap, type SeriesJson, type ValueCombo } from 
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import PlotlyChart from "./PlotlyChart";
 import MetricCard from "./MetricCard";
+import { fmtSigned, fmtSignedComma } from "../lib/fmt";
 
 const TC_OPTIONS = [0, 5, 10, 20];
 const TIMING_OPTIONS = [
@@ -25,7 +26,7 @@ interface ValueTabProps {
 
 export default function ValueTab({ assetClass, product, onPositionsChange }: ValueTabProps) {
   const [tcBps, setTcBps] = useState(5);
-  const [shiftN, setShiftN] = useState(2);
+  const [shiftN, setShiftN] = useState(1);
   // Starts empty rather than hardcoded F8/5yr/10% -- the correct default
   // combo is asset-specific (e.g. NGL uses F12/10yr/10%), seeded from the
   // first server response instead of guessed client-side.
@@ -168,10 +169,10 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
       {error && <p className="error">{(error as Error).message}</p>}
       {data?.metrics && (
         <div className="metric-row">
-          <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => v.toFixed(2)} />
-          <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => v.toFixed(2)} />
-          <MetricCard label="Ann PnL (Net)" value={data.metrics.ann} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 })} unit={` ${data.unit_label}`} />
-          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 })} unit={` ${data.unit_label}`} />
+          <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => fmtSigned(v)} />
+          <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => fmtSigned(v)} />
+          <MetricCard label="Ann PnL (Net)" value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit={` ${data.unit_label}`} />
+          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit={` ${data.unit_label}`} />
           <MetricCard label="% Flat" value={data.metrics.flat_pct} format={(v) => v.toFixed(0)} unit="%" />
         </div>
       )}

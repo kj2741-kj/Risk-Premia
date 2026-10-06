@@ -7,12 +7,36 @@ import {
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import PlotlyChart from "./PlotlyChart";
 import MetricCard from "./MetricCard";
+import { fmtSigned } from "../lib/fmt";
 
 type Family = "Momentum" | "Carry" | "CarryMom" | "Value";
 const FAMILY_ORDER: Family[] = ["Momentum", "Carry", "CarryMom", "Value"];
 const FAMILY_TITLE: Record<Family, string> = { Momentum: "Momentum", Carry: "Carry", CarryMom: "Carry-Momentum", Value: "Value" };
-const DEFAULT_SHIFT_N: Record<Family, number> = { Momentum: 1, Carry: 1, CarryMom: 1, Value: 2 };
-const COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)"];
+const DEFAULT_SHIFT_N: Record<Family, number> = { Momentum: 1, Carry: 1, CarryMom: 1, Value: 1 };
+const COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"];
+const COMBINE_HELP =
+  "Applies to both the reference-strategy aggregate below and any portfolio you build in Portfolio " +
+  "Construction. Equal Weight: fixed equal capital split. Inverse Vol: reweights every day using each " +
+  "strategy's own trailing realized vol (lower-vol strategies get more weight), ignoring correlation. " +
+  "Risk Parity (ERC): each strategy contributes equal RISK, solved from the full rolling covariance " +
+  "matrix and rebalanced every ~21 trading days from the trailing 252 days. Dynamic Risk Parity (DRP): " +
+  "inverse-EWMA-vol weighting (20-day half-life vol, 60-day half-life covariance, correlations shrunk " +
+  "50% toward zero), rescaled to match Equal Weight's own full-sample volatility, rebalanced every ~21 " +
+  "trading days. All four are identical with only one strategy enabled.";
+const TILT_HELP =
+  "0 = pure Equal Risk Contribution (risk only, no return awareness). Sliding up blends in a risk budget " +
+  "proportional to each sleeve's own trailing Sharpe (same rolling window as the covariance, never " +
+  "looking ahead) -- a weak or negative-Sharpe sleeve still keeps a small floor of risk budget rather " +
+  "than being fully excluded, so even tilt=1 stays diversified, not concentrated in a single sleeve. " +
+  "Trailing Sharpe over any one rolling window is a genuinely noisy estimate -- this does not guarantee " +
+  "a higher return, it only tilts risk toward whichever sleeve looked stronger recently.";
+const SEPARATE_TENOR_HELP =
+  "Off (default): this asset class's two Carry tenor pairs are equal-weighted into one Combined Carry " +
+  "row, and the two CarryMom tenor pairs into one Combined CarryMom row -- four reference strategies " +
+  "total (Momentum, Combined Carry, Combined CarryMom, Value). On: show each tenor pair as its own row " +
+  "instead -- six total (Momentum, Carry x2, CarryMom x2, Value) -- this project's original convention. " +
+  "Applies to the reference strategies below, the strategy pickers further down, and the " +
+  "reference-strategy portfolio aggregate.";
 const FAR_NEAR_OPTIONS = Array.from({ length: 15 }, (_, i) => `F${i + 1}`);
 const CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"] as const;
 
@@ -39,7 +63,7 @@ function newLeg(family: Family, near: string, far: string): PortfolioLeg {
   if (family === "Momentum") return { fast: 5, slow: 60 };
   if (family === "Carry") return { type: "V1 Level", near, far, zwindow: 252, horizon: 20 };
   if (family === "CarryMom") return { near, far, horizon: 20 };
-  return { contract: "F8", lookback: 1260, threshold: 0.10 };
+  return { contract: "F3", lookback: 1260, threshold: 0.10 };
 }
 
 interface PortfolioTabProps {
@@ -53,6 +77,9 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
     staleTime: Infinity,
   });
   const strategies: ReferenceStrategy[] = refData?.strategies ?? [];
+  const [separateTenor, setSeparateTenor] = useState(false);
+  const hasMultiTenor = refData?.has_multi_tenor ?? false;
+  const showCombinedCards = hasMultiTenor && !separateTenor;
 
   // ── Live controls (debounced, not gated behind Refresh Results -- matches
   // the Streamlit tab, where tc_bps/combine_method/vol_window/return_tilt
@@ -135,8 +162,8 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
   // metric strategy / shown list (matches the st.form in the original tab).
   // tc_bps/combine_method/vol_window/return_tilt/portfolios are live. ─────
   const liveParams = useMemo(
-    () => ({ tcBps, combineMethod, volWindow, returnTilt, customPortfolios: portfolios }),
-    [tcBps, combineMethod, volWindow, returnTilt, portfolios],
+    () => ({ tcBps, combineMethod, volWindow, returnTilt, separateTenorCarry: separateTenor, customPortfolios: portfolios }),
+    [tcBps, combineMethod, volWindow, returnTilt, separateTenor, portfolios],
   );
   const debouncedLive = useDebouncedValue(liveParams, 400);
 
@@ -162,7 +189,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
     // was removed).
     if (metricLabels.length === 0) return;
     if (pendingMetricStrategy === undefined || !metricLabels.includes(pendingMetricStrategy)) {
-      setPendingMetricStrategy(metricLabels[metricLabels.length - 1]);
+      setPendingMetricStrategy(portfolios.length > 0 ? portfolios[portfolios.length - 1].label : metricLabels[0]);
     }
     if (data && pendingYrStart === undefined) setPendingYrStart(data.min_year);
     if (data && pendingYrEnd === undefined) setPendingYrEnd(data.max_year);
@@ -180,12 +207,15 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
   return (
     <div className="tab-panel">
       <p className="tab-caption">
-        Log-return methodology (research/engine.py), not the dollar-PnL convention used by
-        Momentum/Carry/Value/Comparison above -- figures here will not reconcile exactly with those tabs.
+        Log-return methodology (research/engine.py), not the dollar-PnL convention used by the
+        Momentum, Carry, Value, and Comparison tabs above. This is deliberate: strategies,
+        products, and asset classes can only be combined into a portfolio without a
+        price-level-scale distortion in log-return terms. Figures here will not reconcile
+        exactly with those other tabs.
       </p>
       {data && (
         <p className="caption">
-          Common data window across all products: {data.common_start} to {data.common_end}.
+          Common data window across all {data.n_products} {assetClass} products: {data.common_start} to {data.common_end}.
         </p>
       )}
 
@@ -193,7 +223,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
         <label>Transaction cost (bps, round-trip)
           <input type="number" min={0} max={50} value={tcBps} onChange={(e) => setTcBps(Number(e.target.value))} />
         </label>
-        <label>Combine strategies via
+        <label title={COMBINE_HELP}>Combine strategies via
           <select value={combineMethod} onChange={(e) => setCombineMethod(e.target.value)}>
             {COMBINE_METHODS.map((m) => <option key={m}>{m}</option>)}
           </select>
@@ -204,15 +234,56 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
           </label>
         )}
         {combineMethod === "Risk Parity (ERC, rolling)" && (
-          <label>Return tilt (0-1)
+          <label title={TILT_HELP}>Return tilt (0-1)
             <input type="number" min={0} max={1} step={0.05} value={returnTilt} onChange={(e) => setReturnTilt(Number(e.target.value))} />
           </label>
         )}
       </div>
 
       <div className="section-header">Reference Strategies</div>
-      <p className="tab-caption">The officially reported parameter set for this asset class -- read-only.</p>
-      {strategies.map((s) => (
+      <p className="tab-caption">
+        The officially reported parameter set for this asset class, shown here for comparison.
+        Read-only -- use Portfolio Construction below to combine them: switching a family on there
+        pre-fills it with these exact same parameters.
+      </p>
+      {hasMultiTenor && (
+        <label title={SEPARATE_TENOR_HELP} style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, textTransform: "none", marginBottom: 10 }}>
+          <input type="checkbox" checked={separateTenor} onChange={(e) => setSeparateTenor(e.target.checked)} />
+          Treat Carry / Carry-Momentum tenor pairs as separate strategies
+        </label>
+      )}
+      {showCombinedCards && (
+        <>
+          {["mom"].map((id) => {
+            const r = strategies.find((x) => x.id === id);
+            return r && (
+              <details key={id} style={{ marginBottom: 6 }}>
+                <summary style={{ cursor: "pointer", color: "var(--text)" }}>{r.label}</summary>
+                <ul>{r.legs_desc.map((d, i) => <li key={i} className="tab-caption">{d}</li>)}</ul>
+                <p className="caption">Execution lag (shift_n): {r.shift_n} | Combine legs via: Equal Weight</p>
+              </details>
+            );
+          })}
+          {(refData?.combined ?? []).map((c) => (
+            <details key={c.label} style={{ marginBottom: 6 }}>
+              <summary style={{ cursor: "pointer", color: "var(--text)" }}>{c.label}</summary>
+              <ul>{c.tenor_pairs.map(([n, f]) => <li key={n + f} className="tab-caption">{c.note} ({n}-{f})</li>)}</ul>
+              <p className="caption">Combine tenor pairs via: Equal Weight</p>
+            </details>
+          ))}
+          {["value"].map((id) => {
+            const r = strategies.find((x) => x.id === id);
+            return r && (
+              <details key={id} style={{ marginBottom: 6 }}>
+                <summary style={{ cursor: "pointer", color: "var(--text)" }}>{r.label}</summary>
+                <ul>{r.legs_desc.map((d, i) => <li key={i} className="tab-caption">{d}</li>)}</ul>
+                <p className="caption">Execution lag (shift_n): {r.shift_n} | Combine legs via: Equal Weight</p>
+              </details>
+            );
+          })}
+        </>
+      )}
+      {!showCombinedCards && strategies.map((s) => (
         <details key={s.id} style={{ marginBottom: 6 }}>
           <summary style={{ cursor: "pointer", color: "var(--text)" }}>{s.label}</summary>
           <ul>
@@ -386,20 +457,27 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
         })}
       </div>
 
+      {data?.agg_label && (
+        <p className="caption">
+          "{data.agg_label}" below is currently combined via <strong>{data.combine_method}</strong>{" "}
+          (change it with the "Combine strategies via" dropdown above).
+        </p>
+      )}
       {isFetching && <p>Computing…</p>}
       {error && <p className="error">{(error as Error).message}</p>}
 
       {data?.metrics && (
         <div className="metric-row">
-          <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => v.toFixed(2)} />
-          <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => v.toFixed(2)} />
-          <MetricCard label="Ann Return (Net)" value={data.metrics.ann} format={(v) => v.toFixed(2)} unit="%" />
+          <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => fmtSigned(v)} />
+          <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => fmtSigned(v)} />
+          <MetricCard label="Ann Return (Net)" value={data.metrics.ann} format={(v) => fmtSigned(v)} unit="%" />
           <MetricCard label="Ann Vol" value={data.metrics.vol} format={(v) => v.toFixed(2)} unit="%" />
-          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => v.toFixed(2)} unit="%" />
+          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSigned(v)} unit="%" />
         </div>
       )}
       <p className="caption">
-        Vol replaces "% Flat" here -- once returns are equal-weighted across products, "active day" no
+        Vol replaces the standalone tabs' "% Flat" card here: once returns are equal-weighted across
+        products, a single day can be active for one product and flat for another, so "active day" no
         longer has one well-defined meaning.
       </p>
 
@@ -416,9 +494,9 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
             {data.table_rows.map((r) => (
               <tr key={r.strategy} style={{ borderTop: "1px solid var(--panel-border)" }}>
                 <td>{r.strategy}</td>
-                <td>{r.return?.toFixed(2) ?? "N/A"}</td>
+                <td>{r.return != null ? fmtSigned(r.return, 2) : "N/A"}</td>
                 <td>{r.vol?.toFixed(2) ?? "N/A"}</td>
-                <td>{r.ir?.toFixed(3) ?? "N/A"}</td>
+                <td>{r.ir != null ? fmtSigned(r.ir, 3) : "N/A"}</td>
               </tr>
             ))}
           </tbody>

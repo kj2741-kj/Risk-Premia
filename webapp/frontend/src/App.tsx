@@ -3,6 +3,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import AssetClassPage from "./pages/AssetClassPage";
 import FundamentalAnalysisPage from "./pages/FundamentalAnalysisPage";
+import CrossAssetPage from "./pages/CrossAssetPage";
 import { warmBackend } from "./lib/api";
 
 const NAV = [
@@ -12,6 +13,7 @@ const NAV = [
   { to: "/precious", label: "Precious Metals" },
   { to: "/ngl", label: "NGL / Refined" },
   { to: "/fundamental-analysis", label: "Fundamental Analysis" },
+  { to: "/cross-asset", label: "Cross-Asset Portfolio" },
 ];
 
 export default function App() {
@@ -29,9 +31,6 @@ export default function App() {
               {n.label}
             </NavLink>
           ))}
-          <span className="nav-link disabled" title="Not built yet — see project roadmap">
-            Cross-Asset Portfolio (Coming Soon)
-          </span>
         </div>
       </nav>
 
@@ -47,13 +46,14 @@ export default function App() {
           } />
           <Route path="/precious" element={
             <AssetClassPage key="precious" assetClass="precious" label="Precious Metals"
-              products={["Gold", "Silver", "Copper (CME)", "Platinum", "Palladium"]} />
+              products={["Gold", "Silver", "Platinum", "Palladium"]} />
           } />
           <Route path="/ngl" element={
             <AssetClassPage key="ngl" assetClass="ngl" label="NGL / Refined"
               products={["Ethane", "Propane", "Butane", "Isobutane"]} />
           } />
           <Route path="/fundamental-analysis" element={<FundamentalAnalysisPage />} />
+          <Route path="/cross-asset" element={<CrossAssetPage />} />
         </Routes>
       </main>
     </div>

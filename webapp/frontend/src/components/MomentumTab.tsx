@@ -4,6 +4,7 @@ import { fetchMomentum, fetchMomentumHeatmap, type SeriesJson } from "../lib/api
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import PlotlyChart from "./PlotlyChart";
 import MetricCard from "./MetricCard";
+import { fmtSigned, fmtSignedComma } from "../lib/fmt";
 
 const TC_OPTIONS = [0, 5, 10, 20];
 const TIMING_OPTIONS: { label: string; shiftN: number }[] = [
@@ -176,10 +177,10 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
       {error && <p className="error">{(error as Error).message}</p>}
       {data?.metrics && (
         <div className="metric-row">
-          <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => v.toFixed(2)} />
-          <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => v.toFixed(2)} />
-          <MetricCard label="Ann PnL (Net)" value={data.metrics.ann} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 })} unit={` ${data.unit_label}`} />
-          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => v.toLocaleString(undefined, { maximumFractionDigits: 2 })} unit={` ${data.unit_label}`} />
+          <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => fmtSigned(v)} />
+          <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => fmtSigned(v)} />
+          <MetricCard label="Ann PnL (Net)" value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit={` ${data.unit_label}`} />
+          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit={` ${data.unit_label}`} />
           <MetricCard label="% Flat" value={data.metrics.flat_pct} format={(v) => v.toFixed(0)} unit="%" />
         </div>
       )}

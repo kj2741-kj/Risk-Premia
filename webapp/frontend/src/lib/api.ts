@@ -339,7 +339,16 @@ export interface PortfolioMetrics {
   mdd: number | null;
 }
 
+export interface CombinedReference {
+  label: string;
+  note: string;
+  tenor_pairs: [string, string][];
+}
+
 export interface PortfolioResultsResponse {
+  n_products: number;
+  agg_label: string | null;
+  combine_method: string;
   common_start: string;
   common_end: string;
   min_year: number;
@@ -350,7 +359,7 @@ export interface PortfolioResultsResponse {
   table_rows: { strategy: string; return: number | null; vol: number | null; ir: number | null }[];
 }
 
-export async function fetchPortfolioReference(assetClass: string): Promise<{ strategies: ReferenceStrategy[] }> {
+export async function fetchPortfolioReference(assetClass: string): Promise<{ strategies: ReferenceStrategy[]; has_multi_tenor: boolean; combined: CombinedReference[] }> {
   return getJson(`${API_BASE}/api/${assetClass}/portfolio/reference`);
 }
 
@@ -360,6 +369,7 @@ export interface PortfolioResultsParams {
   volWindow?: number;
   returnTilt?: number;
   customPortfolios?: CustomPortfolioDef[];
+  separateTenorCarry?: boolean;
   yrStart?: number;
   yrEnd?: number;
   metricStrategy?: string;
@@ -371,7 +381,7 @@ export async function fetchPortfolioResults(
 ): Promise<PortfolioResultsResponse> {
   return postJson(`${API_BASE}/api/${assetClass}/portfolio/results`, {
     tc_bps: p.tcBps, combine_method: p.combineMethod, vol_window: p.volWindow, return_tilt: p.returnTilt,
-    custom_portfolios: p.customPortfolios,
+    custom_portfolios: p.customPortfolios, separate_tenor_carry: p.separateTenorCarry,
     yr_start: p.yrStart, yr_end: p.yrEnd, metric_strategy: p.metricStrategy, shown: p.shown,
   });
 }
@@ -420,4 +430,79 @@ export async function fetchFundamental(commodity: string, p: FundamentalParams =
   if (p.nwBandwidth) q.set("nw_bandwidth", String(p.nwBandwidth));
   if (p.fixedScale !== undefined) q.set("fixed_scale", String(p.fixedScale));
   return getJson(`${API_BASE}/api/fundamental/${commodity}?${q.toString()}`);
+}
+
+// ── Cross-Asset Portfolio (hub/app.py's third tab) ─────────────────────────
+
+export interface CrossAssetMeta {
+  asset_classes: string[];
+  styles: string[];
+  cc_combine_methods: string[];
+  cn_combine_methods: string[];
+}
+
+export interface EquityBlock {
+  warning?: string;
+  empty?: boolean;
+  labels: string[];
+  min_year: number;
+  max_year: number;
+  default_start: number;
+  yr_start: number;
+  yr_end: number;
+  focus: string;
+  shown: string[];
+  metrics: PortfolioMetrics;
+  equity_fig: PlotlyFigure | null;
+  table_rows: { strategy: string; return: number | null; vol: number | null; ir: number | null }[];
+}
+
+export interface CorrelationBlock {
+  min_year: number;
+  max_year: number;
+  default_start: number;
+  yr_start: number;
+  yr_end: number;
+  strategy_labels: string[];
+  strategies: string[];
+  fig: PlotlyFigure | null;
+  warning: string | null;
+}
+
+export interface CrossAssetParams {
+  tcBps: number;
+  assets: string[];
+  styles?: string[];
+  combine: string;
+  yrStart?: number;
+  yrEnd?: number;
+  focus?: string;
+  hidden?: string[];
+}
+
+export async function fetchCrossAssetMeta(): Promise<CrossAssetMeta> {
+  return getJson(`${API_BASE}/api/crossasset/meta`);
+}
+
+function crossBody(p: CrossAssetParams) {
+  return {
+    tc_bps: p.tcBps, assets: p.assets, styles: p.styles, combine: p.combine,
+    yr_start: p.yrStart, yr_end: p.yrEnd, focus: p.focus, hidden: p.hidden,
+  };
+}
+
+export async function fetchCrossCommodity(p: CrossAssetParams): Promise<EquityBlock> {
+  return postJson(`${API_BASE}/api/crossasset/commodity`, crossBody(p));
+}
+
+export async function fetchCrossN(p: CrossAssetParams): Promise<EquityBlock> {
+  return postJson(`${API_BASE}/api/crossasset/crossn`, crossBody(p));
+}
+
+export async function fetchCrossCorrelation(
+  p: { tcBps: number; yrStart?: number; yrEnd?: number; strategies?: string[] },
+): Promise<CorrelationBlock> {
+  return postJson(`${API_BASE}/api/crossasset/correlation`, {
+    tc_bps: p.tcBps, yr_start: p.yrStart, yr_end: p.yrEnd, strategies: p.strategies,
+  });
 }

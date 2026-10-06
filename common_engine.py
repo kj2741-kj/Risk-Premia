@@ -335,7 +335,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     strategies, for the Comparison tab to overlay alongside Carry/Value."""
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
 
-    section_header(f"MOMENTUM — {product}")
+    section_header(f"MOMENTUM: {product}")
     st.caption("Moving-average crossover: signal(t) = sign[MA(F1_raw, fast) − MA(F1_raw, slow)]. "
                "Scope is limited to MA crossover; CTA/Baz-Granger and structural anchor signals "
                "are not included.")
@@ -429,7 +429,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     st.divider()
 
     # ── Heatmap (uses the same year-range slider) ────────────────────────────
-    st.markdown(f"**Sharpe Heatmap — Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
+    st.markdown(f"**Sharpe Heatmap: Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
     st.caption("Scroll/drag to zoom into any region, double-click to reset. Every integer "
                f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
     hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
@@ -442,7 +442,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
             hovertemplate="Fast MA: %{y}<br>Slow MA: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
         ))
         fig_hm.update_layout(**CHART_LAYOUT, height=560, dragmode="zoom",
-                              title=dict(text=f"{product} — Sharpe by MA Crossover", font=dict(size=13)),
+                              title=dict(text=f"{product}: Sharpe by MA Crossover", font=dict(size=13)),
                               xaxis_title="Slow MA", yaxis_title="Fast MA")
         fig_hm.update_xaxes(rangeslider=dict(visible=False))
         st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_mom_hm",
@@ -581,7 +581,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     variants, for the Comparison tab to overlay alongside Momentum/Value."""
     near_default, far_default = ("F2", "F3") if skip_front_contract else ("F1", "F2")
 
-    section_header(f"CARRY — {product}")
+    section_header(f"CARRY: {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. Three variants are "
                "available: V1 Level (Roll Yield / Long Slope, any contract pair), V2 Z-score, "
                "and V3 Carry-Momentum.")
@@ -614,7 +614,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     V1_LABEL, V2_LABEL, V3_LABEL = "V1 Level (Roll Yield / Long Slope)", "V2 Z-score (252d)", "V3 Carry-Momentum"
 
     st.markdown("**Add a Carry Variant**")
-    st.caption("V1 Level takes any (Near, Far) contract pair -- covers what used to be separate V1 Roll "
+    st.caption("V1 Level takes any (Near, Far) contract pair, covering what used to be separate V1 Roll "
                "Yield and V2 Long Slope variants, the identical formula just with a different pair, so "
                "one flow covers both (same unification as the heatmap's \"N/A\" mode below).")
     vcol1, vcol2, vcol3, vcol4 = st.columns([1.3, 1, 1, 0.9])
@@ -741,7 +741,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     # Z-score, so one grid covers all three variants. Has its OWN
     # independent year-range slider -- not linked to the Performance Metrics
     # slider above or the equity curve's "Time period" slider below. ────────
-    st.markdown(f"**Sharpe Heatmap — Contract Pair × Carry Signal**")
+    st.markdown(f"**Sharpe Heatmap: Contract Pair × Carry Signal**")
     st.caption('"N/A" -> V1 Level signal (long in backwardation, short in contango). Enter a whole '
                "number of days to reinterpret that same horizon as V3 Carry-Momentum or V2 Z-score.")
     hcol1, hcol2 = st.columns([1, 1.4])
@@ -754,12 +754,12 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         try:
             parsed = int(days_clean)
             if parsed <= 0:
-                st.warning("Horizon must be a positive whole number of days -- showing the V1 Level "
+                st.warning("Horizon must be a positive whole number of days; showing the V1 Level "
                            "signal instead.")
             else:
                 hm_days = parsed
         except ValueError:
-            st.warning('Enter a whole number of days, or "N/A" for the V1 Level signal -- showing '
+            st.warning('Enter a whole number of days, or "N/A" for the V1 Level signal; showing '
                        "V1 Level for now.")
     if hm_days is not None:
         with hcol2:
@@ -789,7 +789,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         else:
             signal_desc = f"V2 Z-score ({hm_days}d)"
         fig_hm.update_layout(**CHART_LAYOUT, height=560,
-                             title=dict(text=f"{product} — Carry Sharpe by Contract Pair ({signal_desc})",
+                             title=dict(text=f"{product}: Carry Sharpe by Contract Pair ({signal_desc})",
                                         font=dict(size=13)),
                              xaxis_title="Far Contract", yaxis_title="Near Contract")
         st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_car_hm")
@@ -884,7 +884,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     NGL_CONFIG's f1_col/f2_col comment in rolling_continuous.py).
     Returns the {label: position} dict of the currently active/chosen
     variants, for the Comparison tab to overlay alongside Momentum/Carry."""
-    section_header(f"VALUE — {product}")
+    section_header(f"VALUE: {product}")
     st.caption("Moving-average reversion: deviation = (Fk − MA_N)/MA_N. Long (+1) when cheap "
                "(below −T), short (−1) when expensive (above +T), flat otherwise. Only the "
                "MA-reversion variant is implemented; the Baz-Granger reversal variant is not included.")
@@ -1023,7 +1023,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     # same convention as Carry's heatmap. Has its OWN independent year-range
     # slider -- not linked to Performance Metrics above or the equity curve's
     # "Time period" slider below. ─────────────────────────────────────────────
-    st.markdown(f"**Sharpe Heatmap — Contract × Lookback**")
+    st.markdown(f"**Sharpe Heatmap: Contract × Lookback**")
     st.caption("Deviation = (Fk − MA_N)/MA_N at a fixed threshold below; long (+1) when cheap, short "
                "(−1) when expensive. Contract and Lookback are the grid; Threshold is a separate "
                "control since the signal always needs one to fire.")
@@ -1051,7 +1051,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
             hovertemplate="Contract: %{y}<br>Lookback: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
         ))
         fig_hm.update_layout(**CHART_LAYOUT, height=560,
-                             title=dict(text=f"{product} — Value Sharpe by Contract × Lookback "
+                             title=dict(text=f"{product}: Value Sharpe by Contract × Lookback "
                                              f"(±{hm_thr*100:.0f}%)", font=dict(size=13)),
                              xaxis_title="Lookback", yaxis_title="Contract")
         st.plotly_chart(fig_hm, use_container_width=True, key=f"{key_prefix}_val_hm")
@@ -1158,7 +1158,7 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     # stay warmed up on full history; only the displayed/summed window
     # narrows), independent of any "Year range for performance metrics"
     # slider elsewhere on this tab. ──────────────────────────────────────────
-    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
+    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}): Net of TC**")
     start, end = _time_window_slider(f1r, key_prefix)
     pnl_by_label = {label: net_pnl for label, (gross_pnl, net_pnl) in pnl_cache.items()}
     _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix, unit_label)
@@ -1280,7 +1280,7 @@ def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.
     its own time-period slider (default = full history) directly above the
     chart -- narrowing it re-baselines the curve to 0 at that start date,
     independent of the 'Year range for performance metrics' slider above."""
-    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
+    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}): Net of TC**")
     options = list(positions.keys())
     _sync_multiselect_new_options(f"{key_prefix}_equity_select", options)
     chosen = st.multiselect("Strategies to show", options=options,
@@ -1325,7 +1325,7 @@ def render_signal_position_chart(pos: pd.Series, f1r: pd.Series, label: str, key
     """Two-panel chart: F1_raw price (top) + Long/Short position bars (bottom).
     Matches the Stage 1 Metals dashboard's 'Signal & Position' chart exactly."""
     st.divider()
-    section_header(f"SIGNAL & POSITION HISTORY — {label}")
+    section_header(f"SIGNAL & POSITION HISTORY: {label}")
     st.caption("Top: F1_raw price. Bottom: the position this strategy actually holds each day "
                "(+1 long, −1 short, 0 flat).")
 
@@ -1349,7 +1349,7 @@ def render_signal_position_chart(pos: pd.Series, f1r: pd.Series, label: str, key
     ), row=2, col=1)
     fig_sig.update_layout(
         **CHART_LAYOUT, height=500, barmode="overlay",
-        title=dict(text=f"{label} — Price & Position", font=dict(size=13)),
+        title=dict(text=f"{label}: Price & Position", font=dict(size=13)),
         hovermode="x unified", showlegend=True,
     )
     fig_sig.update_yaxes(title_text="F1 Price", row=1, col=1)
@@ -1385,15 +1385,15 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
     strategy-comparison charts -- a property of the product's F1_raw (actual
     traded front-month) price itself, independent of any strategy, so it
     always renders even when no strategy is currently active."""
-    section_header(f"COMPARISON — {product}")
+    section_header(f"COMPARISON: {product}")
     st.caption("Overlays every strategy currently selected in the Momentum, Carry, and Value tabs above "
-               "-- add or remove strategies below in Momentum/Carry/Value, then come back here to see "
+               "add or remove strategies below in Momentum/Carry/Value, then come back here to see "
                "them update. One filter controls both charts.")
 
-    st.markdown(f"**Underlying Volatility — {product}**")
+    st.markdown(f"**Underlying Volatility: {product}**")
     st.caption(f"EWMA annualized volatility of {product}'s daily $ change in F1_raw (the actual traded "
-               f"front-month price -- carries roll-day jumps, unlike the back-adjusted F1_continuous used "
-               f"for PnL elsewhere), in {unit_label} terms -- a property of the underlying itself, "
+               f"front-month price, which carries roll-day jumps, unlike the back-adjusted F1_continuous used "
+               f"for PnL elsewhere), in {unit_label} terms: a property of the underlying itself, "
                "independent of any strategy or the filter below. Exponentially-weighted rather than a "
                "simple rolling window, per Bouchouev's *Virtual Barrels* (Ch. 8.4): a fixed window makes "
                "old shocks vanish abruptly the instant they drop out of the sample (the \"volatility "
@@ -1418,7 +1418,7 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
             all_positions[f"{group_name}: {label}"] = pos
 
     if not all_positions:
-        st.info("No strategies are currently active -- select at least one in the Momentum, Carry, or "
+        st.info("No strategies are currently active; select at least one in the Momentum, Carry, or "
                 "Value tabs above and it will appear here.")
     else:
         tc_col, _ = st.columns([1, 3])
@@ -1439,7 +1439,7 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
             positions = {label: all_positions[label] for label in chosen}
 
             st.divider()
-            st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}) — Net of TC**")
+            st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}): Net of TC**")
             start, end = _time_window_slider(f1r, key_prefix + "_cmp")
             show_vol_overlay = st.checkbox(
                 f"Superimpose Volatility ({vol_window_label} window, from the chart above)",

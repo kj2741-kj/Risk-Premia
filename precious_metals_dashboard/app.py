@@ -58,7 +58,7 @@ PRECIOUS_PORTFOLIO_EXCLUDED = ("Copper_COMEX",)
 
 with st.sidebar:
     st.markdown('<p class="main-title">✨ Precious Metals Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value</p>', unsafe_allow_html=True)
     st.divider()
     product_code = st.radio(
         "Product", PRODUCT_ORDER, key="precious_product_choice",
@@ -97,7 +97,7 @@ phase = f1_df["Phase"]
 curve = load_curve_simple(PRECIOUS_FUTURES_FILE, cfg["price_sheet"])
 curve = curve[curve.index.year >= 2006]
 
-st.markdown(f'<p class="main-title">✨ Precious Metals Risk Premia — {cfg["name"]}</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="main-title">✨ Precious Metals Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
@@ -124,7 +124,7 @@ with tab_compare:
 
 with tab_portfolio:
     st.caption("Combines 4 Precious Metals products (Gold, Silver, Platinum, Palladium) into one "
-               "asset-class-level portfolio -- independent of the sidebar's Product selection "
+               "asset-class-level portfolio, independent of the sidebar's Product selection "
                "above, which only affects the Momentum/Carry/Value/Comparison tabs. Copper (COMEX) "
                "is excluded here too (dashboard-only, see sidebar note); it still exists in "
                "research/configs/precious.py's own PRODUCTS list for the research pipeline. No "

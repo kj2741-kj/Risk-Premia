@@ -52,7 +52,7 @@ METAL_OPTIONS = {
 
 with st.sidebar:
     st.markdown('<p class="main-title">⚙️ Metals Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value</p>', unsafe_allow_html=True)
     st.divider()
     metal = st.radio("Metal", list(METAL_OPTIONS.keys()), key="metal_choice")
     st.divider()
@@ -64,7 +64,7 @@ with st.sidebar:
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="metals_roll_n")
     st.caption("Full 10-tab Stage 1 dashboard (Market Overview, Portfolio, etc.) lives at the original "
-               "Metals-Risk-Premia deployment — this is the simplified Stage 2 rebuild, matching the "
+               "Metals-Risk-Premia deployment; this is the simplified Stage 2 rebuild, matching the "
                "format used for Energy / Precious Metals / NGL.")
 
 cfg = METAL_OPTIONS[metal]
@@ -86,7 +86,7 @@ phase = f1_df["Phase"]
 curve = load_curve_simple(CURVE_FILE, cfg["curve_sheet"])
 curve = curve[curve.index.year >= 2006]
 
-st.markdown(f'<p class="main-title">⚙️ Metals Risk Premia — {metal}</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="main-title">⚙️ Metals Risk Premia: {metal}</p>', unsafe_allow_html=True)
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
@@ -113,6 +113,6 @@ with tab_compare:
 
 with tab_portfolio:
     st.caption("Combines all 4 Metals products (Copper, Aluminium, Lead, Zinc) into one "
-               "asset-class-level portfolio -- independent of the sidebar's Metal selection above, "
+               "asset-class-level portfolio, independent of the sidebar's Metal selection above, "
                "which only affects the Momentum/Carry/Value/Comparison tabs.")
     render_portfolio_tab(metals_research_cfg, key_prefix="metals_portfolio")

@@ -580,7 +580,7 @@ def _render_draft_sleeve(sleeve: dict, cfg, key_prefix: str) -> None:
             sleeve["legs"] = _reference_leg_seed(cfg, family)
             sleeve["shift_n"] = _reference_shift_n(cfg, family)
 
-        st.caption("Pre-filled with the reference parameters for this family -- edit below to "
+        st.caption("Pre-filled with the reference parameters for this family; edit below to "
                    "customize, or leave as-is to use it exactly as reported.")
 
         shared_near = shared_far = None
@@ -754,16 +754,16 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             key=f"{key_prefix}_pf_return_tilt",
             help="0 = pure Equal Risk Contribution (risk only, no return awareness). Sliding "
                  "up blends in a risk budget proportional to each sleeve's own trailing Sharpe "
-                 "(same rolling window as the covariance, never looking ahead) -- a weak or "
+                 "(same rolling window as the covariance, never looking ahead); a weak or "
                  "negative-Sharpe sleeve still keeps a small floor of risk budget rather than "
                  "being fully excluded, so even tilt=1 stays diversified, not concentrated in "
                  "a single sleeve. Trailing Sharpe over any one rolling window is a genuinely "
-                 "noisy estimate -- this does not guarantee a higher return, it only tilts risk "
+                 "noisy estimate, and this does not guarantee a higher return; it only tilts risk "
                  "toward whichever sleeve looked stronger recently.")
 
     section_header("Reference strategies")
     st.caption("The officially reported parameter set for this asset class, shown here for "
-               "comparison. Read-only -- use Portfolio Construction below to combine them: "
+               "comparison. Read-only; use Portfolio Construction below to combine them: "
                "switching a family on there pre-fills it with these exact same parameters.")
 
     has_multi_tenor = len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2
@@ -774,10 +774,10 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             value=False, key=f"{key_prefix}_pf_separate_tenor",
             help="Off (default): this asset class's two Carry tenor pairs are equal-weighted "
                  "into one Combined Carry row, and the two CarryMom tenor pairs into one "
-                 "Combined CarryMom row -- four reference strategies total (Momentum, "
+                 "Combined CarryMom row: four reference strategies total (Momentum, "
                  "Combined Carry, Combined CarryMom, Value). On: show each tenor pair as "
-                 "its own row instead -- six total (Momentum, Carry x2, CarryMom x2, Value) "
-                 "-- this project's original convention. Applies to the reference strategies "
+                 "its own row instead: six total (Momentum, Carry x2, CarryMom x2, Value); "
+                 "this project's original convention. Applies to the reference strategies "
                  "below, the strategy pickers further down, and the reference-strategy "
                  "portfolio aggregate.")
 
@@ -794,7 +794,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
 
     section_header("Portfolio construction")
     st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
-               "pre-fills with its reference parameters above -- leave it as-is to add that "
+               "pre-fills with its reference parameters above; leave it as-is to add that "
                "reference strategy directly, or edit its legs to customize. One family alone "
                f"becomes a single-strategy portfolio; several together are combined via "
                f"{combine_method} (set above). Add Portfolio saves the "
@@ -840,7 +840,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                     net_by_name[label] = n
                     sleeve_names.append(label)
             if not net_by_name:
-                st.warning("No valid output from the selected families -- check leg parameters "
+                st.warning("No valid output from the selected families; check leg parameters "
                            "(a tenor pair or contract that does not exist in the curve data "
                            "returns an empty series).")
             else:
@@ -865,7 +865,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             c1, c2 = st.columns([5, 1])
             with c1:
                 method_note = p.get("combine_method", "Equal Weight")
-                st.markdown(f"**{p['label']}** -- {' + '.join(p['sleeves'])}  \n"
+                st.markdown(f"**{p['label']}**: {' + '.join(p['sleeves'])}  \n"
                             f"<span style='color:#7A7068;font-size:0.82rem'>{method_note}</span>",
                             unsafe_allow_html=True)
             with c2:
@@ -959,7 +959,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
 
     section_header("Year range, performance metrics, and cumulative equity")
     st.caption("Adjust the controls below, then click Refresh Results to redraw the chart, "
-               "table, and metric cards with the new choices -- nothing recomputes until you do.")
+               "table, and metric cards with the new choices; nothing recomputes until you do.")
     with st.form(key=f"{key_prefix}_pf_results_form"):
         yr_start_input, yr_end_input = st.slider(
             "Year range", min_value=min_year, max_value=max_year,

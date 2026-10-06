@@ -58,7 +58,7 @@ ENERGY_PORTFOLIO_EXCLUDED = ("SingaporeGasoil", "FuelOil")
 
 with st.sidebar:
     st.markdown('<p class="main-title">🛢️ Energy Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value</p>', unsafe_allow_html=True)
     st.divider()
     product_code = st.radio(
         "Product", PRODUCT_ORDER, key="energy_product_choice",
@@ -72,7 +72,7 @@ with st.sidebar:
         index=0, key="energy_roll_method",
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="energy_roll_n")
-    st.caption("GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) are excluded — no usable "
+    st.caption("GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) are excluded, with no usable "
                "expiry-calendar coverage to build a continuous series. Singapore Gasoil and Fuel Oil are "
                "also excluded from this dashboard as of 2026-08-03; both remain in the underlying research "
                "config and engine. Same Momentum/Carry/Value format as the Metals and Precious Metals "
@@ -99,7 +99,7 @@ phase = f1_df["Phase"]
 curve = load_curve_simple(ENERGY_FUTURES_FILE, cfg["price_sheet"])
 curve = curve[curve.index.year >= 2006]
 
-st.markdown(f'<p class="main-title">🛢️ Energy Risk Premia — {cfg["name"]}</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="main-title">🛢️ Energy Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
@@ -126,11 +126,11 @@ with tab_compare:
 
 with tab_portfolio:
     st.caption("Combines 5 Energy products (WTI, Brent, RBOB, Heating Oil, Nat Gas) into one "
-               "asset-class-level portfolio -- independent of the sidebar's Product selection above, "
+               "asset-class-level portfolio, independent of the sidebar's Product selection above, "
                "which only affects the Momentum/Carry/Value/Comparison tabs. Singapore Gasoil and Fuel "
                "Oil are excluded here too (dashboard-only, see sidebar note); both still exist in "
                "research/configs/energy.py's own PRODUCTS list for the research pipeline. Does not "
-               "include the StatArb sleeve (the 8-spread cross-asset book, shared with NGL) -- "
+               "include the StatArb sleeve (the 8-spread cross-asset book, shared with NGL); "
                "this tab covers Momentum, Carry, Carry-Momentum, and Value only.")
     render_portfolio_tab(energy_research_cfg, key_prefix="energy_portfolio",
                           excluded_products=ENERGY_PORTFOLIO_EXCLUDED)

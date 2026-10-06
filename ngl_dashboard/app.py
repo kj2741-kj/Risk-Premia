@@ -111,7 +111,7 @@ CARRY_DEFAULT_FEATURE = "V1 (F2-F14)"
 
 with st.sidebar:
     st.markdown('<p class="main-title">🧪 NGL Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value</p>', unsafe_allow_html=True)
     st.divider()
     product_code = st.radio(
         "Product", PRODUCT_ORDER, key="ngl_product_choice",
@@ -129,7 +129,7 @@ with st.sidebar:
                "(the Mt Belvieu / Polymer Grade petrochemicals) are excluded from this dashboard as "
                "of 2026-08-03; both remain in the underlying research config and engine. Same "
                "Momentum/Carry/Value format as the Metals and Energy dashboards.")
-    st.caption("Front contract: **F2**, not F1 -- NGL swaps are monthly-averaging instruments where "
+    st.caption("Front contract: **F2**, not F1. NGL swaps are monthly-averaging instruments where "
                "F1 can be a stale/partial-month price. All Momentum/Carry/Value PnL and the Momentum "
                "signal are based on F2 (rolling into F3).")
 
@@ -154,7 +154,7 @@ phase = f1_df["Phase"]
 curve = load_curve_simple(NGL_FUTURES_FILE, cfg["price_sheet"])
 curve = curve[curve.index.year >= 2006]
 
-st.markdown(f'<p class="main-title">🧪 NGL Risk Premia — {cfg["name"]}</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="main-title">🧪 NGL Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
@@ -186,13 +186,13 @@ with tab_compare:
 
 with tab_portfolio:
     st.caption("Combines 4 NGL products (Ethane, Propane, Butane, Isobutane) into one "
-               "asset-class-level portfolio -- independent of the sidebar's Product selection "
+               "asset-class-level portfolio, independent of the sidebar's Product selection "
                "above, which only affects the Momentum/Carry/Value/Comparison tabs. Ethylene and "
                "Propylene are excluded here too (dashboard-only, see sidebar note); both still "
                "exist in research/configs/ngl.py's own PRODUCTS list for the research pipeline. "
                "Carry and Carry-Momentum use NGL's single F4-F15 tenor pair, not the Metals-style "
                "two-tier structure. Does not include the StatArb sleeve (the 8-spread cross-asset "
-               "book, shared with Energy) -- this tab covers Momentum, Carry, Carry-Momentum, and "
+               "book, shared with Energy); this tab covers Momentum, Carry, Carry-Momentum, and "
                "Value only.")
     render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio",
                           excluded_products=NGL_PORTFOLIO_EXCLUDED)

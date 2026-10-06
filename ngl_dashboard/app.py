@@ -131,8 +131,7 @@ with st.sidebar:
                "Momentum/Carry/Value format as the Metals and Energy dashboards.")
     st.caption("Front contract: **F2**, not F1 -- NGL swaps are monthly-averaging instruments where "
                "F1 can be a stale/partial-month price. All Momentum/Carry/Value PnL and the Momentum "
-               "signal are based on F2 (rolling into F3), matching Mark Bogorad's NGL_SKIP_FRONT "
-               "convention.")
+               "signal are based on F2 (rolling into F3).")
 
 cfg = NGL_CONFIG[product_code]
 unit = PRODUCT_UNITS[product_code]
@@ -191,9 +190,9 @@ with tab_portfolio:
                "above, which only affects the Momentum/Carry/Value/Comparison tabs. Ethylene and "
                "Propylene are excluded here too (dashboard-only, see sidebar note); both still "
                "exist in research/configs/ngl.py's own PRODUCTS list for the research pipeline. "
-               "Carry and Carry-Momentum use NGL's single F4-F15 tenor pair (Bogorad's own "
-               "convention), not the Metals-style two-tier structure. Does not include the "
-               "StatArb sleeve (Bogorad's 8-spread cross-asset book, shared with Energy) -- this "
-               "tab covers Momentum, Carry, Carry-Momentum, and Value only.")
+               "Carry and Carry-Momentum use NGL's single F4-F15 tenor pair, not the Metals-style "
+               "two-tier structure. Does not include the StatArb sleeve (the 8-spread cross-asset "
+               "book, shared with Energy) -- this tab covers Momentum, Carry, Carry-Momentum, and "
+               "Value only.")
     render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio",
                           excluded_products=NGL_PORTFOLIO_EXCLUDED)

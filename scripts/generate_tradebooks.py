@@ -229,6 +229,12 @@ def compute_performance(daily_pnl: pd.Series, position: pd.Series, f1_cont: pd.S
         return ann, std, sh, so
 
     def _max_dd(pnl_series):
+        # NOTE 2026-08-04: daily_pnl here is DOLLAR PnL (Position x delta
+        # F1_continuous -- see module docstring), NOT a log-return series. The
+        # log-space-vs-true-value conversion applied to MDD in
+        # run_regime_table.py::_metrics does not apply here: exp() of a
+        # cumulative dollar sum is meaningless. Stays in native dollar/unit
+        # terms, unconverted, matching the original (correct) convention.
         cum = pnl_series.fillna(0).cumsum()
         return float((cum - cum.cummax()).min())
 

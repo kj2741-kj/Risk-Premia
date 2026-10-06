@@ -350,6 +350,12 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
         a = pnl[pos != 0].dropna()
         return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
 
+    # NOTE 2026-08-04: this function is DOLLAR PnL (gp = pos * f1c.diff(), a raw
+    # price level, not a log price -- see docstring above), NOT a log-return
+    # series. The log-space-vs-true-value conversion applied to MDD/ret in
+    # run_regime_table.py::_metrics does not apply here: exp() of a cumulative
+    # dollar sum is meaningless. `cum`/`ann_pnl` stay in native dollar/unit
+    # terms, unconverted, matching the original (correct) convention.
     cum = net.fillna(0).cumsum()
     ann_pnl = net.dropna().mean() * 252 if net.notna().any() else np.nan
     return dict(gross=_s(gp), net=_s(net),

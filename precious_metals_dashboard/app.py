@@ -2,13 +2,20 @@
 Precious Metals Dashboard - Stage 2
 =====================================
 Standalone Streamlit app, its own separate deployment. Gold, Silver,
-Copper (CME/HG), Platinum, Palladium. Momentum / Carry / Value only,
-same format as the Metals/Energy/NGL Stage 2 rebuilds -- reuses the
-identical shared engine (common_engine.py) so every dashboard behaves
-identically. No custom default overrides are needed here (unlike NGL) --
-these are liquid, standard COMEX/NYMEX futures with a normal front-month
-convention, so the Metals/Energy defaults (F1-F2 carry, F8/5yr value)
-apply unchanged.
+Platinum, Palladium. Momentum / Carry / Value only, same format as the
+Metals/Energy/NGL Stage 2 rebuilds -- reuses the identical shared engine
+(common_engine.py) so every dashboard behaves identically. No custom
+default overrides are needed here (unlike NGL) -- these are liquid,
+standard COMEX/NYMEX futures with a normal front-month convention, so the
+Metals/Energy defaults (F1-F2 carry, F8/5yr value) apply unchanged.
+
+Copper (COMEX/HG) removed from this dashboard 2026-08-05 (user's explicit
+decision) -- across the product selector, every standalone tab, and the
+Portfolio tab. It was miscategorized here originally: Copper is an
+industrial metal already covered by the Metals asset class (LME), not a
+precious metal. Remains in research/configs/precious.py's own PRODUCTS
+list for the research pipeline; this is a dashboard-display-only
+exclusion, not an engine change.
 """
 
 import os
@@ -41,10 +48,13 @@ inject_css()
 
 # unit_label: the product's natural pricing unit, used only for the
 # TC-per-flip $ display in the sidebar -- has no effect on the Sharpe/PnL math.
+# Copper (HG) removed 2026-08-05 -- see module docstring. Remains in
+# research/configs/precious.py's own PRODUCTS list.
 PRODUCT_UNITS = {
-    "GC": "/oz", "SI": "/oz", "HG": "/lb", "PL": "/oz", "PA": "/oz",
+    "GC": "/oz", "SI": "/oz", "PL": "/oz", "PA": "/oz",
 }
-PRODUCT_ORDER = ["GC", "SI", "HG", "PL", "PA"]
+PRODUCT_ORDER = ["GC", "SI", "PL", "PA"]
+PRECIOUS_PORTFOLIO_EXCLUDED = ("Copper_COMEX",)
 
 with st.sidebar:
     st.markdown('<p class="main-title">✨ Precious Metals Dashboard</p>', unsafe_allow_html=True)
@@ -62,8 +72,9 @@ with st.sidebar:
         index=0, key="precious_roll_method",
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="precious_roll_n")
-    st.caption("Gold/Silver/Copper (COMEX), Platinum/Palladium (NYMEX). Same Momentum/Carry/Value "
-               "format as the Metals, Energy, and NGL dashboards.")
+    st.caption("Gold, Silver, Platinum, Palladium (COMEX/NYMEX). Copper (COMEX) is excluded from "
+               "this dashboard as of 2026-08-05; it remains in the underlying research config and "
+               "engine. Same Momentum/Carry/Value format as the Metals, Energy, and NGL dashboards.")
 
 cfg = PRECIOUS_CONFIG[product_code]
 unit = PRODUCT_UNITS[product_code]
@@ -112,10 +123,13 @@ with tab_compare:
                                             "Value": value_positions})
 
 with tab_portfolio:
-    st.caption("Combines all 5 Precious Metals products (Gold, Silver, Copper-COMEX, Platinum, "
-               "Palladium) into one asset-class-level portfolio -- independent of the sidebar's "
-               "Product selection above, which only affects the Momentum/Carry/Value/Comparison "
-               "tabs. No StatArb sleeve for this asset class: tested rigorously across all 10 "
-               "pairs (including Gold-Silver and Platinum-Palladium) and found to be a genuine "
-               "null, so it was never built here.")
-    render_portfolio_tab(precious_research_cfg, key_prefix="precious_portfolio")
+    st.caption("Combines 4 Precious Metals products (Gold, Silver, Platinum, Palladium) into one "
+               "asset-class-level portfolio -- independent of the sidebar's Product selection "
+               "above, which only affects the Momentum/Carry/Value/Comparison tabs. Copper (COMEX) "
+               "is excluded here too (dashboard-only, see sidebar note); it still exists in "
+               "research/configs/precious.py's own PRODUCTS list for the research pipeline. No "
+               "StatArb sleeve for this asset class: tested rigorously across all 10 pairs "
+               "(including Gold-Silver and Platinum-Palladium) and found to be a genuine null, so "
+               "it was never built here.")
+    render_portfolio_tab(precious_research_cfg, key_prefix="precious_portfolio",
+                          excluded_products=PRECIOUS_PORTFOLIO_EXCLUDED)

@@ -33,9 +33,11 @@ widget keys. Nothing here is Metals-specific, so the remaining three
 dashboards can add the same tab later by importing their own config.
 
 Combine-method roadmap: Equal Weight, Inverse Vol (rolling, trailing-
-vol-window reweighting -- see combine_returns() in research/engine.py), and
+vol-window reweighting -- see combine_returns() in research/engine.py),
 Risk Parity (rolling Equal Risk Contribution over the full covariance
-matrix -- see research/risk_parity.py) are all exposed for portfolio-level
+matrix -- see research/risk_parity.py), and Dynamic Risk Parity (rolling
+EWMA-vol/EWMA-covariance inverse-vol weighting with shrinkage and a
+volatility target -- see research/drp.py) are all exposed for portfolio-level
 combination -- the reference-strategy aggregate and any custom Portfolio
 Construction entry, via one shared selector (_combine_sleeves() below).
 Leg-level combination within one strategy family (combine_positions())
@@ -66,15 +68,19 @@ from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E40
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_value)
 from risk_parity import rolling_erc_combine  # noqa: E402
+from drp import rolling_drp_combine  # noqa: E402
 
-COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)"]
+COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"]
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
 CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
 
 FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value"]
 FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value"}
-DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 2}
+# "Value": 1, changed from 2 -- user's decision 2026-08-04: shift_n=1 is now the locked
+# default for every strategy family, project-wide. See research/configs/metals.py's
+# VALUE_SHIFT_N comment for the full rationale.
+DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 1}
 
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
            "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
@@ -269,17 +275,30 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
     raise ValueError(f"Unknown family {family!r}")
 
 
+def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Series:
+    """Pre-shift combined raw signal for one strategy family on one product --
+    the leg-combination step shared by _instance_product_returns, exposed
+    separately so a caller can combine this signal further with ANOTHER
+    instance's raw signal before a single execution shift is applied (e.g.
+    Combined Carry's across-tenor-pair combination, which must average two
+    tenor pairs' raw composite signals, shift ONCE, then compute PnL --
+    not average two tenor pairs' already-shifted PnL series)."""
+    if not instance["legs"]:
+        return pd.Series(dtype=float)
+    raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
+    raws = [r for r in raws if not r.empty]
+    if not raws:
+        return pd.Series(dtype=float)
+    return raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
+
+
 def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
     """Gross and net daily log-return contribution of one strategy family
     (a reference strategy or a draft sleeve) on one product."""
     empty = pd.Series(dtype=float)
-    if not instance["legs"]:
+    combo = _instance_product_raw_signal(instance, product_data)
+    if combo.empty:
         return empty, empty
-    raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
-    raws = [r for r in raws if not r.empty]
-    if not raws:
-        return empty, empty
-    combo = raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
     pos = exec_shift(combo, int(instance["shift_n"])).fillna(0)
     return log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
 
@@ -290,6 +309,37 @@ def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd
     grosses, nets = [], []
     for product_data in data.values():
         g, n = _instance_product_returns(instance, product_data, tc_bps)
+        if not n.empty:
+            grosses.append(g)
+            nets.append(n)
+    empty = pd.Series(dtype=float)
+    gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
+    net_agg = combine_returns(nets, "equal_weight") if nets else empty
+    return gross_agg, net_agg
+
+
+def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict],
+                                    data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+    """Signal-level Combined Carry / Combined CarryMom (Dimil's construction,
+    Methodology doc Section 7): for each product, equal-weight this asset
+    class's Carry tenor pairs' raw (pre-shift) composite signals into ONE
+    combined raw signal, apply the execution shift ONCE to that combined
+    result, then compute PnL -- NOT a return-level average of each tenor
+    pair's own already-shifted, already-PnL'd series (that was tonight's
+    earlier, incorrect version; this one is verified to reproduce Dimil's
+    real Metals numbers exactly). `tenor_instances` are this family's
+    per-tenor-pair reference instances (e.g. "Carry (F1-F3)", "Carry
+    (F1-F13)"), each contributing one raw composite signal per product."""
+    shift_n = cfg.CARRY_SHIFT_N if family == "Carry" else cfg.CARRY_MOMENTUM_SHIFT_N
+    grosses, nets = [], []
+    for product_data in data.values():
+        raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
+        raws = [r for r in raws if not r.empty]
+        if not raws:
+            continue
+        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
+        pos = exec_shift(combo, shift_n).fillna(0)
+        g, n = log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
         if not n.empty:
             grosses.append(g)
             nets.append(n)
@@ -336,18 +386,31 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
     def _slice(s):
         return s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
 
-    def _sharpe(s):
-        return float(s.mean() / s.std(ddof=1) * np.sqrt(252)) if len(s) > 20 and s.std(ddof=1) > 0 else np.nan
+    def _true_ann_vol(s):
+        """True compounded annual return and true annualized volatility of
+        SIMPLE returns, not log-return figures -- see research/
+        run_regime_table.py::_metrics for the full derivation of both."""
+        if len(s) > 20 and s.std(ddof=1) > 0:
+            log_ann = float(s.mean() * 252)
+            ann = float((np.exp(log_ann) - 1) * 100)
+            vol = float(np.expm1(s).std(ddof=1) * np.sqrt(252) * 100)
+            return ann, vol
+        return np.nan, np.nan
+
+    def _sharpe(ann_pct, vol_pct):
+        """IR from the SAME true-% ann/vol (same units) -- see
+        research/run_regime_table.py::_metrics for the full rationale."""
+        return float(ann_pct / vol_pct) if pd.notna(vol_pct) and vol_pct > 0 else np.nan
 
     g, n = _slice(gross), _slice(net)
-    if len(n) > 20 and n.std(ddof=1) > 0:
-        ann = float(n.mean() * 252 * 100)
-        vol = float(n.std(ddof=1) * np.sqrt(252) * 100)
-    else:
-        ann = vol = np.nan
+    gross_ann, gross_vol = _true_ann_vol(g)
+    ann, vol = _true_ann_vol(n)
+    # True value-based drawdown, not log-space peak-to-trough -- see
+    # research/run_regime_table.py::_metrics for the full derivation.
     cum = n.cumsum()
-    mdd = float((cum - cum.cummax()).min() * 100) if len(cum) else np.nan
-    return dict(gross=_sharpe(g), net=_sharpe(n), ann=ann, vol=vol, mdd=mdd)
+    value = np.exp(cum)
+    mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
+    return dict(gross=_sharpe(gross_ann, gross_vol), net=_sharpe(ann, vol), ann=ann, vol=vol, mdd=mdd)
 
 
 def _fmt(x, fmt_spec: str) -> str:
@@ -381,6 +444,15 @@ def _render_reference_strategy(instance: dict) -> None:
         for leg in instance["legs"]:
             st.markdown(f"- {_describe_leg(instance['family'], leg)}")
         st.caption(f"Execution lag (shift_n): {instance['shift_n']}  |  Combine legs via: Equal Weight")
+
+
+def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str]], note: str) -> None:
+    """Read-only card for a Combined Carry / Combined CarryMom reference row --
+    equal-weight of the per-tenor-pair legs it's built from."""
+    with st.expander(label, expanded=False):
+        for near, far in tenor_pairs:
+            st.markdown(f"- {note} ({near}-{far})")
+        st.caption("Combine tenor pairs via: Equal Weight")
 
 
 # Leg rendering (shared by every editable leg list -- currently only the
@@ -572,15 +644,17 @@ def _combine_sleeves(gross_by_name: dict[str, pd.Series], net_by_name: dict[str,
                       tilt: float = 0.0) -> tuple[pd.Series, pd.Series]:
     """Combine several strategies' gross/net return series under the selected UI method.
 
-    Risk Parity solves weights on the tradeable NET series only, then applies that exact
-    schedule to gross via _apply_weight_schedule -- risk allocation should be decided on the
-    cost-inclusive series, not a second, independent solve on gross. Equal Weight is also the
-    fallback with fewer than two series, since none of the weighting schemes have anything to
-    weight in that case (matches each method's own single-series pass-through/fallback).
+    Risk Parity and Dynamic Risk Parity both solve weights on the tradeable NET series only,
+    then apply that exact schedule to gross via _apply_weight_schedule -- risk allocation
+    should be decided on the cost-inclusive series, not a second, independent solve on gross.
+    Equal Weight is also the fallback with fewer than two series, since none of the weighting
+    schemes have anything to weight in that case (matches each method's own single-series
+    pass-through/fallback).
 
     `tilt` only applies to Risk Parity (0 = pure ERC, the default; see
     risk_parity.sharpe_tilted_budget for what higher values do) and is ignored by the other
-    two methods."""
+    methods, including Dynamic Risk Parity, which has no tilt concept of its own (inverse-vol
+    weighting only, no risk-contribution solve to tilt)."""
     if len(net_by_name) < 2:
         return (combine_returns(list(gross_by_name.values()), "equal_weight"),
                 combine_returns(list(net_by_name.values()), "equal_weight"))
@@ -589,6 +663,10 @@ def _combine_sleeves(gross_by_name: dict[str, pd.Series], net_by_name: dict[str,
                 combine_returns(list(net_by_name.values()), "inverse_vol", vol_window=vol_window))
     if combine_method == "Risk Parity (ERC, rolling)":
         net_combined, weights_over_time = rolling_erc_combine(net_by_name, tilt=tilt)
+        gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
+        return gross_combined, net_combined
+    if combine_method == "Dynamic Risk Parity (DRP, rolling)":
+        net_combined, weights_over_time = rolling_drp_combine(net_by_name)
         gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
         return gross_combined, net_combined
     return (combine_returns(list(gross_by_name.values()), "equal_weight"),
@@ -658,8 +736,11 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
              "Inverse Vol: reweights every day using each strategy's own trailing realized vol "
              "(lower-vol strategies get more weight), ignoring correlation. Risk Parity (ERC): "
              "each strategy contributes equal RISK, solved from the full rolling covariance "
-             "matrix and rebalanced every ~21 trading days from the trailing 252 days. All three "
-             "are identical with only one strategy enabled.")
+             "matrix and rebalanced every ~21 trading days from the trailing 252 days. Dynamic "
+             "Risk Parity (DRP): inverse-EWMA-vol weighting (20-day half-life vol, 60-day "
+             "half-life covariance, correlations shrunk 50% toward zero), rescaled to match "
+             "Equal Weight's own full-sample volatility, rebalanced every ~21 trading days. All "
+             "four are identical with only one strategy enabled.")
     vol_window = 63
     if combine_method == "Inverse Vol":
         vol_window = st.number_input(
@@ -684,9 +765,32 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     st.caption("The officially reported parameter set for this asset class, shown here for "
                "comparison. Read-only -- use Portfolio Construction below to combine them: "
                "switching a family on there pre-fills it with these exact same parameters.")
+
+    has_multi_tenor = len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2
+    separate_tenor_carry = False
+    if has_multi_tenor:
+        separate_tenor_carry = st.checkbox(
+            "Treat Carry / Carry-Momentum tenor pairs as separate strategies",
+            value=False, key=f"{key_prefix}_pf_separate_tenor",
+            help="Off (default): this asset class's two Carry tenor pairs are equal-weighted "
+                 "into one Combined Carry row, and the two CarryMom tenor pairs into one "
+                 "Combined CarryMom row -- four reference strategies total (Momentum, "
+                 "Combined Carry, Combined CarryMom, Value). On: show each tenor pair as "
+                 "its own row instead -- six total (Momentum, Carry x2, CarryMom x2, Value) "
+                 "-- this project's original convention. Applies to the reference strategies "
+                 "below, the strategy pickers further down, and the reference-strategy "
+                 "portfolio aggregate.")
+
     reference_strategies = _build_reference_strategies(cfg)
-    for instance in reference_strategies:
-        _render_reference_strategy(instance)
+    if separate_tenor_carry or not has_multi_tenor:
+        for instance in reference_strategies:
+            _render_reference_strategy(instance)
+    else:
+        by_id = {inst["id"]: inst for inst in reference_strategies}
+        _render_reference_strategy(by_id["mom"])
+        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V1+V2 composite")
+        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry-Momentum")
+        _render_reference_strategy(by_id["value"])
 
     section_header("Portfolio construction")
     st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
@@ -771,14 +875,59 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             portfolios.pop(to_remove)
             st.rerun()
 
-    instance_gross, instance_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded_products)
+    raw_gross, raw_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded_products)
+
+    # "Combined Carry" alternative construction (added 2026-08-04, corrected to signal-level
+    # 2026-08-04): equal-weight this asset class's two Carry tenor pairs' raw signals into one
+    # Combined Carry row, and the two CarryMom tenor pairs' raw signals into one Combined
+    # CarryMom row, shifting once -- Dimil's construction from Research_Dashboard_CombinedCarry
+    # .html / Methodology doc Section 7, verified to reproduce his real Metals numbers exactly
+    # (see research/_validate_signal_combine.py). This is now the DEFAULT view (four reference
+    # strategies: Momentum, Combined Carry, Combined CarryMom, Value); the `separate_tenor_carry`
+    # checkbox above switches back to the original six-row breakdown. Only meaningful with >=2
+    # Carry tenor pairs, so this always falls through to the raw six-row set for Precious Metals
+    # (one pair only, nothing to combine).
+    if raw_net and has_multi_tenor and not separate_tenor_carry:
+        by_id = {inst["id"]: inst for inst in reference_strategies}
+        carry_tenor_instances = [by_id[f"carry_{near}{far}"] for near, far in cfg.CARRY_TENOR_PAIRS
+                                  if f"carry_{near}{far}" in by_id]
+        carrymom_tenor_instances = [by_id[f"carrymom_{near}{far}"] for near, far in cfg.CARRY_TENOR_PAIRS
+                                     if f"carrymom_{near}{far}" in by_id]
+        if len(carry_tenor_instances) == len(cfg.CARRY_TENOR_PAIRS) and \
+           len(carrymom_tenor_instances) == len(cfg.CARRY_TENOR_PAIRS):
+            cc_gross, cc_net = _combined_tenor_family_returns("Carry", cfg, carry_tenor_instances, data, tc_bps)
+            ccm_gross, ccm_net = _combined_tenor_family_returns("CarryMom", cfg, carrymom_tenor_instances, data, tc_bps)
+            instance_gross = {"Momentum": raw_gross["Momentum"], "Combined Carry": cc_gross,
+                               "Combined CarryMom": ccm_gross, "Value": raw_gross["Value"]}
+            instance_net = {"Momentum": raw_net["Momentum"], "Combined Carry": cc_net,
+                             "Combined CarryMom": ccm_net, "Value": raw_net["Value"]}
+        else:
+            instance_gross, instance_net = dict(raw_gross), dict(raw_net)
+    else:
+        instance_gross, instance_net = dict(raw_gross), dict(raw_net)
 
     if instance_net:
-        agg_label = f"{combine_method} Portfolio (all reference strategies)"
+        # Stable key, deliberately NOT combine_method-dependent (was
+        # f"{combine_method} Portfolio (all reference strategies)" until
+        # 2026-09-23): that made switching the "Combine strategies via"
+        # dropdown mint a brand-new dict key every time, so the sticky
+        # `applied` selection state below (which only updates on "Refresh
+        # Results") silently fell back to metric_labels[0] ("Momentum") for
+        # the metric cards and dropped the aggregate row out of `shown`
+        # entirely -- the dropdown recomputed DRP/ERC correctly under the
+        # hood, but the chart and cards kept showing whatever unaffected
+        # individual strategy happened to still match the stale sticky
+        # state, silently reverting instead of erroring. Keeping this key
+        # fixed lets `applied["metric_strategy"]`/`applied["shown"]` keep
+        # pointing at the SAME row across a combine_method switch, so the
+        # existing selection just updates in place.
+        agg_label = "Portfolio (all reference strategies)"
         agg_gross, agg_net = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
                                                tilt=return_tilt)
         instance_gross[agg_label] = agg_gross
         instance_net[agg_label] = agg_net
+        st.caption(f"\"{agg_label}\" below is currently combined via **{combine_method}** "
+                   f"(change it with the \"Combine strategies via\" dropdown above).")
 
     for p in portfolios:
         instance_gross[p["label"]] = p["gross"]
@@ -862,19 +1011,27 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
         if window.empty:
             continue
-        eq = window.cumsum() * 100
+        # True cumulative %, not log-return % -- see research/run_regime_table.py::_metrics for
+        # the full derivation. Matches the metric cards above (ann/mdd already true %).
+        eq = (np.exp(window.cumsum()) - 1) * 100
         fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
                                   line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
         if len(window) > 20 and window.std(ddof=1) > 0:
-            ret = float(window.mean() * 252 * 100)
-            vol = float(window.std(ddof=1) * np.sqrt(252) * 100)
+            log_ret = float(window.mean() * 252)
+            ret = (np.exp(log_ret) - 1) * 100
+            # True annualized volatility of simple returns, not the log-return
+            # distribution's spread -- see research/run_regime_table.py::
+            # _metrics for the full derivation.
+            vol = float(np.expm1(window).std(ddof=1) * np.sqrt(252) * 100)
+            # IR from the SAME true-% ret/vol above (same units) -- see
+            # research/run_regime_table.py::_metrics for the full rationale.
             ir = ret / vol if vol > 0 else np.nan
         else:
             ret = vol = ir = np.nan
         rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})
 
     layout = dict(CHART_LAYOUT)
-    layout["yaxis_title"] = "Cumulative Log-Return (%)"
+    layout["yaxis_title"] = "Cumulative Return (%)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=460)
     st.plotly_chart(fig, use_container_width=True)
 

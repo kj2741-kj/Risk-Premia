@@ -22,7 +22,7 @@ const CN_COMBINE_HELP =
   "match Equal Weight's own full-sample volatility (research/drp.py). No Risk Parity (ERC) option " +
   "at this level.";
 const CORR_YEAR_HELP =
-  "Restricts the correlation calculation to this sub-period -- a static recomputation over " +
+  "Restricts the correlation calculation to this sub-period: a static recomputation over " +
   "whichever years you pick, not a rolling window. Compare different historical regimes (e.g. " +
   "2015-2020 vs 2020-2026) to see whether a correlation is stable or regime-dependent.";
 
@@ -151,8 +151,8 @@ export default function CrossAssetPage() {
     <div className="page">
       <h1>🌐 Cross-Asset Portfolio</h1>
       <p className="tab-caption">
-        Combining asset classes into one book (Research_Methodology.docx Section 9). Calendar alignment:
-        intersection -- a date where any selected asset class isn't trading is dropped entirely, with a
+        Combining asset classes into one book (Research_Methodology.docx Section 9). Calendar alignment is by
+        intersection: a date where any selected asset class isn't trading is dropped entirely, with a
         dropped date's move rolled into the next surviving date so no leg's real return is lost.
       </p>
 
@@ -224,7 +224,7 @@ export default function CrossAssetPage() {
         How the Cross-Commodity Portfolio's strategy rows (Momentum/Carry/CarryMom/Value/EW PORT/Risk
         Parity/Dynamic Risk Parity) correlate with Equity (S&amp;P 500), Fixed Income (US Aggregate Bond), a
         broad passive Commodity Index (DBC), Gold as a distinct safe-haven, and a traditional 60/40
-        stock-bond portfolio -- the standard "does this add value beyond simple beta, and does it diversify
+        stock-bond portfolio: the standard "does this add value beyond simple beta, and does it diversify
         a traditional portfolio" questions for any systematic commodity strategy. Data: research/benchmarks.py
         (yfinance daily prices, cached locally).
       </p>
@@ -248,10 +248,10 @@ export default function CrossAssetPage() {
 
       <hr className="divider" />
       <p className="caption">
-        Engine: research/cross_asset_engine.py (new, isolated module -- does not modify common_engine.py,
+        Engine: research/cross_asset_engine.py (a new, isolated module that does not modify common_engine.py,
         research/engine.py, research/risk_parity.py, or any of the 4 live asset-class dashboards).
         Signal-level Carry/Carry-Momentum combination across tenor pairs (Methodology doc Section 7), not
-        the return-level construction used in an earlier static HTML report edit -- these numbers and those
+        the return-level construction used in an earlier static HTML report edit; these numbers and those
         reports are not directly comparable until the reports are regenerated to match.
       </p>
     </div>

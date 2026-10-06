@@ -185,7 +185,7 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
         </div>
       )}
 
-      <div className="section-header">Sharpe Heatmap — Fast × Slow MA Crossover</div>
+      <div className="section-header">Sharpe Heatmap: Fast × Slow MA Crossover</div>
       <div className="control-row">
         <label>Max window <input type="number" min={10} max={500} value={heatmapMaxWindow}
           onChange={(e) => setHeatmapMaxWindow(Number(e.target.value))} /></label>
@@ -214,7 +214,7 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
 
       {data && (
         <>
-          <div className="section-header">Cumulative PnL (Equity Curve, {data.unit_label}) — Net of TC</div>
+          <div className="section-header">Cumulative PnL (Equity Curve, {data.unit_label}): Net of TC</div>
           <div className="control-row">
             <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
               onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

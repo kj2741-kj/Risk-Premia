@@ -41,7 +41,7 @@ export default function ComparisonTab({ assetClass, product, groups }: Compariso
     return (
       <div className="tab-panel">
         <p className="tab-caption">
-          Open the Momentum, Carry, and Value tabs above at least once — this tab overlays whatever strategies
+          Open the Momentum, Carry, and Value tabs above at least once; this tab overlays whatever strategies
           are currently active there.
         </p>
       </div>
@@ -57,7 +57,7 @@ export default function ComparisonTab({ assetClass, product, groups }: Compariso
         Overlays every strategy currently active in the Momentum, Carry, and Value tabs above.
       </p>
 
-      <div className="section-header">Underlying Volatility — {product}</div>
+      <div className="section-header">Underlying Volatility: {product}</div>
       <div className="control-row">
         <label>Window
           <select value={volWindowLabel} onChange={(e) => setVolWindowLabel(e.target.value)}>
@@ -92,7 +92,7 @@ export default function ComparisonTab({ assetClass, product, groups }: Compariso
         })}
       </div>
 
-      <div className="section-header">Cumulative PnL (Equity Curve) — Net of TC</div>
+      <div className="section-header">Cumulative PnL (Equity Curve): Net of TC</div>
       <div className="control-row">
         <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
           onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

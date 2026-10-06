@@ -161,7 +161,7 @@ def get_momentum(
         hovertemplate="%{x|%b %d, %Y}<br>Short<extra></extra>",
     ), row=2, col=1)
     fig_sig.update_layout(**CHART_LAYOUT, height=500, barmode="overlay",
-                           title=dict(text=f"{focus_label} — Price & Position", font=dict(size=13)),
+                           title=dict(text=f"{focus_label}: Price & Position", font=dict(size=13)),
                            hovermode="x unified", showlegend=True)
     fig_sig.update_yaxes(title_text="F1 Price", row=1, col=1)
     fig_sig.update_yaxes(title_text="Position", tickvals=[-1, 0, 1],
@@ -208,7 +208,7 @@ def get_momentum_heatmap(
         hovertemplate="Fast MA: %{y}<br>Slow MA: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
     ))
     fig_hm.update_layout(**CHART_LAYOUT, height=560, dragmode="zoom",
-                          title=dict(text=f"{product} — Sharpe by MA Crossover", font=dict(size=13)),
+                          title=dict(text=f"{product}: Sharpe by MA Crossover", font=dict(size=13)),
                           xaxis_title="Slow MA", yaxis_title="Fast MA")
     fig_hm.update_xaxes(rangeslider=dict(visible=False))
 

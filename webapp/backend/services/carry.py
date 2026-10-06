@@ -148,7 +148,7 @@ def get_carry(
     fig_sig.add_trace(go.Bar(x=pos_w.index, y=pos_long.values, name="Long (+1)", marker_color="#00E676"), row=2, col=1)
     fig_sig.add_trace(go.Bar(x=pos_w.index, y=pos_short.values, name="Short (-1)", marker_color="#FF1744"), row=2, col=1)
     fig_sig.update_layout(**CHART_LAYOUT, height=500, barmode="overlay",
-                           title=dict(text=f"{focus_label} — Price & Position", font=dict(size=13)),
+                           title=dict(text=f"{focus_label}: Price & Position", font=dict(size=13)),
                            hovermode="x unified", showlegend=True)
     fig_sig.update_yaxes(title_text="F1 Price", row=1, col=1)
     fig_sig.update_yaxes(title_text="Position", tickvals=[-1, 0, 1], ticktext=["Short", "Flat", "Long"], row=2, col=1)
@@ -200,7 +200,7 @@ def get_carry_heatmap(
     else:
         signal_desc = f"V2 Z-score ({days}d)"
     fig_hm.update_layout(**CHART_LAYOUT, height=560,
-                          title=dict(text=f"{product} — Carry Sharpe by Contract Pair ({signal_desc})", font=dict(size=13)),
+                          title=dict(text=f"{product}: Carry Sharpe by Contract Pair ({signal_desc})", font=dict(size=13)),
                           xaxis_title="Far Contract", yaxis_title="Near Contract")
 
     best = hm_df.loc[hm_df["sharpe"].idxmax()]

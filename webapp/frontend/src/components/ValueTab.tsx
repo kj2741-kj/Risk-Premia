@@ -177,7 +177,7 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
         </div>
       )}
 
-      <div className="section-header">Sharpe Heatmap — Contract × Lookback</div>
+      <div className="section-header">Sharpe Heatmap: Contract × Lookback</div>
       <div className="control-row">
         <label>Threshold
           <select value={hmThreshold} onChange={(e) => setHmThreshold(Number(e.target.value))}>
@@ -207,7 +207,7 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
 
       {data && (
         <>
-          <div className="section-header">Cumulative PnL (Equity Curve, {data.unit_label}) — Net of TC</div>
+          <div className="section-header">Cumulative PnL (Equity Curve, {data.unit_label}): Net of TC</div>
           <div className="control-row">
             <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
               onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

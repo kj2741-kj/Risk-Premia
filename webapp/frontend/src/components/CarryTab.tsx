@@ -211,7 +211,7 @@ export default function CarryTab({ assetClass, product, onPositionsChange }: Car
         </div>
       )}
 
-      <div className="section-header">Sharpe Heatmap — Contract Pair × Carry Signal</div>
+      <div className="section-header">Sharpe Heatmap: Contract Pair × Carry Signal</div>
       <div className="control-row">
         <label>Horizon (days) <input type="text" value={hmDays} onChange={(e) => setHmDays(e.target.value)} /></label>
         {hmDays.trim().toUpperCase() !== "N/A" && !Number.isNaN(Number(hmDays)) && (
@@ -254,7 +254,7 @@ export default function CarryTab({ assetClass, product, onPositionsChange }: Car
 
       {data && (
         <>
-          <div className="section-header">Cumulative PnL (Equity Curve, {data.unit_label}) — Net of TC</div>
+          <div className="section-header">Cumulative PnL (Equity Curve, {data.unit_label}): Net of TC</div>
           <div className="control-row">
             <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
               onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

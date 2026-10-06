@@ -26,15 +26,15 @@ const COMBINE_HELP =
 const TILT_HELP =
   "0 = pure Equal Risk Contribution (risk only, no return awareness). Sliding up blends in a risk budget " +
   "proportional to each sleeve's own trailing Sharpe (same rolling window as the covariance, never " +
-  "looking ahead) -- a weak or negative-Sharpe sleeve still keeps a small floor of risk budget rather " +
+  "looking ahead); a weak or negative-Sharpe sleeve still keeps a small floor of risk budget rather " +
   "than being fully excluded, so even tilt=1 stays diversified, not concentrated in a single sleeve. " +
-  "Trailing Sharpe over any one rolling window is a genuinely noisy estimate -- this does not guarantee " +
-  "a higher return, it only tilts risk toward whichever sleeve looked stronger recently.";
+  "Trailing Sharpe over any one rolling window is a genuinely noisy estimate, and this does not guarantee " +
+  "a higher return; it only tilts risk toward whichever sleeve looked stronger recently.";
 const SEPARATE_TENOR_HELP =
   "Off (default): this asset class's two Carry tenor pairs are equal-weighted into one Combined Carry " +
-  "row, and the two CarryMom tenor pairs into one Combined CarryMom row -- four reference strategies " +
+  "row, and the two CarryMom tenor pairs into one Combined CarryMom row: four reference strategies " +
   "total (Momentum, Combined Carry, Combined CarryMom, Value). On: show each tenor pair as its own row " +
-  "instead -- six total (Momentum, Carry x2, CarryMom x2, Value) -- this project's original convention. " +
+  "instead: six total (Momentum, Carry x2, CarryMom x2, Value); this project's original convention. " +
   "Applies to the reference strategies below, the strategy pickers further down, and the " +
   "reference-strategy portfolio aggregate.";
 const FAR_NEAR_OPTIONS = Array.from({ length: 15 }, (_, i) => `F${i + 1}`);
@@ -243,7 +243,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
       <div className="section-header">Reference Strategies</div>
       <p className="tab-caption">
         The officially reported parameter set for this asset class, shown here for comparison.
-        Read-only -- use Portfolio Construction below to combine them: switching a family on there
+        Read-only; use Portfolio Construction below to combine them: switching a family on there
         pre-fills it with these exact same parameters.
       </p>
       {hasMultiTenor && (
@@ -296,7 +296,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
       <div className="section-header">Portfolio Construction</div>
       <p className="tab-caption">
         Switch on whichever strategy families belong in this portfolio. Each pre-fills with its
-        reference parameters -- edit to customize, or leave as-is.
+        reference parameters; edit to customize, or leave as-is.
       </p>
       {FAMILY_ORDER.map((family) => {
         const sleeve = draft[family];
@@ -424,7 +424,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
           <div className="section-header">Your Portfolios</div>
           {portfolios.map((p) => (
             <div className="control-row" key={p.label}>
-              <span>{p.label} -- {p.sleeves.map((s) => FAMILY_TITLE[s.family]).join(" + ")}</span>
+              <span>{p.label}: {p.sleeves.map((s) => FAMILY_TITLE[s.family]).join(" + ")}</span>
               <button onClick={() => removePortfolio(p.label)}>Remove</button>
             </div>
           ))}

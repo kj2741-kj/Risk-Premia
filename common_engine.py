@@ -582,8 +582,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     section_header(f"CARRY: {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. Three variants are "
-               "available: V1 - Carry slope (Roll Yield / Long Slope, any contract pair), V2 - Z-score on carry slope, "
-               "and V3 - Carry momentum.")
+               "available: V1 - Carry slope, V2 - Z-score on carry slope and V3 - Carry momentum. All three take any "
+               f"(Near, Far) contract pair; V2 and V3 default to ({near_default}-{far_default}).")
 
     tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
@@ -613,31 +613,30 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     V1_LABEL, V2_LABEL, V3_LABEL = "V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"
 
     st.markdown("**Add a Carry Variant**")
-    st.caption("V1 - Carry slope takes any (Near, Far) contract pair, covering what used to be separate V1 Roll "
-               "Yield and V2 Long Slope variants, the identical formula just with a different pair, so "
-               "one flow covers both (same unification as the heatmap's \"N/A\" mode below).")
-    vcol1, vcol2, vcol3, vcol4 = st.columns([1.3, 1, 1, 0.9])
+    st.caption("Every variant takes any (Near, Far) contract pair. V2 - Z-score on carry slope and V3 - Carry momentum "
+               f"default to ({near_default}-{far_default}); pick a different pair to add them on another tenor. "
+               "A variant on the default pair keeps its short label, e.g. \"V2 (win=252)\".")
+    vcol1, vcol2, vcol3, vcol4, vcol5 = st.columns([1.3, 0.8, 0.8, 1, 0.8])
     with vcol1:
         vgroup = st.selectbox("Variant", [V1_LABEL, V2_LABEL, V3_LABEL], key=f"{key_prefix}_car_vgroup")
-    near_sub = far_sub = None
     with vcol2:
-        if vgroup == V1_LABEL:
-            near_options = all_contracts[:-1] if len(all_contracts) > 1 else all_contracts
-            near_idx = near_options.index(near_default) if near_default in near_options else 0
-            near_sub = st.selectbox("Near", near_options, index=near_idx, key=f"{key_prefix}_car_near")
-        elif vgroup == V3_LABEL:
-            sub = st.selectbox("Horizon (days)", [5, 10, 20, 60], index=2, key=f"{key_prefix}_car_sub")
-        elif vgroup == V2_LABEL:
-            sub = st.selectbox("Window (days)", [126, 252, 504], index=1, key=f"{key_prefix}_car_sub")
+        near_options = all_contracts[:-1] if len(all_contracts) > 1 else all_contracts
+        near_idx = near_options.index(near_default) if near_default in near_options else 0
+        near_sub = st.selectbox("Near", near_options, index=near_idx, key=f"{key_prefix}_car_near")
     with vcol3:
-        if vgroup == V1_LABEL:
-            far_options = [c for c in all_contracts if int(c[1:]) > int(near_sub[1:])]
-            far_idx = far_options.index(far_default) if far_default in far_options else 0
-            # Keyed on near_sub so switching Near always yields a fresh, valid
-            # Far list -- a fixed key here could otherwise retain a stale Far
-            # selection that isn't in the new (near-dependent) options list.
-            far_sub = st.selectbox("Far", far_options, index=far_idx, key=f"{key_prefix}_car_far_{near_sub}")
+        far_options = [c for c in all_contracts if int(c[1:]) > int(near_sub[1:])]
+        far_idx = far_options.index(far_default) if far_default in far_options else 0
+        # Keyed on near_sub so switching Near always yields a fresh, valid
+        # Far list -- a fixed key here could otherwise retain a stale Far
+        # selection that isn't in the new (near-dependent) options list.
+        far_sub = st.selectbox("Far", far_options, index=far_idx, key=f"{key_prefix}_car_far_{near_sub}")
+    sub = None
     with vcol4:
+        if vgroup == V3_LABEL:
+            sub = st.selectbox("Horizon (days)", [5, 10, 20, 60], index=2, key=f"{key_prefix}_car_sub_v3")
+        elif vgroup == V2_LABEL:
+            sub = st.selectbox("Window (days)", [126, 252, 504], index=1, key=f"{key_prefix}_car_sub_v2")
+    with vcol5:
         st.write("")
         st.write("")
         add_clicked = st.button("Add", key=f"{key_prefix}_car_add")
@@ -648,12 +647,13 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
                                      else [f"V1 ({near_default}-{far_default})", "V2 (win=252)", "V3 (N=20)"])
 
     if add_clicked:
+        pair_prefix = "" if (near_sub, far_sub) == (near_default, far_default) else f"{near_sub}-{far_sub}, "
         if vgroup == V1_LABEL:
             label = f"V1 ({near_sub}-{far_sub})"
         elif vgroup == V2_LABEL:
-            label = f"V2 (win={sub})"
+            label = f"V2 ({pair_prefix}win={sub})"
         else:
-            label = f"V3 (N={sub})"
+            label = f"V3 ({pair_prefix}N={sub})"
         if label not in st.session_state[ss_key]:
             st.session_state[ss_key] = st.session_state[ss_key] + [label]
 
@@ -662,16 +662,18 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         # Slope. V2 - Z-score on carry slope / V3 - Carry momentum keep their original underlying
         # functions (carry_v3_position/carry_v4_position); only the label
         # prefix shown to the user was renumbered to close the V1-V3 gap.
+        # Labels: "V1 (F1-F3)"; "V2 (win=252)" / "V3 (N=20)" on the default
+        # pair; "V2 (F1-F13, win=252)" / "V3 (F1-F13, N=20)" on any other pair.
+        parts = [x.strip() for x in label[label.index("(") + 1: label.rindex(")")].split(",")]
         if label.startswith("V1"):
-            pair = label[label.index("(") + 1: label.index(")")]
-            a, b = pair.split("-")
+            a, b = parts[0].split("-")
             return carry_v1_position(crv, a, b, shift_n=shift_n)
+        a, b = parts[0].split("-") if len(parts) == 2 else (near_default, far_default)
+        value = int(parts[-1].split("=")[1])
         if label.startswith("V2"):
-            win = int(label.split("=")[1].rstrip(")"))
-            return carry_v3_position(crv, win, shift_n=shift_n, near=near_default, far=far_default)
+            return carry_v3_position(crv, value, shift_n=shift_n, near=a, far=b)
         if label.startswith("V3"):
-            n = int(label.split("=")[1].rstrip(")"))
-            return carry_v4_position(crv, n, shift_n=shift_n, near=near_default, far=far_default)
+            return carry_v4_position(crv, value, shift_n=shift_n, near=a, far=b)
         return pd.Series(dtype=float)
 
     chosen = st.multiselect(

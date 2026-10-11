@@ -334,6 +334,105 @@ NGL_CONFIG: dict[str, dict] = {
     },
 }
 
+# ── Agriculture (data/Prices_0924/*.xlsx -- 2026-09-24 Bloomberg pull) ──────
+# Simple single-header-row price format, same as Metals/Energy/Precious above
+# (f1_col=1, f2_col=2, data_start_row=2 -- verified directly against
+# Agriculture_Futures_Updated.xlsx, no NGL-style front-month skip needed).
+#
+# Calendar file is a CONVERTED workbook (Agri_Rolling_Calendar.xlsx), not the
+# raw Prices_0924 drop -- the source (Expiry_Calendars_Updated_2.xlsx's
+# "Agriculture" sheet) holds all products in one consolidated sheet with
+# different column names (Last Trade Date/Last Delivery Date) than this
+# engine's expected LAST_TRADEABLE_DT/FUT_DLV_DT_LAST, so it was reshaped into
+# the same one-sheet-per-product schema as expiry_calendars_20260701.xlsx
+# above. See that conversion script's own validation output and
+# project_agri_expiry_calendar_source_errors memory for the two source data
+# errors found and handled during that conversion:
+#   - Cocoa (CC): one bad row dropped (contract J23 -- null dates, null
+#     contract size, Currency='THB', Name='Cameco Corp' -- a Bloomberg
+#     ticker-lookup collision, unrelated to cocoa).
+#   - Sugar No.11 (SB): EXCLUDED ENTIRELY, not present in this config or the
+#     calendar file -- confirmed systemic corruption (off-cycle month codes
+#     duplicate the adjacent real quarterly contract's date back to 2005; 16
+#     contracts from U24 through Q26 share an identical stale date). Needs a
+#     clean re-pull before Sugar can be added back.
+AGRI_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Agriculture_Futures_Updated.xlsx")
+AGRI_CALENDAR_FILE = os.path.join(DATA_DIR, "Prices_0924", "Agri_Rolling_Calendar.xlsx")
+
+AGRI_CONFIG: dict[str, dict] = {
+    "C": {
+        "name": "Corn (CBOT)", "price_sheet": "Corn CBOT",
+        "calendar_sheet": "C - Corn (CBOT)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "W": {
+        "name": "Wheat (CBOT)", "price_sheet": "Wheat CBOT",
+        "calendar_sheet": "W - Wheat (CBOT)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "O": {
+        "name": "Oats (CBOT)", "price_sheet": "Oats CBOT",
+        "calendar_sheet": "O - Oats (CBOT)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "RR": {
+        "name": "Rough Rice (CBOT)", "price_sheet": "Rough Rice CBOT",
+        "calendar_sheet": "RR - Rough Rice (CBOT)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "S": {
+        "name": "Soybean (CBOT)", "price_sheet": "Soybean CBOT",
+        "calendar_sheet": "S - Soybean (CBOT)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "BO": {
+        "name": "Soybean Oil (CBOT)", "price_sheet": "Soybean Oil CBOT",
+        "calendar_sheet": "BO - Soybean Oil (CBOT)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "SM": {
+        "name": "Soybean Meal (CBOT)", "price_sheet": "Soybean Meal CBOT",
+        "calendar_sheet": "SM - Soybean Meal (CBOT)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "KC": {
+        "name": "Coffee C (ICE)", "price_sheet": "Coffee C ICE",
+        "calendar_sheet": "KC - Coffee C (ICE)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "CC": {
+        "name": "Cocoa (ICE)", "price_sheet": "Cocoa ICE",
+        "calendar_sheet": "CC - Cocoa (ICE)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "JO": {
+        "name": "Orange Juice (ICE)", "price_sheet": "Orange Juice ICE",
+        "calendar_sheet": "JO - Orange Juice (ICE)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "CT": {
+        "name": "Cotton No.2 (ICE)", "price_sheet": "Cotton No.2 ICE",
+        "calendar_sheet": "CT - Cotton No.2 (ICE)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "FC": {
+        "name": "Feeder Cattle (CME)", "price_sheet": "Feeder Cattle CME",
+        "calendar_sheet": "FC - Feeder Cattle (CME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "LC": {
+        "name": "Live Cattle (CME)", "price_sheet": "Live Cattle CME",
+        "calendar_sheet": "LC - Live Cattle (CME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    "LH": {
+        "name": "Lean Hogs (CME)", "price_sheet": "Lean Hogs CME",
+        "calendar_sheet": "LH - Lean Hogs (CME)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+    # NOTE: "SB" (Sugar No.11 ICE) deliberately absent -- see comment block above.
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Data loaders

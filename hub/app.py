@@ -62,6 +62,8 @@ DASHBOARD_LINKS = {
                         "desc": "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value."},
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
                         "desc": "Ethane, Propane, Butane, Isobutane, Ethylene, Propylene. Momentum, Carry, Value."},
+    "Agriculture":    {"url": "https://risk-premia-agri.streamlit.app/", "ready": True,
+                        "desc": "14 grains, softs, oilseeds and livestock futures. Momentum, Carry, Value."},
 }
 
 # Cached data loaders for the Fundamental Analysis tab. Cached separately from
@@ -337,7 +339,7 @@ outside metals.
     st.caption("Each asset class below is its own independent dashboard. Open one to explore live "
                "signals, parameter controls, equity curves, rolling Sharpe, and performance metrics.")
 
-    nav_cols = st.columns(4)
+    nav_cols = st.columns(5)
     for col, (name, info) in zip(nav_cols, DASHBOARD_LINKS.items()):
         with col:
             st.markdown(f"**{name}**")

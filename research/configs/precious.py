@@ -73,7 +73,10 @@ from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_
 
 ASSET_CLASS = "Precious Metals"
 
-PRODUCTS = ["Gold", "Silver", "Copper_COMEX", "Platinum", "Palladium"]
+# Copper_COMEX removed from the research product list 2026-10-10 (user's decision), matching the
+# dashboard, which has excluded it since 2026-08-05. Its entries in METAL_CODES / SHEET_NAMES below
+# are kept so it can be re-added by editing this list only.
+PRODUCTS = ["Gold", "Silver", "Platinum", "Palladium"]
 
 METAL_CODES = {"Gold": "GC", "Silver": "SI", "Copper_COMEX": "HG", "Platinum": "PL", "Palladium": "PA"}
 

@@ -250,7 +250,12 @@ ENERGY_CONFIG: dict[str, dict] = {
 }
 
 PRECIOUS_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Precious_Metals_Futures_Updated.xlsx")
-PRECIOUS_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
+# Aligned 2026-10-10: GC/SI/PL/PA sheets keep only the contract months Bloomberg's
+# generic F1..Fn actually uses (Gold Feb/Apr/Jun/Aug/Oct/Dec, Silver Mar/May/Jul/Sep/Dec,
+# Platinum Jan/Apr/Jul/Oct, Palladium Mar/Jun/Sep/Dec); the original had all 12 months per metal,
+# which created spurious roll events. The HG sheet is unchanged (Copper-COMEX is not in the
+# Precious portfolio). Original kept as expiry_calendars_20260701.xlsx.
+PRECIOUS_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701_aligned.xlsx")
 
 PRECIOUS_CONFIG: dict[str, dict] = {
     "GC": {

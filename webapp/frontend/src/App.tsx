@@ -12,6 +12,7 @@ const NAV = [
   { to: "/energy", label: "Energy" },
   { to: "/precious", label: "Precious Metals" },
   { to: "/ngl", label: "NGL / Refined" },
+  { to: "/agri", label: "Agriculture" },
   { to: "/fundamental-analysis", label: "Fundamental Analysis" },
   { to: "/cross-asset", label: "Cross-Asset Portfolio" },
 ];
@@ -51,6 +52,11 @@ export default function App() {
           <Route path="/ngl" element={
             <AssetClassPage key="ngl" assetClass="ngl" label="NGL / Refined"
               products={["Ethane", "Propane", "Butane", "Isobutane"]} />
+          } />
+          <Route path="/agri" element={
+            <AssetClassPage key="agri" assetClass="agri" label="Agriculture" hidePortfolio
+              products={["Corn", "Wheat", "Oats", "Rough Rice", "Soybean", "Soybean Oil", "Soybean Meal",
+                         "Coffee", "Cocoa", "Orange Juice", "Cotton", "Feeder Cattle", "Live Cattle", "Lean Hogs"]} />
           } />
           <Route path="/fundamental-analysis" element={<FundamentalAnalysisPage />} />
           <Route path="/cross-asset" element={<CrossAssetPage />} />

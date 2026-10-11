@@ -3,7 +3,7 @@ Per-asset-class config for the generic Momentum/Carry/Value/Comparison router.
 
 Hoists the same per-file dict of defaults each Streamlit dashboard's app.py
 already passes as kwargs (see metals_dashboard/app.py vs ngl_dashboard/app.py)
-into one shared structure, so one generic router can serve all four asset
+into one shared structure, so one generic router can serve all five asset
 classes instead of duplicating route code per asset class.
 """
 
@@ -122,11 +122,46 @@ NGL = {
     "value_default_combo": None,
 }
 
+AGRI = {
+    "asset_class": "agri",
+    "label": "Agriculture",
+    "rolling_config": rc.AGRI_CONFIG,
+    "futures_file": rc.AGRI_FUTURES_FILE,
+    "calendar_file": rc.AGRI_CALENDAR_FILE,
+    # Sugar No.11 excluded: corrupt expiry calendar in the source pull (see
+    # agri_dashboard/app.py). No Portfolio route: Carry tenor pairs are not
+    # locked for this asset class (research/configs/agri.py CARRY_TENOR_PAIRS
+    # is empty), so the frontend hides the Portfolio tab for it.
+    "products": {
+        "Corn": {"code": "C", "unit": "¢/bu"},
+        "Wheat": {"code": "W", "unit": "¢/bu"},
+        "Oats": {"code": "O", "unit": "¢/bu"},
+        "Rough Rice": {"code": "RR", "unit": "$/cwt"},
+        "Soybean": {"code": "S", "unit": "¢/bu"},
+        "Soybean Oil": {"code": "BO", "unit": "¢/lb"},
+        "Soybean Meal": {"code": "SM", "unit": "$/ton"},
+        "Coffee": {"code": "KC", "unit": "¢/lb"},
+        "Cocoa": {"code": "CC", "unit": "$/MT"},
+        "Orange Juice": {"code": "JO", "unit": "¢/lb"},
+        "Cotton": {"code": "CT", "unit": "¢/lb"},
+        "Feeder Cattle": {"code": "FC", "unit": "¢/lb"},
+        "Live Cattle": {"code": "LC", "unit": "¢/lb"},
+        "Lean Hogs": {"code": "LH", "unit": "¢/lb"},
+    },
+    "skip_front_contract": False,
+    "momentum_default_feature": {},
+    "carry_default_near": None,
+    "carry_default_far": None,
+    "carry_default_feature_label": None,
+    "value_default_combo": None,
+}
+
 REGISTRY: dict[str, dict] = {
     "metals": METALS,
     "energy": ENERGY,
     "precious": PRECIOUS,
     "ngl": NGL,
+    "agri": AGRI,
 }
 
 

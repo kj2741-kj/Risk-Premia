@@ -13,9 +13,11 @@ interface AssetClassPageProps {
   assetClass: string;
   label: string;
   products: string[];
+  // Agriculture has no locked Carry tenor pairs yet, so no Portfolio tab.
+  hidePortfolio?: boolean;
 }
 
-export default function AssetClassPage({ assetClass, label, products }: AssetClassPageProps) {
+export default function AssetClassPage({ assetClass, label, products, hidePortfolio }: AssetClassPageProps) {
   const [product, setProduct] = useState(products[0]);
   const [tab, setTab] = useState<Tab>("Momentum");
   const [groups, setGroups] = useState<Record<string, Record<string, SeriesJson>>>({
@@ -55,7 +57,7 @@ export default function AssetClassPage({ assetClass, label, products }: AssetCla
       </div>
 
       <div className="tabs">
-        {TABS.map((t) => (
+        {TABS.filter((t) => !(hidePortfolio && t === "Portfolio")).map((t) => (
           <button key={t} className={t === tab ? "tab active" : "tab"} onClick={() => selectTab(t)}>
             {t}
           </button>

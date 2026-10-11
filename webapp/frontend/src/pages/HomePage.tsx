@@ -6,6 +6,7 @@ const DASHBOARD_LINKS = [
   { to: "/energy", name: "Energy", desc: "WTI, Brent, RBOB, Heating Oil, Nat Gas. Momentum, Carry, Value." },
   { to: "/precious", name: "Precious Metals", desc: "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value." },
   { to: "/ngl", name: "NGL / Refined", desc: "Ethane, Propane, Butane, Isobutane. Momentum, Carry, Value." },
+  { to: "/agri", name: "Agriculture", desc: "Grains, softs, oilseeds, and livestock (14 products). Momentum, Carry, Value." },
 ];
 
 export default function HomePage() {

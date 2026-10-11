@@ -1,6 +1,6 @@
 # Risk Premia — Multi-Asset Momentum/Carry/Value Research
 
-> **Portfolio construction rules (2026-10-10): Carry = V2 (z-score) only, blended across the short and long tenor pairs; Momentum = default 3-crossover composite, at every level. See [`Readme Portfolio construction 10 Oct.md`](<Readme Portfolio construction 10 Oct.md>) for the definition, tenors per asset class and status. The code still builds the older V1+V2 composite until that rule is implemented.**
+> **Portfolio construction rules (2026-10-10): Carry = V2 (z-score on carry slope) only, blended across the short and long tenor pairs; Momentum = default 3-crossover composite, at every level. See [`Readme Portfolio construction 10 Oct.md`](<Readme Portfolio construction 10 Oct.md>) for the definition, tenors per asset class and status. The code still builds the older V1+V2 composite until that rule is implemented.**
 
 ## What's here
 
@@ -28,7 +28,7 @@ Two layers:
 
 All 4 asset classes have a locked ex-ante strategy set and a full-sample + regime-conditional result. Value's anchor contract is **F3** everywhere (changed from F8 2026-08-03, applied uniformly):
 
-- **Metals** (Copper/Aluminium/Lead/Zinc): Momentum, Carry V1+V2 (F1-F3 and F1-F13), Carry-Momentum (V3), Value (F3). Unchanged since 2026-07-24. FDR (q=0.10) on the 49-cell grid: **0 survivors**.
+- **Metals** (Copper/Aluminium/Lead/Zinc): Momentum, Carry V1+V2 (carry slope + z-score on carry slope) (F1-F3 and F1-F13), Carry momentum (V3), Value (F3). Unchanged since 2026-07-24. FDR (q=0.10) on the 49-cell grid: **0 survivors**.
 - **Precious Metals** (Gold/Silver/Copper-COMEX/Platinum/Palladium): Carry tenor is **F1-F3** (changed 2026-08-03 from F1-F2 — user's explicit decision, overriding a real-volume liquidity finding that Platinum/Palladium F3 liquidity is weak, 87.0%/68.5% days traded; see `configs/precious.py`'s docstring for the full caveat).
 - **Energy** (engine PRODUCTS: WTI/Brent/RBOB/HeatingOil/NatGas/SingaporeGasoil/FuelOil — **dashboard shows only the first 5**, see below): Carry F1-F3 + **F1-F13** (changed 2026-08-03 from F1-F12, to match Metals). Fuel Oil has no F13 column at all and is still in this file's PRODUCTS list, so its Carry(F1-F13)/CarryMom(F1-F13) leg is silently flat/zero in `run_regime_table.py`'s reports (no crash, just a disclosed dilution) — irrelevant to the dashboard since Fuel Oil isn't shown there. WTI's 2020-04-20 negative print patched (single-cell impute).
 - **NGL** (engine PRODUCTS: Ethane/Propane/Butane/Isobutane/Ethylene/Propylene — **dashboard shows only the first 4**, see below): Carry is now **two tiers** as of 2026-08-03 — F2-F4 (short, new) and F2-F14 (changed from Bogorad's original F4-F15, for a 12- rather than 11-month span). Neither pair has been re-verified for liquidity/seasonality since; see `configs/ngl.py`'s docstring for the specific caveat (F2 reintroduces near-tenor heating-season seasonality that F4 was originally chosen to avoid).

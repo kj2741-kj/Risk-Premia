@@ -236,7 +236,7 @@ def write_momentum_sheet(wb, sheet_name: str, f1_series: pd.DataFrame, pairs, sh
 def write_carry_composite_sheet(wb, sheet_name: str, curve: pd.DataFrame, f1_series: pd.DataFrame,
                                  near: str, far: str, zscore_window: int, shift_n: int, tc_bps: int,
                                  ref_metrics: dict):
-    """V1(Level)+V2(Z-score) composite Carry, on tenor pair (near, far)."""
+    """V1 (Carry slope) + V2 (Z-score on carry slope) composite Carry, on tenor pair (near, far)."""
     ws = wb.create_sheet(sheet_name)
     idx = f1_series.index
     n_rows = len(idx)

@@ -11,9 +11,9 @@ Signal form and parameter CONVENTIONS are identical to Metals (per user's
 explicit "ex-ante is same as discussed" instruction) EXCEPT the Carry tenor,
 which was re-derived from real data, not assumed:
   - Momentum: 3-way MA-crossover composite, same (1,20)/(5,60)/(20,250) pairs.
-  - Carry: V1(Level)+V2(Z-score) composite, tenor pair F1-F3 ONLY (changed
+  - Carry: V1 (Carry slope) + V2 (Z-score on carry slope) composite, tenor pair F1-F3 ONLY (changed
     from F1-F2 2026-08-03, see below).
-  - Carry-Momentum: same horizon=20, kept separate from the Carry composite.
+  - Carry momentum: same horizon=20, kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes) / 5yr lookback / +-10% threshold.
   - StatArb: NOT used -- already tested and excluded for Precious Metals

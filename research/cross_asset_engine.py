@@ -55,7 +55,7 @@ one) -- an accepted, known tradeoff of this convention, not eliminated by
 the bug fix above, just no longer compounded by a silent PnL deletion on
 top of it.
 
-Signal-level Carry / Carry-Momentum construction (Methodology doc Section 7,
+Signal-level Carry / Carry momentum construction (Methodology doc Section 7,
 "the equal-weighting across tenors is applied to the raw signal, and the
 execution shift is applied once to the combined result -- not separately per
 tenor before combining"): verified BYTE-FOR-BYTE against Dimil's real pushed

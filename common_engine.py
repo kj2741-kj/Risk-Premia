@@ -9,9 +9,9 @@ render_carry_tab / render_value_tab -- all the signal math, charts,
 and layout live here once.
 
 Stage 2 scope (deliberately simple, per spec): MA-crossover momentum
-only (no CTA/Baz-Granger, no structural Anchors), Carry V1-V3 (V1 Level
-[Roll Yield/Long Slope merged, any contract pair], V2 Z-score, V3
-Carry-Momentum), Value V1 MA-reversion only. No OOS / walk-forward yet
+only (no CTA/Baz-Granger, no structural Anchors), Carry V1-V3 (V1 Carry slope
+[Roll Yield/Long Slope merged, any contract pair], V2 - Z-score on carry slope on carry slope, V3
+Carry momentum), Value V1 MA-reversion only. No OOS / walk-forward yet
 -- in-sample only.
 
 Conventions (identical to Stage 1 / Metals dashboard):
@@ -469,7 +469,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
 
 
 # ═══════════════════════════════════════════════════════════════
-# CARRY: V1 LEVEL (ROLL YIELD / LONG SLOPE), V2 Z-SCORE, V3 CARRY-MOMENTUM
+# CARRY: V1 CARRY SLOPE, V2 Z-SCORE ON CARRY SLOPE, V3 CARRY MOMENTUM
 # ═══════════════════════════════════════════════════════════════
 
 def _carry_base(curve: pd.DataFrame, a: str, b: str) -> pd.Series:
@@ -481,7 +481,7 @@ def _carry_base(curve: pd.DataFrame, a: str, b: str) -> pd.Series:
 
 
 def carry_v1_position(curve: pd.DataFrame, near: str = "F1", far: str = "F2", shift_n: int = 1) -> pd.Series:
-    """V1 Level -- covers what used to be separate V1 Roll Yield (near-tenor
+    """V1 - Carry slope -- covers what used to be separate V1 Roll Yield (near-tenor
     pair) and V2 Long Slope (far-tenor pair) variants: identical formula,
     the only difference was which (near, far) pair fed it, so one function
     with a free pair argument replaces both."""
@@ -512,9 +512,9 @@ def carry_heatmap(curve: pd.DataFrame, contracts: tuple[str, ...], days: int | N
                    f1r: pd.Series, f1c: pd.Series, start: str, end: str, shift_n: int) -> pd.DataFrame:
     """Gross Sharpe for every valid (near, far) contract-pair (near before far
     in `contracts`, e.g. F1 before F27), over [start, end].
-    `days=None` -> V1 Level signal: sign of the raw (near-far)/near yield.
-    `days=N, mode="Momentum"` -> V3 Carry-Momentum: sign of the yield's N-day change.
-    `days=N, mode="Zscore"` -> V2 Z-score: sign of (yield - rolling_mean(N)) / rolling_std(N).
+    `days=None` -> V1 - Carry slope signal: sign of the raw (near-far)/near yield.
+    `days=N, mode="Momentum"` -> V3 - Carry momentum: sign of the yield's N-day change.
+    `days=N, mode="Zscore"` -> V2 - Z-score on carry slope: sign of (yield - rolling_mean(N)) / rolling_std(N).
     (`mode` is an internal identifier, independent of the V1/V2/V3 numbering
     shown in the UI, so a future renumbering doesn't need to touch this.)
     Gross only (no TC), matching momentum_heatmap's convention -- not needed
@@ -553,13 +553,12 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     Renumbered from the original V1-V4 scheme: V1 Roll Yield and V2 Long
     Slope were the identical formula with just a different (near, far)
-    pair, so they're merged into one "V1 Level" variant with a free
+    pair, so they're merged into one "V1 - Carry slope" variant with a free
     Near/Far picker (any pair, not just the two presets each used to
     offer) -- eliminating the old V2 slot. The old V3 Z-score is now V2,
-    and the old V4 Carry-Momentum is now V3, closing the gap. Every label
-    still spells out which original strategy it is (e.g. "V1 Level (Roll
-    Yield / Long Slope)", "V2 Z-score", "V3 Carry-Momentum") so the
-    renumbering doesn't create ambiguity about which logic is which.
+    and the old V4 Carry-Momentum is now V3, closing the gap. Variant names
+    (renamed 2026-10-11): "V1 - Carry slope", "V2 - Z-score on carry slope",
+    "V3 - Carry momentum".
 
     `phase` (if passed) adds roll-day TC on top of position-change TC.
     `default_active_variants`/`default_feature_variant` override the
@@ -583,8 +582,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     section_header(f"CARRY: {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. Three variants are "
-               "available: V1 Level (Roll Yield / Long Slope, any contract pair), V2 Z-score, "
-               "and V3 Carry-Momentum.")
+               "available: V1 - Carry slope (Roll Yield / Long Slope, any contract pair), V2 - Z-score on carry slope, "
+               "and V3 - Carry momentum.")
 
     tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
@@ -601,7 +600,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
                        "delay (Signal[t−2]); Lag-2 adds two (Signal[t−3]).")
 
     # Every contract with real price data, product-agnostic (e.g. F1..F27 for
-    # Copper, F1..F20 for Gold) -- shared by the "V1 Level" custom Near/Far
+    # Copper, F1..F20 for Gold) -- shared by the "V1 - Carry slope" custom Near/Far
     # pickers below and the Sharpe Heatmap further down, so both draw from the
     # exact same valid-contract list. Same "real data only" filter as the
     # heatmap's own list (a header-only, all-empty far column doesn't count).
@@ -611,10 +610,10 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     if skip_front_contract and "F1" in all_contracts:
         all_contracts.remove("F1")
 
-    V1_LABEL, V2_LABEL, V3_LABEL = "V1 Level (Roll Yield / Long Slope)", "V2 Z-score (252d)", "V3 Carry-Momentum"
+    V1_LABEL, V2_LABEL, V3_LABEL = "V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"
 
     st.markdown("**Add a Carry Variant**")
-    st.caption("V1 Level takes any (Near, Far) contract pair, covering what used to be separate V1 Roll "
+    st.caption("V1 - Carry slope takes any (Near, Far) contract pair, covering what used to be separate V1 Roll "
                "Yield and V2 Long Slope variants, the identical formula just with a different pair, so "
                "one flow covers both (same unification as the heatmap's \"N/A\" mode below).")
     vcol1, vcol2, vcol3, vcol4 = st.columns([1.3, 1, 1, 0.9])
@@ -659,8 +658,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
             st.session_state[ss_key] = st.session_state[ss_key] + [label]
 
     def _build_position(label: str, crv: pd.DataFrame) -> pd.Series:
-        # V1 Level (near-far pair) -- the merged former V1 Roll Yield / V2 Long
-        # Slope. V2 Z-score / V3 Carry-Momentum keep their original underlying
+        # V1 - Carry slope (near-far pair) -- the merged former V1 Roll Yield / V2 Long
+        # Slope. V2 - Z-score on carry slope / V3 - Carry momentum keep their original underlying
         # functions (carry_v3_position/carry_v4_position); only the label
         # prefix shown to the user was renumbered to close the V1-V3 gap.
         if label.startswith("V1"):
@@ -736,14 +735,14 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     # far-month the product's own curve data actually has (e.g. F27 for
     # Copper, F15 for Gold) -- not the F15 cap used elsewhere for the Value
     # tab's contract dropdown. "Horizon (days)" defaults to N/A (the plain
-    # V1 Level signal); typing a day-count reveals the Mode radio to
-    # reinterpret that same number as either V3 Carry-Momentum or V2
+    # V1 - Carry slope signal); typing a day-count reveals the Mode radio to
+    # reinterpret that same number as either V3 - Carry momentum or V2
     # Z-score, so one grid covers all three variants. Has its OWN
     # independent year-range slider -- not linked to the Performance Metrics
     # slider above or the equity curve's "Time period" slider below. ────────
     st.markdown(f"**Sharpe Heatmap: Contract Pair × Carry Signal**")
-    st.caption('"N/A" -> V1 Level signal (long in backwardation, short in contango). Enter a whole '
-               "number of days to reinterpret that same horizon as V3 Carry-Momentum or V2 Z-score.")
+    st.caption('"N/A" -> V1 - Carry slope signal (long in backwardation, short in contango). Enter a whole '
+               "number of days to reinterpret that same horizon as V3 - Carry momentum or V2 - Z-score on carry slope.")
     hcol1, hcol2 = st.columns([1, 1.4])
     with hcol1:
         days_raw = st.text_input("Horizon (days)", value="N/A", key=f"{key_prefix}_car_hm_days")
@@ -754,13 +753,13 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         try:
             parsed = int(days_clean)
             if parsed <= 0:
-                st.warning("Horizon must be a positive whole number of days; showing the V1 Level "
+                st.warning("Horizon must be a positive whole number of days; showing the V1 - Carry slope "
                            "signal instead.")
             else:
                 hm_days = parsed
         except ValueError:
-            st.warning('Enter a whole number of days, or "N/A" for the V1 Level signal; showing '
-                       "V1 Level for now.")
+            st.warning('Enter a whole number of days, or "N/A" for the V1 - Carry slope signal; showing '
+                       "V1 - Carry slope for now.")
     if hm_days is not None:
         with hcol2:
             mode_label = st.radio("Interpret as", [V3_LABEL, V2_LABEL], horizontal=True,
@@ -783,11 +782,11 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
             hovertemplate="Near: %{y}<br>Far: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
         ))
         if hm_days is None:
-            signal_desc = "V1 Level"
+            signal_desc = "V1 - Carry slope"
         elif hm_mode == "Momentum":
-            signal_desc = f"V3 Carry-Momentum ({hm_days}d)"
+            signal_desc = f"V3 - Carry momentum ({hm_days}d)"
         else:
-            signal_desc = f"V2 Z-score ({hm_days}d)"
+            signal_desc = f"V2 - Z-score on carry slope ({hm_days}d)"
         fig_hm.update_layout(**CHART_LAYOUT, height=560,
                              title=dict(text=f"{product}: Carry Sharpe by Contract Pair ({signal_desc})",
                                         font=dict(size=13)),

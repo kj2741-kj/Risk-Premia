@@ -637,7 +637,7 @@ with tab_crossasset:
     st.caption(
         "Engine: research/cross_asset_engine.py (a new, isolated module that does not modify "
         "common_engine.py, research/engine.py, research/risk_parity.py, or any of the 4 live "
-        "asset-class dashboards). Signal-level Carry/Carry-Momentum combination across tenor "
+        "asset-class dashboards). Signal-level Carry/Carry momentum combination across tenor "
         "pairs (Methodology doc Section 7), not the return-level construction used in an earlier "
         "static HTML report edit; these numbers and those reports are not directly comparable "
         "until the reports are regenerated to match."

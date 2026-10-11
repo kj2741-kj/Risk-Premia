@@ -7,10 +7,10 @@ research/configs/metals.py / precious.py's structure.
 
 Signal form and most parameters are identical to Metals/Precious Metals:
   - Momentum: 3-way MA-crossover composite, (1,20)/(5,60)/(20,250).
-  - Carry: V1(Level)+V2(Z-score) composite, TWO tenor pairs (per user's
+  - Carry: V1 (Carry slope) + V2 (Z-score on carry slope) composite, TWO tenor pairs (per user's
     explicit choice: Energy keeps the Metals-style two-tier structure rather
     than Bogorad's single F4-F15, which is used for NGL instead).
-  - Carry-Momentum: same horizon=20, kept separate from the Carry composite.
+  - Carry momentum: same horizon=20, kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes) / 5yr lookback / +-10% threshold.
 

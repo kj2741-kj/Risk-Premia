@@ -81,15 +81,15 @@ MOMENTUM_DEFAULT_FEATURE = {
 }
 # Carry: (F1-F2)/F1 near-tenor roll yield is dominated by front-of-curve
 # heating-season seasonality for NGLs, not genuine term structure -- it is
-# strongly negative-Sharpe for every NGL ticker. The far-tenor V1 Level
+# strongly negative-Sharpe for every NGL ticker. The far-tenor V1 (Carry slope)
 # pair (originally F4-F15, what used to be a separate "V2 Long Slope"
 # variant before V1/V2 were merged into one Level signal with a free
 # contract pair) -- matching Mark Bogorad's paper2_energy_risk_premia carry
 # convention, is positive-Sharpe for 5 of 6 tickers and tracks the paper's
 # own Ethane/Propane/Butane results far more closely. Applied uniformly
 # (not per-product) to match the existing Metals/Energy convention of one
-# fixed default carry set. "V2 (win=252)" here is Z-score (formerly V3,
-# renumbered when V1/V2 merged). "V3 (N=20)" is Carry-Momentum (formerly
+# fixed default carry set. "V2 (win=252)" here is Z-score on carry slope (formerly V3,
+# renumbered when V1/V2 merged). "V3 (N=20)" is Carry momentum (formerly
 # V4) -- added to the default set uniformly across all dashboards, matching
 # Bouchouev's Virtual Barrels finding that carry-momentum (his eq. 5.3,
 # sign(Carry - MA(Carry, n))) was his most robust systematic oil signal
@@ -190,9 +190,9 @@ with tab_portfolio:
                "above, which only affects the Momentum/Carry/Value/Comparison tabs. Ethylene and "
                "Propylene are excluded here too (dashboard-only, see sidebar note); both still "
                "exist in research/configs/ngl.py's own PRODUCTS list for the research pipeline. "
-               "Carry and Carry-Momentum use NGL's single F4-F15 tenor pair, not the Metals-style "
+               "Carry and Carry momentum use NGL's single F4-F15 tenor pair, not the Metals-style "
                "two-tier structure. Does not include the StatArb sleeve (the 8-spread cross-asset "
-               "book, shared with Energy); this tab covers Momentum, Carry, Carry-Momentum, and "
+               "book, shared with Energy); this tab covers Momentum, Carry, Carry momentum, and "
                "Value only.")
     render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio",
                           excluded_products=NGL_PORTFOLIO_EXCLUDED)

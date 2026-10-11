@@ -86,11 +86,11 @@ MOMENTUM_SHIFT_N = 1
 # PEAK for every product, F13 is the annual/Bouchouev-Bogorad-convention tenor
 # (weaker liquidity for Lead/Zinc there, disclosed not hidden).
 CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3"), ("F1", "F13")]
-# V1(Level)+V2(Z-score) composite -- deliberately excludes V3, kept separate below.
+# V1 (Carry slope) + V2 (Z-score on carry slope) composite -- deliberately excludes V3, kept separate below.
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 
-# Carry-Momentum (V3): kept as ITS OWN separate strategy, not folded into the
+# Carry momentum (V3): kept as ITS OWN separate strategy, not folded into the
 # Carry composite above -- it's a rate-of-change/momentum-on-carry construct,
 # a different economic hypothesis from V1/V2's level-based signal.
 CARRY_MOMENTUM_HORIZON = 20

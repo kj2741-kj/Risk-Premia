@@ -5,7 +5,7 @@ Two parts. Reference Strategies: the six locked, officially reported
 strategy configurations (Momentum, Carry F1-F3, Carry F1-F13, CarryMom
 F1-F3, CarryMom F1-F13, Value), shown read-only as a comparison baseline.
 Portfolio Construction: a single draft spanning all four strategy families
-(Momentum, Carry, Carry-Momentum, Value), each off by default. Toggling a
+(Momentum, Carry, Carry momentum, Value), each off by default. Toggling a
 family on reveals its own editable leg list; leaving a family off excludes
 it entirely. One Add Portfolio button combines whichever families are
 toggled on -- equal-weighted at the return level if more than one -- into
@@ -73,10 +73,10 @@ from drp import rolling_drp_combine  # noqa: E402
 COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"]
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
-CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
+CARRY_TYPES = ["V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"]
 
 FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value"]
-FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value"}
+FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry momentum", "Value": "Value"}
 # "Value": 1, changed from 2 -- user's decision 2026-08-04: shift_n=1 is now the locked
 # default for every strategy family, project-wide. See research/configs/metals.py's
 # VALUE_SHIFT_N comment for the full rationale.
@@ -132,7 +132,7 @@ def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
     if family == "Momentum":
         return {"leg_id": leg_id, "fast": 5, "slow": 60}
     if family == "Carry":
-        return {"leg_id": leg_id, "type": "V1 Level", "near": near, "far": far,
+        return {"leg_id": leg_id, "type": "V1 - Carry slope", "near": near, "far": far,
                 "zwindow": 252, "horizon": 20}
     if family == "CarryMom":
         return {"leg_id": leg_id, "near": near, "far": far, "horizon": 20}
@@ -155,9 +155,9 @@ def _build_reference_strategies(cfg) -> list[dict]:
         instances.append({
             "id": f"carry_{near}{far}", "family": "Carry", "label": f"Carry ({near}-{far})",
             "legs": [
-                {"leg_id": uuid.uuid4().hex[:8], "type": "V1 Level", "near": near, "far": far,
+                {"leg_id": uuid.uuid4().hex[:8], "type": "V1 - Carry slope", "near": near, "far": far,
                  "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
-                {"leg_id": uuid.uuid4().hex[:8], "type": "V2 Z-score", "near": near, "far": far,
+                {"leg_id": uuid.uuid4().hex[:8], "type": "V2 - Z-score on carry slope", "near": near, "far": far,
                  "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
             ],
             "shift_n": cfg.CARRY_SHIFT_N, "combine_method": "equal_weight",
@@ -194,20 +194,20 @@ def _reference_leg_seed(cfg, family: str) -> list[dict]:
     pre-fill a draft sleeve the moment it is switched on -- so toggling a
     family on and clicking Add Portfolio with no further edits reproduces
     that family's own reference strategy exactly, directly answering "can I
-    just add from the reference strategies". Carry and Carry-Momentum use
+    just add from the reference strategies". Carry and Carry momentum use
     the FIRST locked tenor pair (matching "Carry (F1-F3)"/"CarryMom
     (F1-F3)"); a second tenor variant, where the asset class has one, stays
     available as its own reference row for comparison, not as a second
     slot within one portfolio -- a portfolio has at most one Carry sleeve
-    and one Carry-Momentum sleeve at a time, by design."""
+    and one Carry momentum sleeve at a time, by design."""
     if family == "Momentum":
         return [{"leg_id": uuid.uuid4().hex[:8], "fast": f, "slow": s} for f, s in cfg.MOMENTUM_PAIRS]
     near, far = cfg.CARRY_TENOR_PAIRS[0] if getattr(cfg, "CARRY_TENOR_PAIRS", None) else ("F1", "F3")
     if family == "Carry":
         return [
-            {"leg_id": uuid.uuid4().hex[:8], "type": "V1 Level", "near": near, "far": far,
+            {"leg_id": uuid.uuid4().hex[:8], "type": "V1 - Carry slope", "near": near, "far": far,
              "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
-            {"leg_id": uuid.uuid4().hex[:8], "type": "V2 Z-score", "near": near, "far": far,
+            {"leg_id": uuid.uuid4().hex[:8], "type": "V2 - Z-score on carry slope", "near": near, "far": far,
              "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
         ]
     if family == "CarryMom":
@@ -251,12 +251,12 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
         near, far = leg.get("near"), leg.get("far")
         if near is None or far is None:
             return pd.Series(dtype=float)
-        leg_type = leg.get("type", "V1 Level")
-        if leg_type == "V1 Level":
+        leg_type = leg.get("type", "V1 - Carry slope")
+        if leg_type == "V1 - Carry slope":
             return raw_signal_carry_v1(curve, near, far)
-        if leg_type == "V2 Z-score":
+        if leg_type == "V2 - Z-score on carry slope":
             return raw_signal_carry_v2(curve, near, far, int(leg.get("zwindow") or 252))
-        if leg_type == "V3 Carry-Momentum":
+        if leg_type == "V3 - Carry momentum":
             horizon = leg.get("horizon")
             if horizon is None:
                 return pd.Series(dtype=float)
@@ -423,15 +423,15 @@ def _describe_leg(family: str, leg: dict) -> str:
     if family == "Momentum":
         return f"MA crossover, fast={leg.get('fast')}, slow={leg.get('slow')}"
     if family == "Carry":
-        leg_type = leg.get("type", "V1 Level")
+        leg_type = leg.get("type", "V1 - Carry slope")
         text = f"{leg_type} ({leg.get('near')}-{leg.get('far')})"
-        if leg_type == "V2 Z-score":
+        if leg_type == "V2 - Z-score on carry slope":
             text += f", z-window={leg.get('zwindow')}"
-        elif leg_type == "V3 Carry-Momentum":
+        elif leg_type == "V3 - Carry momentum":
             text += f", horizon={leg.get('horizon')}"
         return text
     if family == "CarryMom":
-        return f"Carry-Momentum ({leg.get('near')}-{leg.get('far')}), horizon={leg.get('horizon')}"
+        return f"Carry momentum ({leg.get('near')}-{leg.get('far')}), horizon={leg.get('horizon')}"
     if family == "Value":
         return (f"contract={leg.get('contract')}, lookback={leg.get('lookback')}d, "
                 f"threshold=+-{leg.get('threshold')}")
@@ -482,7 +482,7 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
         i = 0
         with cols[i]:
             leg_type = st.selectbox("Type", CARRY_TYPES,
-                                     index=_safe_index(CARRY_TYPES, leg.get("type", "V1 Level")),
+                                     index=_safe_index(CARRY_TYPES, leg.get("type", "V1 - Carry slope")),
                                      key=f"{key_prefix}_type")
             leg["type"] = leg_type
         i += 1
@@ -500,16 +500,16 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
                                            key=f"{key_prefix}_far")
             i += 1
         with cols[i]:
-            if leg_type == "V2 Z-score":
+            if leg_type == "V2 - Z-score on carry slope":
                 leg["zwindow"] = st.number_input("Z-Window", min_value=20, max_value=756,
                                                   value=int(leg.get("zwindow") or 252), step=1,
                                                   key=f"{key_prefix}_zwindow")
-            elif leg_type == "V3 Carry-Momentum":
+            elif leg_type == "V3 - Carry momentum":
                 leg["horizon"] = st.number_input("Horizon", min_value=1, max_value=252,
                                                   value=int(leg.get("horizon") or 20), step=1,
                                                   key=f"{key_prefix}_horizon")
             else:
-                st.caption("No additional parameter for V1 Level.")
+                st.caption("No additional parameter for V1 - Carry slope.")
         i += 1
         with cols[i]:
             st.write("")
@@ -770,7 +770,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     separate_tenor_carry = False
     if has_multi_tenor:
         separate_tenor_carry = st.checkbox(
-            "Treat Carry / Carry-Momentum tenor pairs as separate strategies",
+            "Treat Carry / Carry momentum tenor pairs as separate strategies",
             value=False, key=f"{key_prefix}_pf_separate_tenor",
             help="Off (default): this asset class's two Carry tenor pairs are equal-weighted "
                  "into one Combined Carry row, and the two CarryMom tenor pairs into one "
@@ -789,7 +789,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         by_id = {inst["id"]: inst for inst in reference_strategies}
         _render_reference_strategy(by_id["mom"])
         _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V1+V2 composite")
-        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry-Momentum")
+        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum")
         _render_reference_strategy(by_id["value"])
 
     section_header("Portfolio construction")

@@ -4,7 +4,7 @@ Rules adopted 2026-10-10 (user decisions). Read this before building or changing
 
 ## The rule
 
-In portfolio construction, at every level, the Carry sleeve is the **V2 (z-score) signal only, blended across the short-tenor and long-tenor pairs**. V1 (Level) is not part of the Carry sleeve any more.
+In portfolio construction, at every level, the Carry sleeve is the **V2 (z-score on carry slope) signal only, blended across the short-tenor and long-tenor pairs**. V1 (carry slope) is not part of the Carry sleeve any more.
 
 "Every level" means:
 - each asset-class portfolio (Metals, Energy, NGL, Precious), and
@@ -55,7 +55,7 @@ Decision 2026-10-10 (user): in portfolio construction at every level, Momentum s
 
 The previous default (live in `dashboard_portfolio_tab.py` and `research/cross_asset_engine.py`) is "Combined Carry": for each tenor pair a V1+V2 composite (`sign((sign V1 + sign V2) / 2)`), the two pairs then blended at the signal level. The only change is dropping V1 from each pair.
 
-Carry-Momentum (V3) is a separate sleeve and is not affected by this rule. It is under its own separate analysis.
+Carry momentum (V3) is a separate sleeve and is not affected by this rule. It is under its own separate analysis.
 
 ## Evidence behind the rule
 

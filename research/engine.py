@@ -27,11 +27,11 @@ re-checking against common_engine.py):
     look-ahead leakage, not the raw shift itself.
 
 Carry naming note (source of a real mismatch worth remembering): the
-dashboards' UI labels "V1 Level / V2 Z-score / V3 Carry-Momentum" map to code
+dashboards' UI labels "V1 - Carry slope / V2 - Z-score on carry slope / V3 - Carry momentum" map to code
 functions carry_v1_position / carry_v3_position / carry_v4_position
 respectively -- there is no carry_v2_position in the source, an old variant
 was apparently retired. Use carry_v3_position when the research plan says
-"the V2 Z-score anchor", not a function literally named v2.
+"the V2 Z-score on carry slope anchor", not a function literally named v2.
 """
 
 from __future__ import annotations
@@ -254,7 +254,7 @@ def momentum_composite_position(f1r: pd.Series, pairs: tuple[tuple[int, int], ..
 
 
 # ═══════════════════════════════════════════════════════════════
-# CARRY: V1 LEVEL / V2 Z-SCORE (code name carry_v3) / V3 CARRY-MOMENTUM (code name carry_v4)
+# CARRY: V1 CARRY SLOPE / V2 Z-SCORE ON CARRY SLOPE (code name carry_v3) / V3 CARRY MOMENTUM (code name carry_v4)
 # Copied from common_engine.py -- see module docstring for the naming mismatch
 # ═══════════════════════════════════════════════════════════════
 
@@ -267,14 +267,14 @@ def _carry_base(curve: pd.DataFrame, a: str, b: str) -> pd.Series:
 
 
 def carry_v1_position(curve: pd.DataFrame, near: str = "F1", far: str = "F2", shift_n: int = 1) -> pd.Series:
-    """UI label: "V1 Level" -- sign of the raw (near-far)/near slope."""
+    """UI label: "V1 - Carry slope" -- sign of the raw (near-far)/near slope."""
     raw = _carry_base(curve, near, far)
     return exec_shift(np.sign(raw), shift_n).fillna(0)
 
 
 def carry_v3_position(curve: pd.DataFrame, window: int = 252, shift_n: int = 1,
                        near: str = "F1", far: str = "F2") -> pd.Series:
-    """UI label: "V2 Z-score" (win=252 default)."""
+    """UI label: "V2 - Z-score on carry slope" (win=252 default)."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
@@ -284,7 +284,7 @@ def carry_v3_position(curve: pd.DataFrame, window: int = 252, shift_n: int = 1,
 
 def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1,
                        near: str = "F1", far: str = "F2") -> pd.Series:
-    """UI label: "V3 Carry-Momentum" (N=20 default)."""
+    """UI label: "V3 - Carry momentum" (N=20 default)."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
@@ -296,7 +296,7 @@ def carry_v1v2_composite_position(curve: pd.DataFrame, near: str = "F1", far: st
                                    zscore_window: int = 252, shift_n: int = 1) -> pd.Series:
     """Ex-ante Carry anchor (locked 2026-07-23): average V1 (Level) and V2
     (Z-score) into one composite -- deliberately NOT including V3
-    (Carry-Momentum), which is a rate-of-change/momentum-on-carry construct,
+    (Carry momentum), which is a rate-of-change/momentum-on-carry construct,
     a genuinely different economic hypothesis from V1/V2's level-based signal,
     kept as its own separate strategy instead (see carry_v4_position).
     V1 and V2 are both derived from the same raw carry slope (V2 just
@@ -382,13 +382,13 @@ def raw_signal_momentum(f1r: pd.Series, fast: int, slow: int) -> pd.Series:
 
 
 def raw_signal_carry_v1(curve: pd.DataFrame, near: str = "F1", far: str = "F2") -> pd.Series:
-    """Raw, pre-shift V1 Level sign. Same formula as carry_v1_position."""
+    """Raw, pre-shift V1 Carry slope sign. Same formula as carry_v1_position."""
     return np.sign(_carry_base(curve, near, far))
 
 
 def raw_signal_carry_v2(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
                          window: int = 252) -> pd.Series:
-    """Raw, pre-shift V2 Z-score sign. Same formula as carry_v3_position."""
+    """Raw, pre-shift V2 Z-score on carry slope sign. Same formula as carry_v3_position."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
@@ -398,7 +398,7 @@ def raw_signal_carry_v2(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
 
 def raw_signal_carrymom(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
                          horizon: int = 20) -> pd.Series:
-    """Raw, pre-shift V3 Carry-Momentum sign. Same formula as carry_v4_position."""
+    """Raw, pre-shift V3 Carry momentum sign. Same formula as carry_v4_position."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)

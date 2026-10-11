@@ -7,7 +7,7 @@ research/configs/metals.py / precious.py / energy.py's structure.
 
 Signal form and most parameters are identical to the other asset classes:
   - Momentum: 3-way MA-crossover composite, (1,20)/(5,60)/(20,250).
-  - Carry: V1(Level)+V2(Z-score) composite, TWO tenor pairs as of 2026-08-03
+  - Carry: V1 (Carry slope) + V2 (Z-score on carry slope) composite, TWO tenor pairs as of 2026-08-03
     -- F2-F4 (short-term, added 2026-08-03 for consistency with Metals'/
     Energy's two-tier structure) and F2-F14 (changed from F4-F15 the same
     day, for a clean 12-month span -- F4-F15 was 11 months). Neither pair
@@ -22,7 +22,7 @@ Signal form and most parameters are identical to the other asset classes:
     F4-F15 quote-availability check (all 6 products well-quoted through
     F15, worst case Propylene 79.6%) has NOT been redone for either new
     pair -- treat both as provisional pending that re-check.
-  - Carry-Momentum: same horizon=20, same two tenor pairs (F2-F4, F2-F14),
+  - Carry momentum: same horizon=20, same two tenor pairs (F2-F4, F2-F14),
     kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes, overriding this file's own

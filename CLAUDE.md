@@ -29,6 +29,6 @@ If you're asked to add a product, remove one, or change a product list, check al
 
 ## Carry rule (2026-10-10)
 
-Portfolio-level Carry at every level (per asset class and cross-asset) is V2 z-score only, signal-level blend of the short and long tenor pairs. Spec, tenors per asset class, Energy ex-NatGas and implementation status are in `README_CARRY_RULE.md`. Read it before touching any Carry sleeve.
+Portfolio-level Carry at every level (per asset class and cross-asset) is V2 z-score only, signal-level blend of the short and long tenor pairs. Spec, tenors per asset class, Energy ex-NatGas and implementation status are in `Readme Portfolio construction 10 Oct.md`. Read it before touching any Carry sleeve.
 
 Momentum stays as the default 3-crossover composite (1,20)/(5,60)/(20,250) at every level; see the Momentum section of the same file.

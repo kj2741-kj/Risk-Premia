@@ -109,23 +109,36 @@ def _wti_inventory():
 # Streamlit-free while still being cacheable at this layer). This is what makes switching
 # styles or asset-class selection near-instant after the first load of a given asset class.
 @st.cache_data(ttl=3600, show_spinner="Loading curve data and computing signals...")
-def _cached_per_product_four_row(asset_class: str, tc_bps: int):
-    return cae.per_product_four_row(asset_class, tc_bps)
+def _cached_per_product_four_row(asset_class: str, tc_bps: int, carry_spec=None):
+    # carry_spec: a cae.CarrySpec (hashable, so it is part of the cache key). None = the rule default.
+    return cae.per_product_four_row(asset_class, tc_bps, carry_spec)
+
+
+def _carry_fetcher(specs_key):
+    """Per-product fetcher bound to one set of Carry settings. `specs_key` is a tuple of
+    (asset_class, CarrySpec) pairs, i.e. hashable, so the cached functions below can take it."""
+    specs = dict(specs_key)
+
+    def fetch(asset_class: str, tc_bps: int):
+        return _cached_per_product_four_row(asset_class, tc_bps, specs.get(asset_class))
+    return fetch
 
 
 @st.cache_data(ttl=3600, show_spinner="Computing Cross-Commodity Portfolio (Momentum/Carry/CarryMom/Value/EW/Risk Parity)...")
-def _cached_cross_commodity_portfolio(tc_bps: int):
-    return cae.cross_commodity_portfolio(tc_bps)
+def _cached_cross_commodity_portfolio(tc_bps: int, specs_key=()):
+    return cae.cross_commodity_portfolio(tc_bps, tuple(cae.ALL_ASSET_CLASSES),
+                                          per_product_fetcher=_carry_fetcher(specs_key))
 
 
 @st.cache_data(ttl=3600, show_spinner="Computing Dynamic Risk Parity Cross-Commodity Portfolio...")
-def _cached_cross_commodity_drp(tc_bps: int):
+def _cached_cross_commodity_drp(tc_bps: int, specs_key=()):
     # cross_commodity_portfolio() (above) is Dimil's own fixed EW+Risk Parity
     # reference form, kept unmodified as the validated known-good baseline
     # research/_validate_cross_asset_engine.py checks against -- Dynamic Risk
     # Parity is computed separately via the generalized cross_commodity_dynamic()
     # and merged in as an extra row, rather than editing that reference function.
-    _, n = cae.cross_commodity_dynamic(tc_bps, tuple(cae.ASSET_CLASSES), cae.STYLE_NAMES, "dynamic_risk_parity")
+    _, n = cae.cross_commodity_dynamic(tc_bps, tuple(cae.ALL_ASSET_CLASSES), cae.STYLE_NAMES, "dynamic_risk_parity",
+                                  per_product_fetcher=_carry_fetcher(specs_key))
     return n["Portfolio"]
 
 
@@ -464,7 +477,7 @@ with tab_fund:
             mime="text/csv",
         )
 
-# TAB 3: Cross-Asset Portfolio (Metals + Energy + Precious + NGL combined)
+# TAB 3: Cross-Asset Portfolio (Metals + Energy + Precious + NGL + Agriculture combined)
 with tab_crossasset:
     st.markdown('<p class="main-title">🌐 Cross-Asset Portfolio</p>', unsafe_allow_html=True)
     st.caption(
@@ -479,6 +492,94 @@ with tab_crossasset:
         help="Applied at every level of this construction (product, asset-class, cross-asset). "
              "Default 5bps matches every other report in this project.",
     )
+
+    # ── Carry settings: default = the 10 Oct rule (V2 only, each asset class's locked tenor pairs).
+    # Every portfolio, the correlation section and every combine method below read these settings.
+    TENORS = [f"F{i}" for i in range(1, 16)]
+    default_specs = {ac: cae.default_carry_spec(ac) for ac in cae.ALL_ASSET_CLASSES}
+    with st.expander("Carry settings (default: V2 only, each asset class's locked tenor pairs)"):
+        st.caption("Default is the 10 Oct rule: Carry = V2 (Z-score on carry slope) only, the asset class's "
+                   "tenor pairs blended at signal level (shift applied once). Change anything below to "
+                   "customise; every portfolio and the correlation section on this tab then use it. "
+                   "Tenor pairs apply to both Carry and Carry momentum. Momentum and Value are unaffected.")
+        k1, k2, k3 = st.columns([2, 1, 1])
+        with k1:
+            var_labels = st.multiselect(
+                "Carry signals in the composite", list(cae.CARRY_VARIANT_LABELS.values()),
+                default=[cae.CARRY_VARIANT_LABELS["V2"]], key="ca_carry_variants",
+                help="V2 alone is the rule default. Adding V1 - Carry slope gives the older V1+V2 composite "
+                     "(sign of the average, flat when they disagree).")
+        with k2:
+            z_override = st.number_input("V2 Z-window (days)", min_value=20, max_value=756, value=252, step=1,
+                                          key="ca_carry_zwindow")
+        with k3:
+            h_override = st.number_input("Carry momentum horizon (days)", min_value=1, max_value=252, value=20,
+                                          step=1, key="ca_carry_horizon")
+        st.markdown("**Tenor pairs by asset class**")
+        pair_choice = {}
+        for ac in cae.ALL_ASSET_CLASSES:
+            dp = list(default_specs[ac].pairs)
+            r0, r1, r2, r3, r4, r5 = st.columns([1.2, 1, 1, 1.5, 1, 1])
+            with r0:
+                st.write(""); st.write(cae.ASSET_CLASS_LABELS[ac])
+            with r1:
+                n1 = st.selectbox("Near", TENORS, index=TENORS.index(dp[0][0]), key=f"ca_carry_{ac}_n1")
+            with r2:
+                f1 = st.selectbox("Far", TENORS, index=TENORS.index(dp[0][1]), key=f"ca_carry_{ac}_f1")
+            with r3:
+                use2 = st.checkbox("Second pair", value=len(dp) >= 2, key=f"ca_carry_{ac}_use2")
+            chosen = [(n1, f1)]
+            if use2:
+                d2 = dp[1] if len(dp) >= 2 else ("F1", "F13")
+                with r4:
+                    n2 = st.selectbox("Near ", TENORS, index=TENORS.index(d2[0]), key=f"ca_carry_{ac}_n2")
+                with r5:
+                    f2 = st.selectbox("Far ", TENORS, index=TENORS.index(d2[1]), key=f"ca_carry_{ac}_f2")
+                chosen.append((n2, f2))
+            pair_choice[ac] = tuple(chosen)
+
+    def _build_specs():
+        """Resolve the widget choices into one validated CarrySpec per asset class, and check the chosen
+        tenor pairs exist in the curve data. Returns (specs, notes). Raises ValueError with a readable
+        message if a choice is invalid."""
+        variants_key = tuple(k for k, lab in cae.CARRY_VARIANT_LABELS.items() if lab in var_labels)
+        if not variants_key:
+            raise ValueError("pick at least one Carry signal (V1 or V2)")
+        specs = {ac: cae.resolve_carry_spec(
+            ac, cae.CarrySpec(variants_key, int(z_override), int(h_override), pair_choice[ac]))
+            for ac in cae.ALL_ASSET_CLASSES}
+        notes = []
+        for ac in cae.ALL_ASSET_CLASSES:
+            pp = _cached_per_product_four_row(ac, tc_bps, specs[ac])
+            total = len(pp["Momentum"]["names"])
+            for style, label in (("Combined Carry", "Carry"), ("Combined CarryMom", "Carry momentum")):
+                got = pp[style]["names"]
+                thin = [n for n, k in zip(got, pp[style]["n_pairs"]) if k < len(specs[ac].pairs)]
+                if thin:
+                    notes.append(f"{cae.ASSET_CLASS_LABELS[ac]} {label}: {', '.join(thin)} had data for only some of the "
+                                 f"chosen pairs, so they are blended on fewer pairs than the other products.")
+                if len(got) < total:
+                    missing = [n for n in pp["Momentum"]["names"] if n not in got]
+                    notes.append(f"{cae.ASSET_CLASS_LABELS[ac]} {label}: no data for {', '.join(missing)} "
+                                 f"on the chosen pair(s), so those products are left out of that sleeve.")
+        return specs, notes
+
+    carry_error, carry_notes = None, []
+    try:
+        carry_specs, carry_notes = _build_specs()
+    except ValueError as e:
+        carry_error = str(e)
+        carry_specs = dict(default_specs)
+    if carry_error:
+        st.error(f"Carry settings not applied ({carry_error}). Showing the rule defaults until this is fixed.")
+    for _n in carry_notes:
+        st.warning(_n)
+    is_default_carry = all(carry_specs[ac] == default_specs[ac] for ac in cae.ALL_ASSET_CLASSES)
+    st.caption("Carry settings: **rule default (V2 only)**." if is_default_carry else
+               "Carry settings: **CUSTOM** (differs from the V2-only rule default); numbers below are not "
+               "comparable with the rule-default / Dimil figures.")
+    carry_specs_key = tuple((ac, carry_specs[ac]) for ac in cae.ALL_ASSET_CLASSES)
+    carry_fetcher = _carry_fetcher(carry_specs_key)
 
     st.divider()
 
@@ -517,21 +618,21 @@ with tab_crossasset:
                            "Dynamic Risk Parity": "dynamic_risk_parity"}[cc_combine]
         cc_gross, cc_net = cae.cross_commodity_dynamic(
             tc_bps, cc_asset_keys, cc_style_keys, cc_combine_key,
-            per_product_fetcher=_cached_per_product_four_row)
+            per_product_fetcher=carry_fetcher)
         _render_equity_and_metrics(cc_gross, cc_net, key_prefix="cc")
 
     st.divider()
 
     section_header("Cross-Asset-Class Portfolio")
-    st.caption("Combination of 1-4 asset classes' own Equal Weight portfolios (generalizes the "
-               "4 fixed Cross-Pairs shown on the static report to any 1-4 you pick). Pick just "
+    st.caption("Combination of 1-5 asset classes' own Equal Weight portfolios (generalizes the "
+               "4 fixed Cross-Pairs shown on the static report to any 1-5 you pick). Pick just "
                "one to see that asset class's own EW Portfolio number on its own, matching its "
                "individual dashboard's Portfolio tab.")
 
     cn1, cn2 = st.columns([3, 1])
     with cn1:
         cn_assets_labels = st.multiselect(
-            "Asset classes (choose 1-4)", list(cae.ASSET_CLASS_LABELS.values()),
+            "Asset classes (choose 1-5)", list(cae.ASSET_CLASS_LABELS.values()),
             default=["Metals", "Energy"], key="cn_assets")
     with cn2:
         cn_combine = st.selectbox(
@@ -541,13 +642,13 @@ with tab_crossasset:
                  "asset-class portfolios, rescaled to match Equal Weight's own full-sample "
                  "volatility (research/drp.py). No Risk Parity (ERC) option at this level.")
 
-    if not 1 <= len(cn_assets_labels) <= 4:
-        st.warning("Pick between 1 and 4 asset classes.")
+    if not 1 <= len(cn_assets_labels) <= len(cae.ALL_ASSET_CLASSES):
+        st.warning(f"Pick between 1 and {len(cae.ALL_ASSET_CLASSES)} asset classes.")
     else:
         cn_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cn_assets_labels)
         cn_combine_key = "equal_weight" if cn_combine == "Equal Weight" else "dynamic_risk_parity"
         cn_gross, cn_net = cae.cross_n_portfolio(
-            tc_bps, cn_asset_keys, per_product_fetcher=_cached_per_product_four_row,
+            tc_bps, cn_asset_keys, per_product_fetcher=carry_fetcher,
             combine_method=cn_combine_key)
         _render_equity_and_metrics(cn_gross, cn_net, key_prefix="cn")
 
@@ -564,8 +665,8 @@ with tab_crossasset:
         "prices, cached locally)."
     )
 
-    corr_strategy_net = dict(_cached_cross_commodity_portfolio(tc_bps))
-    corr_strategy_net["Dynamic Risk Parity"] = _cached_cross_commodity_drp(tc_bps)
+    corr_strategy_net = dict(_cached_cross_commodity_portfolio(tc_bps, carry_specs_key))
+    corr_strategy_net["Dynamic Risk Parity"] = _cached_cross_commodity_drp(tc_bps, carry_specs_key)
     corr_bench_returns = _cached_benchmark_returns()
 
     corr_all_years = []

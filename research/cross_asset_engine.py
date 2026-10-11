@@ -77,6 +77,7 @@ from __future__ import annotations
 import importlib
 import sys
 import os
+from typing import NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -95,8 +96,15 @@ from drp import rolling_drp_combine
 from run_regime_table import _metrics
 from regimes import REGIMES, REPORT_START
 
+# ASSET_CLASSES is the original four-class set that the validated reference forms
+# (cross_commodity_portfolio's defaults, cross_pair_portfolios, research/_validate_cross_asset_engine.py)
+# are checked against -- unchanged. Agriculture was added 2026-10-11 as a fifth, selectable asset class:
+# ALL_ASSET_CLASSES is what the live hub offers, and every function below that takes an `asset_classes`
+# argument accepts "agri" alongside the original four.
 ASSET_CLASSES = ["metals", "energy", "precious", "ngl"]
-ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "precious": "Precious", "ngl": "NGL"}
+ALL_ASSET_CLASSES = ASSET_CLASSES + ["agri"]
+ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "precious": "Precious", "ngl": "NGL",
+                      "agri": "Agriculture"}
 # Dashboard-visible product lists (CLAUDE.md's documented exclusion: research configs' PRODUCTS
 # is NOT what the live dashboard, or the cross-asset numbers, are built on -- Energy excludes
 # Singapore Gasoil + Fuel Oil, NGL excludes Ethylene + Propylene, Precious excludes Copper
@@ -111,6 +119,9 @@ DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
     "ngl": ["Ethane", "Propane", "Butane", "Isobutane"],
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],
+    # Agriculture: six products only (2026-10-11), matching research/configs/agri.py's PRODUCTS and the
+    # Agriculture dashboard. The other nine of the original 14-product build never enter a portfolio.
+    "agri": ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"],
 }
 # All 6 possible pairs across the 4 asset classes. Metals-Precious and Energy-NGL are the two
 # most correlated pairs (Correlations tab) -- included here too (2026-08-05) so that's visible
@@ -133,17 +144,72 @@ def _get_cfg(asset_class: str):
     return _CFG_CACHE[asset_class]
 
 
-def _carry_composite_raw(curve: pd.DataFrame, near: str, far: str, window: int) -> pd.Series:
-    """V1+V2 composite raw (pre-shift) signal for ONE Carry tenor pair --
-    same formula as engine.py's carry_v1v2_composite_position, one step
-    earlier (no shift), so it can be combined further with another tenor
-    pair's composite before a single shift is applied."""
-    v1 = raw_signal_carry_v1(curve, near, far)
-    v2 = raw_signal_carry_v2(curve, near, far, window=window)
-    return combine_positions([v1, v2], "equal_weight")
+CARRY_VARIANT_LABELS = {"V1": "V1 - Carry slope", "V2": "V2 - Z-score on carry slope"}
+DEFAULT_CARRY_VARIANTS = ("V2",)       # the 2026-10-10 rule: V2 only
+LEGACY_CARRY_VARIANTS = ("V1", "V2")   # the older V1+V2 composite, kept to reproduce pre-rule numbers
 
 
-def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, dict[str, list]]:
+class CarrySpec(NamedTuple):
+    """Hashable Carry settings for ONE asset class (so a Streamlit cache can key on it).
+    `variants`: which Carry signals form the composite ("V2" alone = the 10 Oct rule; ("V1","V2") = the
+    older composite). `zwindow`: V2's z-score window. `horizon`: Carry momentum (V3) horizon.
+    `pairs`: the (near, far) tenor pairs, blended at signal level; each is used for Carry AND Carry
+    momentum. A None field means "use the asset class's config value"."""
+    variants: tuple = DEFAULT_CARRY_VARIANTS
+    zwindow: int | None = None
+    horizon: int | None = None
+    pairs: tuple | None = None
+
+
+def resolve_carry_spec(asset_class: str, spec: CarrySpec | None = None) -> CarrySpec:
+    """Fill every None field from the asset class's config and validate the result."""
+    cfg = _get_cfg(asset_class)
+    spec = spec if spec is not None else CarrySpec()
+    variants = tuple(v for v in ("V1", "V2") if v in tuple(spec.variants))
+    if not variants or set(spec.variants) - {"V1", "V2"}:
+        raise ValueError(f"carry variants must be a non-empty subset of ('V1','V2'), got {tuple(spec.variants)!r}")
+    zwindow = int(spec.zwindow if spec.zwindow is not None else cfg.CARRY_ZSCORE_WINDOW)
+    horizon = int(spec.horizon if spec.horizon is not None else cfg.CARRY_MOMENTUM_HORIZON)
+    if not 20 <= zwindow <= 756:
+        raise ValueError(f"zwindow must be 20-756, got {zwindow}")
+    if not 1 <= horizon <= 252:
+        raise ValueError(f"horizon must be 1-252, got {horizon}")
+    raw_pairs = spec.pairs if spec.pairs is not None else cfg.CARRY_TENOR_PAIRS
+    pairs = []
+    for near, far in raw_pairs:
+        if int(str(near)[1:]) >= int(str(far)[1:]):
+            raise ValueError(f"tenor pair {near}-{far}: near must be a shorter tenor than far")
+        if (str(near), str(far)) not in pairs:
+            pairs.append((str(near), str(far)))
+    if not pairs:
+        raise ValueError(f"{asset_class}: no Carry tenor pair configured or chosen")
+    return CarrySpec(variants, zwindow, horizon, tuple(pairs))
+
+
+def default_carry_spec(asset_class: str) -> CarrySpec:
+    """The rule default for one asset class: V2 only, the config's z-window, horizon and tenor pairs."""
+    return resolve_carry_spec(asset_class, CarrySpec())
+
+
+def _carry_composite_raw(curve: pd.DataFrame, near: str, far: str, window: int,
+                          variants: tuple = DEFAULT_CARRY_VARIANTS) -> pd.Series:
+    """Raw (pre-shift) Carry signal for ONE tenor pair: V2 alone by default (10 Oct rule), or the
+    equal-weight composite of whichever `variants` are given (("V1","V2") = the older V1+V2 composite,
+    same formula as engine.py's carry_v1v2_composite_position one step earlier, no shift). Returned
+    unshifted so it can be combined with another tenor pair's signal before a single shift is applied."""
+    sigs = []
+    if "V1" in variants:
+        sigs.append(raw_signal_carry_v1(curve, near, far))
+    if "V2" in variants:
+        sigs.append(raw_signal_carry_v2(curve, near, far, window=window))
+    sigs = [x for x in sigs if not x.empty]
+    if not sigs:
+        return pd.Series(dtype=float)
+    return sigs[0] if len(sigs) == 1 else combine_positions(sigs, "equal_weight")
+
+
+def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
+                          carry_spec: CarrySpec | None = None) -> dict[str, dict[str, list]]:
     """Momentum / Combined Carry / Combined CarryMom / Value gross AND net
     daily log-return series PER PRODUCT (not yet combined across products)
     for one asset class, on the dashboard-filtered product universe.
@@ -167,10 +233,15 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
     cache this function's result once per (asset_class, tc_bps) and reuse
     it freely."""
     cfg = _get_cfg(asset_class)
-    tenor_pairs = cfg.CARRY_TENOR_PAIRS
+    spec = resolve_carry_spec(asset_class, carry_spec)
+    tenor_pairs = list(spec.pairs)
     products = DASHBOARD_PRODUCTS.get(asset_class, cfg.PRODUCTS)
     out = {style: {"gross": [], "net": [], "names": []}
            for style in ("Momentum", "Combined Carry", "Combined CarryMom", "Value")}
+    # n_pairs (added 2026-10-11): how many of the chosen tenor pairs actually had data for each product, index-aligned
+    # with names, so a caller can flag a product that was blended on fewer pairs than the user chose.
+    out["Combined Carry"]["n_pairs"], out["Combined CarryMom"]["n_pairs"] = [], []
+    pair_has_data = {pair: False for pair in tenor_pairs}
 
     for p in products:
         curve = cfg.load_curve(p)
@@ -184,8 +255,10 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
             out["Momentum"]["net"].append(n)
             out["Momentum"]["names"].append(p)
 
-        carry_raws = [_carry_composite_raw(curve, near, far, cfg.CARRY_ZSCORE_WINDOW)
+        carry_raws = [_carry_composite_raw(curve, near, far, spec.zwindow, spec.variants)
                       for near, far in tenor_pairs]
+        for pair, r in zip(tenor_pairs, carry_raws):
+            pair_has_data[pair] = pair_has_data[pair] or (not r.empty)
         carry_raws = [r for r in carry_raws if not r.empty]
         if carry_raws:
             combo = carry_raws[0] if len(carry_raws) == 1 else combine_positions(carry_raws, "equal_weight")
@@ -195,8 +268,9 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
                 out["Combined Carry"]["gross"].append(g)
                 out["Combined Carry"]["net"].append(n)
                 out["Combined Carry"]["names"].append(p)
+                out["Combined Carry"]["n_pairs"].append(len(carry_raws))
 
-        cm_raws = [raw_signal_carrymom(curve, near, far, cfg.CARRY_MOMENTUM_HORIZON)
+        cm_raws = [raw_signal_carrymom(curve, near, far, spec.horizon)
                    for near, far in tenor_pairs]
         cm_raws = [r for r in cm_raws if not r.empty]
         if cm_raws:
@@ -207,6 +281,7 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
                 out["Combined CarryMom"]["gross"].append(g)
                 out["Combined CarryMom"]["net"].append(n)
                 out["Combined CarryMom"]["names"].append(p)
+                out["Combined CarryMom"]["n_pairs"].append(len(cm_raws))
 
         val_pos = value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS,
                                      cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N)
@@ -216,6 +291,14 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS) -> dict[str, di
             out["Value"]["net"].append(n)
             out["Value"]["names"].append(p)
 
+    dead = [f"{n}-{f}" for (n, f), ok in pair_has_data.items() if not ok]
+    if dead:
+        raise ValueError(f"{asset_class}: tenor pair(s) {dead} have no data for any product in this asset class; "
+                         f"choose pairs that exist in the curve")
+    for style in ("Combined Carry", "Combined CarryMom"):
+        if not out[style]["net"]:
+            raise ValueError(f"{asset_class}: no product has data for {style} with tenor pairs "
+                             f"{[f'{n}-{f}' for n, f in tenor_pairs]}; pick pairs that exist in the curve")
     return out
 
 
@@ -439,16 +522,21 @@ def cross_commodity_dynamic(tc_bps: int = TC_BPS,
     return {**gross_styles, "Portfolio": g_port}, {**net_styles, "Portfolio": n_port}
 
 
-def cross_commodity_portfolio(tc_bps: int = TC_BPS) -> dict[str, pd.Series]:
-    """Dimil's exact construction (all 4 asset classes, all 4 styles, Equal
-    Weight AND Risk Parity both computed) -- kept as the validated,
+def cross_commodity_portfolio(tc_bps: int = TC_BPS,
+                               asset_classes: tuple[str, ...] = tuple(ASSET_CLASSES),
+                               per_product_fetcher=per_product_four_row) -> dict[str, pd.Series]:
+    """Dimil's exact construction (by default all 4 original asset classes, all 4 styles, Equal
+    Weight AND Risk Parity both computed; pass asset_classes=ALL_ASSET_CLASSES to include
+    Agriculture; Carry follows the 10 Oct rule (V2 only) unless per_product_fetcher says otherwise) -- kept as the validated,
     known-good reference form (see research/_validate_cross_asset_engine.py).
     cross_commodity_dynamic() above is the generalized version the live UI
     actually drives; this one exists so that validation script keeps
     working unchanged and there's always a fixed point to check new
     changes against."""
-    g_ew, n_ew = cross_commodity_dynamic(tc_bps, tuple(ASSET_CLASSES), STYLE_NAMES, "equal_weight")
-    _, n_rp = cross_commodity_dynamic(tc_bps, tuple(ASSET_CLASSES), STYLE_NAMES, "risk_parity")
+    g_ew, n_ew = cross_commodity_dynamic(tc_bps, tuple(asset_classes), STYLE_NAMES, "equal_weight",
+                                          per_product_fetcher=per_product_fetcher)
+    _, n_rp = cross_commodity_dynamic(tc_bps, tuple(asset_classes), STYLE_NAMES, "risk_parity",
+                                       per_product_fetcher=per_product_fetcher)
     out = {k: v for k, v in n_ew.items() if k != "Portfolio"}
     out["EW PORT"] = n_ew["Portfolio"]
     out["Risk Parity"] = n_rp["Portfolio"]
@@ -463,9 +551,9 @@ def cross_n_portfolio(tc_bps: int = TC_BPS,
                        per_product_fetcher=per_product_four_row,
                        combine_method: str = "equal_weight",
                        ) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
-    """Generalized Cross-Pair -> Cross-N: combination of 1-4 asset classes'
+    """Generalized Cross-Pair -> Cross-N: combination of 1-5 asset classes'
     own Equal Weight portfolios (Methodology doc Section 9's Cross-Pair
-    construction, generalized from exactly-2 to 1-4). Returns (gross_dict,
+    construction, generalized from exactly-2 to 1-5 with Agriculture added 2026-10-11). Returns (gross_dict,
     net_dict) keyed by asset class label plus "Portfolio" for the final
     N-way combination. With exactly 1 asset class, "Portfolio" is identical
     to that one asset class's own EW portfolio (nothing to combine) --
@@ -489,8 +577,11 @@ def cross_n_portfolio(tc_bps: int = TC_BPS,
     gross_by_class/net_by_class itself instead of calling this function).
     No "risk_parity" (ERC) option here -- not requested for this level;
     cross_commodity_dynamic above has it if needed at the style level."""
-    if not 1 <= len(asset_classes) <= 4:
-        raise ValueError("cross_n_portfolio needs 1 to 4 asset classes")
+    if not 1 <= len(asset_classes) <= len(ALL_ASSET_CLASSES):
+        raise ValueError(f"cross_n_portfolio needs 1 to {len(ALL_ASSET_CLASSES)} asset classes")
+    unknown = [ac for ac in asset_classes if ac not in ASSET_CLASS_LABELS]
+    if unknown:
+        raise ValueError(f"unknown asset class(es) {unknown}; valid: {list(ASSET_CLASS_LABELS)}")
     if combine_method not in CROSS_N_COMBINE_METHODS:
         raise ValueError(f"combine_method must be one of {CROSS_N_COMBINE_METHODS}, got {combine_method!r}")
     gross_by_class, net_by_class = {}, {}

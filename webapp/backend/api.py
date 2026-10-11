@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
-from config_registry import get_asset_config
+from config_registry import REGISTRY, get_asset_config
 from services import comparison as comparison_service
 from services import carry as carry_service
 from services import crossasset as crossasset_service
@@ -254,8 +254,22 @@ def comparison(asset_class: str, product: str, body: ComparisonRequest):
 # methodology, a genuinely separate engine from Momentum/Carry/Value/
 # Comparison above (see services/portfolio.py's module docstring).
 
+# Asset classes served by the generic Momentum/Carry/Value/Comparison routes but
+# deliberately without a Portfolio route (Agriculture: Carry tenor pairs are not
+# locked yet, research/configs/agri.py CARRY_TENOR_PAIRS is empty). Answer with
+# an explicit 501 instead of the generic "Unknown asset class" 404.
+def _require_portfolio(asset_class: str) -> None:
+    if asset_class in REGISTRY and asset_class not in portfolio_service._CONFIG_MODULES:
+        raise HTTPException(
+            status_code=501,
+            detail=f"Portfolio is not available for {asset_class!r}: Carry tenor pairs are not locked "
+                   "for this asset class yet.",
+        )
+
+
 @router.get("/{asset_class}/portfolio/reference")
 def portfolio_reference(asset_class: str):
+    _require_portfolio(asset_class)
     try:
         return portfolio_service.get_reference_strategies(asset_class)
     except KeyError as exc:
@@ -302,6 +316,7 @@ class PortfolioResultsRequest(BaseModel):
 
 @router.post("/{asset_class}/portfolio/results")
 def portfolio_results(asset_class: str, body: PortfolioResultsRequest):
+    _require_portfolio(asset_class)
     try:
         return portfolio_service.get_results(
             asset_class,

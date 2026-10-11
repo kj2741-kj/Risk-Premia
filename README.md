@@ -1,5 +1,7 @@
 # Risk Premia — Multi-Asset Momentum/Carry/Value Research
 
+> **Carry rule (2026-10-10): in portfolio construction at every level, Carry = V2 (z-score) only, blended across the short and long tenor pairs. See [`README_CARRY_RULE.md`](README_CARRY_RULE.md) for the definition, tenors per asset class and status. The code still builds the older V1+V2 composite until that rule is implemented.**
+
 ## What's here
 
 Two layers:

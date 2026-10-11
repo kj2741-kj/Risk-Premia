@@ -26,3 +26,7 @@ If you're asked to add a product, remove one, or change a product list, check al
 ## Regenerating reported numbers
 
 `python research/run_regime_table.py <metals|energy|precious|ngl>` is the canonical full-sample + regime-conditional table builder — use this (or `--window-grid` for the JS-ready format `Analysis/Research_Dashboard_F3.html` consumes), not ad hoc scripts, when you need reportable numbers. Changing a `configs/*.py` parameter (Value contract, Carry tenor pairs, etc.) changes every downstream number that touches that strategy, including every portfolio combine method — regenerate rather than hand-patch when parameters change.
+
+## Carry rule (2026-10-10)
+
+Portfolio-level Carry at every level (per asset class and cross-asset) is V2 z-score only, signal-level blend of the short and long tenor pairs. Spec, tenors per asset class, Energy ex-NatGas and implementation status are in `README_CARRY_RULE.md`. Read it before touching any Carry sleeve.

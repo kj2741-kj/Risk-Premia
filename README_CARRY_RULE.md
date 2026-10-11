@@ -1,6 +1,6 @@
-# Carry Construction Rule: V2 Blend of Short and Long Tenor
+# Carry Construction Rule: V2 Blend of Short and Long Tenor (plus Momentum: keep default)
 
-Rule adopted 2026-10-10 (user decision). Read this before building or changing any Carry sleeve or any portfolio that contains one.
+Rules adopted 2026-10-10 (user decisions). Read this before building or changing any Carry or Momentum sleeve, or any portfolio that contains one. The Carry rule is the main body; the Momentum rule is the short section further down.
 
 ## The rule
 
@@ -40,6 +40,15 @@ Notes:
 - **NGL** uses F2-F4 and F2-F14 (the pairs in `research/configs/ngl.py`), not F1-F3 and F1-F13. The NGL Portfolio tab caption in `ngl_dashboard/app.py` still says F4-F15 and is stale.
 - **Precious** has only one tenor pair (F1-F3), so there is nothing to blend. Its Carry sleeve is V2 on F1-F3 alone.
 - **Energy excludes NatGas** under this rule. The dashboards and `cross_asset_engine.DASHBOARD_PRODUCTS` currently still include it. Singapore Gasoil, Fuel Oil, Ethylene and Propylene stay excluded as before (see `CLAUDE.md`).
+
+## Momentum rule: keep the default 3-crossover composite
+
+Decision 2026-10-10 (user): in portfolio construction at every level, Momentum stays as the **current default only**. No change.
+
+- Signal: `sign(mean of sign(MA_fast - MA_slow))` over the three crossovers `(1,20)`, `(5,60)`, `(20,250)`, computed on `F1_raw` (`engine.momentum_composite_position`, `MOMENTUM_PAIRS` in each `research/configs/*.py`), with `shift_n = 1`.
+- Do not replace it with a single crossover or a pair of crossovers.
+- Reason it was checked: a comparison of the three pairs of two against the default triple (2011-01 to 2026-06, 5 bps incl. roll-day cost, equal weight). The default has the highest IR in Energy (0.510) and NGL (0.896). A pair has the higher IR in Metals (best -0.260 against default -0.419) and Precious (best -0.105 against default -0.290), but Momentum is negative in every version in those two sectors, so there is no case for changing it. The gaps were not tested for significance.
+- Cross-check still open: the default row in that comparison used the same composite function as the dashboard but was not explicitly reconciled against the dashboard's Momentum row.
 
 ## What this replaces
 

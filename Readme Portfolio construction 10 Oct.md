@@ -48,6 +48,7 @@ Decision 2026-10-10 (user): in portfolio construction at every level, Momentum s
 - Signal: `sign(mean of sign(MA_fast - MA_slow))` over the three crossovers `(1,20)`, `(5,60)`, `(20,250)`, computed on `F1_raw` (`engine.momentum_composite_position`, `MOMENTUM_PAIRS` in each `research/configs/*.py`), with `shift_n = 1`.
 - Do not replace it with a single crossover or a pair of crossovers.
 - Reason it was checked: a comparison of the three pairs of two against the default triple (2011-01 to 2026-06, 5 bps incl. roll-day cost, equal weight). The default has the highest IR in Energy (0.510) and NGL (0.896). A pair has the higher IR in Metals (best -0.260 against default -0.419) and Precious (best -0.105 against default -0.290), but Momentum is negative in every version in those two sectors, so there is no case for changing it. The gaps were not tested for significance.
+- **Precious rerun on the aligned roll calendar (2026-10-11):** the figures above for Precious were on the old 12-month calendar. On `expiry_calendars_20260701_aligned.xlsx` (Gold, Silver, Platinum, Palladium; 2011-01 to 2026-06) the default is -0.277 (was -0.290), the best pair is still (1,20)+(20,250) at -0.091 (was -0.105), and Momentum is still negative in every version. Decision unchanged.
 - Cross-check still open: the default row in that comparison used the same composite function as the dashboard but was not explicitly reconciled against the dashboard's Momentum row.
 
 ## What this replaces
@@ -72,7 +73,28 @@ Read this honestly:
 - The edge is regime-dependent. V2 is weaker than the old default in the 2022-onward regime in Energy and NGL, and collapses in NGL during 2020-21 (IR 0.003 against 0.750).
 - NGL tenors are provisional: F2 brings back the heating-season seasonality that F4 was originally chosen to avoid.
 
+## Precious on the aligned roll calendar (rerun 2026-10-11)
+
+Dimil111's commit `0b1e8aa` replaced the Precious roll calendar with Bloomberg's contract months (Gold Feb/Apr/Jun/Aug/Oct/Dec, Silver Mar/May/Jul/Sep/Dec, Platinum Jan/Apr/Jul/Oct, Palladium Mar/Jun/Sep/Dec), removing spurious roll events (phase changes per product fell from 987 to 331-495). Same four products, F1-F3, 5 bps incl. roll-day cost, equal weight, 2011-01 to 2026-06. Signals are identical; only the continuous series and roll charges differ.
+
+| Strategy | IR old calendar | IR aligned calendar |
+|---|---|---|
+| Carry V1 | 0.208 | 0.072 |
+| **Carry V2 (the rule)** | 0.090 | -0.000 |
+| Carry V1+V2 (old default) | 0.225 | 0.061 |
+| Momentum default (3) | -0.290 | -0.277 |
+
+Aligned-calendar Carry V2 by regime: R1 0.536, R2 0.380, R3 -0.887, R4 -0.065. Per product (V2): Gold 0.226, Silver 0.276, Platinum 0.205, Palladium -0.456.
+
+What this shows, and what it does not:
+- On Precious the V2-only rule is not better than the old V1+V2 default (0.000 against 0.061 aligned; 0.090 against 0.225 on the old calendar). Precious is the one sector where the rule's evidence is not supportive, and with a single tenor pair there is no blend to help. It was included for consistency, not because the numbers favour it. Not significance-tested.
+- Carry IR fell on the aligned calendar in all three versions, even though roll charges are lower. The cause was not investigated here; it comes from the changed continuous series, so Precious Carry results are sensitive to the roll calendar and the old figures should not be quoted.
+- Platinum and Palladium F3 liquidity remains the weak point noted in `research/configs/precious.py`.
+
 ## Status
+
+**Final_Research_Dashboard.html.** `Analysis/Final_Research_Dashboard.html` (commit `0b1e8aa`) already computes the V2-only Carry rule itself (5 asset classes, equal-weight and inverse-vol, Energy with and without NatGas, combined books). It is a standalone page, not the engine. Its numbers have not been reconciled against the figures in this file or against `research/run_regime_table.py`; do that before quoting both.
+
 
 **This file is the rule and its specification. The code has not been changed yet.** `research/configs/*.py`, `dashboard_portfolio_tab.py`, `research/cross_asset_engine.py`, `research/run_regime_table.py` and `webapp/` still build Carry as the V1+V2 composite. Anyone implementing the rule should change all of them, plus regenerate every reported number that touches Carry (`python research/run_regime_table.py <metals|energy|precious|ngl>`), rather than hand-patching. Check `git branch --show-current` first: the Streamlit dashboards are on `main` and the React rebuild is on `feature/react-dashboard`.
 

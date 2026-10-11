@@ -1,9 +1,12 @@
 """
 research/configs/agri.py
 ===========================
-Ex-ante config for the Agriculture asset class (Corn, Wheat, Oats, Rough
-Rice, Soybean, Soybean Oil, Soybean Meal, Coffee, Cocoa, Orange Juice,
-Cotton No.2, Feeder Cattle, Live Cattle, Lean Hogs). Built 2026-09-29,
+Ex-ante config for the Agriculture asset class. UPDATED 2026-10-11 to six
+products (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar No.11), the book in
+Analysis/Final_Research_Dashboard.html, on the Bloomberg-matched roll calendar
+(Agri_Rolling_Calendar_bloomberg_matched.xlsx, which also supplies a clean Sugar
+calendar). Carry default is F1-F2 (see below). The text below describes the
+original 14-product build of 2026-09-29 and is kept for history. Built 2026-09-29,
 mirroring research/configs/metals.py's structure -- same engine
 (rolling_continuous.get_metal_rolling_f1 / ratio_continuous, both reused
 unchanged, zero new roll-adjustment logic written for this asset class).
@@ -60,29 +63,28 @@ _SCRIPTS_DIR = os.path.join(_REPO_ROOT, "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from rolling_continuous import (AGRI_CALENDAR_FILE, AGRI_CONFIG,  # noqa: E402
+from rolling_continuous import (AGRI_CALENDAR_FILE_BBG, AGRI_BBG_CONFIG as AGRI_CONFIG,  # noqa: E402
                                  AGRI_FUTURES_FILE, get_metal_rolling_f1,
                                  reanchor_f1_continuous)
 from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio  # noqa: E402
 
 ASSET_CLASS = "Agriculture"
 
-PRODUCTS = ["Corn", "Wheat", "Oats", "RoughRice", "Soybean", "SoybeanOil",
-            "SoybeanMeal", "Coffee", "Cocoa", "OrangeJuice", "Cotton",
-            "FeederCattle", "LiveCattle", "LeanHogs"]
-# Sugar No.11 deliberately absent -- see module docstring.
+# Six products only (user's decision 2026-10-11, matching Analysis/Final_Research_Dashboard.html's
+# Agriculture book). The other nine (Oats, Rough Rice, Soybean Meal, Cocoa, Orange Juice, Cotton,
+# Feeder Cattle, Live Cattle, Lean Hogs) are dropped from this config; their data and the original
+# 14-product AGRI_CONFIG / Agri_Rolling_Calendar.xlsx still exist in scripts/rolling_continuous.py.
+PRODUCTS = ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]
 
 AGRI_CODES = {
-    "Corn": "C", "Wheat": "W", "Oats": "O", "RoughRice": "RR",
-    "Soybean": "S", "SoybeanOil": "BO", "SoybeanMeal": "SM",
-    "Coffee": "KC", "Cocoa": "CC", "OrangeJuice": "JO", "Cotton": "CT",
-    "FeederCattle": "FC", "LiveCattle": "LC", "LeanHogs": "LH",
+    "Corn": "C", "Wheat": "W", "Soybean": "S", "SoybeanOil": "BO",
+    "Coffee": "KC", "Sugar": "SB",
 }
 
 SHEET_NAMES = {product: AGRI_CONFIG[code]["price_sheet"] for product, code in AGRI_CODES.items()}
 
 CURVE_FILE = AGRI_FUTURES_FILE
-CALENDAR_FILE = AGRI_CALENDAR_FILE
+CALENDAR_FILE = AGRI_CALENDAR_FILE_BBG  # Bloomberg-matched, 6 products incl. Sugar
 
 # Standardized analysis start (matches Metals/Energy/Precious's own 2026-07-23
 # decision to use 2006 uniformly rather than each file's true earliest date --
@@ -96,15 +98,14 @@ ANALYSIS_START = "2006-01-01"
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-# Carry: PENDING -- see module docstring. Left empty rather than guessed;
-# any code iterating this list (e.g. dashboard_portfolio_tab.py's Carry/
-# CarryMom sleeve) will see zero pairs and should skip those sleeves for
-# Agri, not silently compute against a wrong/borrowed tenor pair.
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = []
+# Carry: F1-F2 only, the pair locked in Analysis/Final_Research_Dashboard.html ("Agriculture: F1-F2
+# only, no long pair defined yet"). Set 2026-10-11 as the DEFAULT; the Streamlit Carry and Portfolio
+# tabs let the user pick any other (near, far) pair. All six products have at least F8 of depth.
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 
-# Carry-Momentum (V3): kept as its own separate strategy, same as every
+# Carry momentum (V3): kept as its own separate strategy, same as every
 # other asset class -- horizon is asset-independent, tenor pair still
 # pending same as Carry above (CarryMom needs a (near, far) pair too).
 CARRY_MOMENTUM_HORIZON = 20

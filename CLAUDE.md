@@ -15,6 +15,8 @@ This is intentional and applies identically on both `main` (Streamlit) and `feat
 
 If you're asked to add a product, remove one, or change a product list, check all of: the relevant `configs/*.py` (engine — usually should stay untouched for this kind of change), the Streamlit dashboard's `PRODUCT_ORDER`/`*_EXCLUDED` constant, and (if touching the webapp) `config_registry.py` + `services/portfolio.py`'s `EXCLUDED_PRODUCTS` + `App.tsx`'s hardcoded arrays. Missing any one of these leaves the two live apps (or the two views within one app) inconsistent with each other.
 
+**Agriculture is six products only (decided 2026-10-11):** Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar No.11. `research/configs/agri.py`'s `PRODUCTS`, `agri_dashboard/app.py` and every portfolio use exactly these six. The other nine (Oats, Rough Rice, Soybean Meal, Cocoa, Orange Juice, Cotton, Feeder Cattle, Live Cattle, Lean Hogs) are hidden and must not enter any portfolio. Carry default pair is F1-F2, customisable in the Streamlit Carry and Portfolio tabs. Roll calendar is `Agri_Rolling_Calendar_bloomberg_matched.xlsx` via `AGRI_BBG_CONFIG` in `scripts/rolling_continuous.py`.
+
 **No cross-asset-class ("Diversified Risk Premia") portfolio exists yet** — combining all 4 asset classes into one book is discussion-only (see `project_cross_asset_portfolio_construction` in project memory, not in this repo). Whoever builds it must reuse the exclusion lists above, not read `configs/*.py`'s raw `PRODUCTS`, or Singapore Gasoil/Fuel Oil/Ethylene/Propylene will silently reappear.
 
 ## Branches

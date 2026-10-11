@@ -438,6 +438,26 @@ AGRI_CONFIG: dict[str, dict] = {
     # NOTE: "SB" (Sugar No.11 ICE) deliberately absent -- see comment block above.
 }
 
+# ── Agriculture, Bloomberg-matched set (added 2026-10-11) ────────────────────
+# The six-product Agriculture book used by Analysis/Final_Research_Dashboard.html and the
+# Agriculture Streamlit dashboard: Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar. Uses
+# Agri_Rolling_Calendar_bloomberg_matched.xlsx, whose contract months are the ones Bloomberg's
+# generic F1..Fn actually uses (F1 rebuilt from the calendar matches Bloomberg 100% for all six).
+# Sugar's calendar sheet is built from the monthly single-contract files (last business day of
+# the month before delivery), which replaces the corrupted Sugar dates that kept it out of
+# AGRI_CONFIG above. AGRI_CALENDAR_FILE / AGRI_CONFIG above are left unchanged because
+# scripts/build_agri_calendar_real_cycle.py and generate_tradebooks.py still use them for the
+# original 14-product workbook.
+AGRI_CALENDAR_FILE_BBG = os.path.join(DATA_DIR, "Prices_0924", "Agri_Rolling_Calendar_bloomberg_matched.xlsx")
+AGRI_BBG_CONFIG: dict[str, dict] = {
+    **{code: AGRI_CONFIG[code] for code in ("C", "W", "S", "BO", "KC")},
+    "SB": {
+        "name": "Sugar No.11 (ICE)", "price_sheet": "Sugar No.11 ICE",
+        "calendar_sheet": "SB - Sugar No.11 (ICE)",
+        "f1_col": 1, "f2_col": 2, "data_start_row": 2,
+    },
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Data loaders

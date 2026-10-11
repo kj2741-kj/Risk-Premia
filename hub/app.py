@@ -63,7 +63,7 @@ DASHBOARD_LINKS = {
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
                         "desc": "Ethane, Propane, Butane, Isobutane, Ethylene, Propylene. Momentum, Carry, Value."},
     "Agriculture":    {"url": "https://risk-premia-agri.streamlit.app/", "ready": True,
-                        "desc": "14 grains, softs, oilseeds and livestock futures. Momentum, Carry, Value."},
+                        "desc": "Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar. Momentum, Carry, Value, Portfolio."},
 }
 
 # Cached data loaders for the Fundamental Analysis tab. Cached separately from

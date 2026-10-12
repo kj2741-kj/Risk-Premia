@@ -1,0 +1,74 @@
+from facts2 import *
+
+
+def ngl():
+    v, a = "ngl", "ngl"
+    pr = VARIANTS[v][1]
+    mom, car, cm, val, sk = (st(v, k) for k in SLEEVES)
+    pm, pc, pcm, pv, ps = (per(v, k) for k in SLEEVES)
+    ew, iv = st(v, "EW PORT"), st(v, "Inverse Vol")
+    ew4, iv4 = st4(v, "EW PORT"), st4(v, "Inverse Vol")
+    ewD, ivD = per(v, "EW PORT"), per(v, "Inverse Vol")
+    ew4D, iv4D = [st4(v, "EW PORT", w)["ir"] for w in ("p1", "p2", "p3")], [st4(v, "Inverse Vol", w)["ir"] for w in ("p1", "p2", "p3")]
+    cw = corr_within(v)
+    others = {t: st(t, "EW PORT")["ir"] for t in ("metals", "energy", "precious", "agri")}
+    others_iv = {t: st(t, "Inverse Vol")["ir"] for t in ("metals", "energy", "precious", "agri")}
+    bo = max(others, key=others.get); bo_iv = max(others_iv, key=others_iv.get)
+    chk(bo == "energy" and bo_iv == "energy", "energy is the best other class")
+    chk(ew["ir"] > 1.5 * max(others.values()) and iv["ir"] > 1.4 * max(others_iv.values()), "NGL well ahead of every other class")
+    chk(all(x > 0 for x in pm + pc + pcm), "NGL Momentum/Carry/CarryMom positive every period")
+    chk(pv[0] < 0 and abs(pv[1]) < 0.1 and pv[2] > 0.8 and val["ir"] > 0, "NGL Value pattern")
+    chk(ps[0] < -0.5 and ps[1] > 0.5 and ps[2] > 0, "NGL Skewness pattern")
+    chk(all(x > 0 for x in ewD + ivD), "NGL portfolios positive every period")
+    chk(ew["ir"] > iv["ir"] and ew["ret"] > iv["ret"] and iv["mdd"] > ew["mdd"], "NGL EW ahead on return and IR, IV shallower drawdown")
+    vy = yearly_log(CS[v]["Value"])
+    chk(all(vy.loc[y] > 0 for y in range(2022, 2027)) and vy.loc[2026] == vy.loc[2022:].max() and round(vy.loc[2026], 2) == 0.36 and round(vy.loc[2025], 2) == 0.09, "NGL Value 2022-2026")
+    vpp = {p: pst(a, p, "Value", "p3")["ir"] for p in pr}
+    chk(round(vpp["Propane"], 2) == 1.47 and round(vpp["Butane"], 2) == 1.09, "NGL Value P3 by product")
+    mp = {p: pst(a, p, "Momentum")["ir"] for p in pr}; cp = {p: pst(a, p, "Carry")["ir"] for p in pr}; cmp_ = {p: pst(a, p, "CarryMom")["ir"] for p in pr}
+    vf = {p: pst(a, p, "Value")["ir"] for p in pr}
+    chk(min(mp.values()) > 0.6 and min(cp.values()) > 0.3 and min(cmp_.values()) > 0.05, "NGL every product positive in Momentum/Carry/CarryMom")
+    chk(vf["Butane"] > 0.2 and vf["Isobutane"] > 0.1 and vf["Ethane"] < 0 and abs(vf["Propane"]) < 0.05, "NGL Value by product")
+    carry_p = [pper(a, p, "Carry") for p in pr]; cmin = min(min(x) for x in [per(v, "Carry")]); cmax = max(per(v, "Carry"))
+    skp = {p: pst(a, p, "Skewness")["ir"] for p in pr}; skpp = {p: pper(a, p, "Skewness") for p in pr}
+    chk(all(skpp[p][0] < -0.2 for p in pr) and all(skpp[p][1] > 0.1 for p in pr), "NGL Skewness P1 negative and P2 positive in every product")
+    sy = yearly_log(CS[v]["Skewness"])
+    chk(round(sy.loc[2020], 2) > 1.0 and sy.loc[2012] < -0.6 and sy.loc[2021] > 0.5, "NGL Skewness years")
+    lg = {p: legs(a, p) for p in pr}
+    eth_crash, _ = skew_episode(a, "Ethane", "2020-03-01", "2020-04-30")
+    prop_after, _ = skew_episode(a, "Propane", "2020-05-01", "2021-12-31")
+    but_after, _ = skew_episode(a, "Butane", "2020-05-01", "2021-12-31")
+    iso_after, _ = skew_episode(a, "Isobutane", "2020-05-01", "2021-12-31")
+    chk(eth_crash > 1.0 and min(prop_after, but_after, iso_after) > 1.3, "NGL Skewness 2020 episode")
+    chk(all(lg[p]["p3"]["long_pct"] > 75 for p in ("Ethane", "Propane", "Butane", "Isobutane")), "NGL Skewness long in P3")
+    B = []
+    blocks = [("h2", "NGL")]; B = blocks.append
+    B(("b", f"NGL is the strongest sleeve in the research: Equal Weight ({line(ew)}) and Inverse Vol ({line(iv)}), the best full-sample IR of any asset class under both constructions. "
+            f"At the individual-strategy level, Momentum (IR {I(mom['ir'])}), Carry (IR {I(car['ir'])}) and Carry-Momentum (IR {I(cm['ir'])}) are positive in every one of the three periods. "
+            f"Value ({line(val)}) is an exception: net positive full-sample but negative in P1 ({I(pv[0])}), flat in P2 ({I(pv[1])}) and strongly positive in P3 ({I(pv[2])}). "
+            f"Skewness ({line(sk)}) is the other: negative in P1 ({I(ps[0])}), strongly positive in P2 ({I(ps[1])}) and weakly positive in P3 ({I(ps[2])})."))
+    B(("b", f"NGL's portfolios are strong in every period rather than in one: Equal Weight IR is P1 {I(ewD[0])}, P2 {I(ewD[1])}, P3 {I(ewD[2])} and Inverse Vol P1 {I(ivD[0])}, P2 {I(ivD[1])}, P3 {I(ivD[2])}. "
+            f"Both are well ahead of every other asset class, whose best full-sample Equal Weight IR is {I(others[bo])} (Energy; {I(st('energy_exng', 'EW PORT')['ir'])} without Natural Gas). "
+            f"Skewness shifts the profile within the periods: P1 falls from {I(ew4D[0])} to {I(ewD[0])} for Equal Weight and P2 rises from {I(ew4D[1])} to {I(ewD[1])}, while the full-sample IR barely moves ({I(ew4['ir'])} to {I(ew['ir'])}; Inverse Vol {I(iv4['ir'])} to {I(iv['ir'])}) and volatility falls ({V(ew4['vol'])} to {V(ew['vol'])}). "
+            f"The macro backdrop is the US export build-out: in 2012 Mont Belvieu propane traded at an average $0.89/gal discount to international prices because export terminals were at capacity (EIA), and US propane exports averaged a record 1.8 million b/d in 2024 (EIA) and passed 2 million b/d for the first time in April 2026, at a record 2.1 million b/d (EIA), "
+            f"while ethane exports reached 492,000 b/d in 2024 against 65,000 b/d in 2015 and normal butane 491,000 b/d against 97,000 (OPIS, citing EIA)."))
+    B(("b", f"Carry ({line(car)}) is the clearest embodiment of NGL's seasonal mechanics: predictable weather- and industrial-driven demand cycles push futures curves from contango in low-demand build periods into steep backwardation as inventories drain in peak season. "
+            f"In the data the F2-F4 slope averages +3.7% (backwardation) in December to March and -1.7% (contango) in June to September. Carry is positive in every period (IR {I(min(pc))} to {I(max(pc))}), capturing that swing."))
+    B(("b", f"The two portfolio constructions are close, with Equal Weight ahead on return and IR and Inverse Vol ahead on drawdown: Equal Weight returns {R(ew['ret'])} against {R(iv['ret'])} for Inverse Vol, with an IR of {I(ew['ir'])} against {I(iv['ir'])}, while Inverse Vol has the shallower maximum drawdown ({M(iv['mdd'])} against {M(ew['mdd'])}) and marginally lower volatility ({V(iv['vol'])} against {V(ew['vol'])})."))
+    B(("b", f"The P3 Value result ({I(pv[2])}) is not a one-year event: the sleeve earns a positive log return in each of 2022 to 2026, and 2026 is its best year of the period ({N(vy.loc[2026])}, against {N(vy.loc[2025])} in 2025). It is led by Propane ({I(vpp['Propane'])}) and Butane ({I(vpp['Butane'])}). "
+            f"The war that began on 28 February 2026 and the closure of the Strait of Hormuz disrupted around 30% of global LPG supply (Veson Nautical estimate) and sent US LPG exports to a record 3.3 million b/d in April 2026 (S&P Global); in our series the Propane front month rose from $0.67/gal on 27 February to $0.90/gal on 27 March."))
+    B(("b", f"Skewness is a single-regime result in NGL. It is negative in all four products in P1 (IR {I(skpp['Ethane'][0])} to {I(skpp['Propane'][0])}) and positive in all four in P2 (IR {I(min(x[1] for x in skpp.values()))} to {I(max(x[1] for x in skpp.values()))}); by calendar year it loses {abs(sy.loc[2012]):.2f} in 2012 and earns {N(sy.loc[2020])} in 2020 and {N(sy.loc[2021])} in 2021, "
+            f"the crash and recovery of 2020-2021: the sleeve was short into the collapse (Ethane's short leg earned {N(eth_crash)} in March and April 2020), turned long in March 2020 and earned {N(prop_after)} in Propane, {N(but_after)} in Butane and {N(iso_after)} in Isobutane from May 2020 to December 2021, "
+            f"then stayed long ({U(min(lg[p]['p3']['long_pct'] for p in pr),0)}% or more of P3 days in every product); it adds {N(sy.loc[2026])} in 2026. "
+            f"It correlates at {N(cw.loc['Skewness', 'Momentum'])} with Momentum and {N(cw.loc['Skewness', 'Carry'])} with Carry, the most negative pairings in any asset class for those two, and at {N(cw.loc['Skewness', 'Value'])} with Value."))
+    B(("b", f"Individual-product decomposition: Momentum works uniformly across all four products (IR {I(min(mp.values()))} to {I(max(mp.values()))}), the highest weakest-product result of any strategy in any asset class in the research. Carry (IR {I(min(cp.values()))} to {I(max(cp.values()))}) and Carry-Momentum (IR {I(min(cmp_.values()))} to {I(max(cmp_.values()))}) are also positive in every product. "
+            f"Value's modest full-sample edge is concentrated in Butane and Isobutane (IR {I(vf['Butane'])} / {I(vf['Isobutane'])}), while Ethane and Propane show none (IR {I(vf['Ethane'])} / {I(vf['Propane'])}), the same split that explains Value's period-to-period inconsistency above. "
+            f"Skewness is positive in Ethane ({I(skp['Ethane'])}) and Isobutane ({I(skp['Isobutane'])}) and negative in Propane ({I(skp['Propane'])}) and Butane ({I(skp['Butane'])})."))
+    B(("fig", "fig_ngl_combined.png", "Figure 4. NGL: Combined Strategy Performance (Cumulative Return, 2012-2026)"))
+    return blocks
+
+
+if __name__ == "__main__":
+    for b in ngl():
+        print(b[0], b[1] if b[0] != "fig" else b[1:])
+        print()

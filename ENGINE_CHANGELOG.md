@@ -6,6 +6,15 @@ that led to it.
 
 ---
 
+## 2026-10-12 (night): Streamlit Cloud kept stale shared modules after a push; apps now refresh them
+
+- **Symptom.** After the Skewness push (80884c8) every Streamlit Cloud app failed: the five dashboards with `ImportError: cannot import name 'render_skewness_tab' from 'common_engine'` and the hub with `AttributeError` on `cae.ALL_ASSET_CLASSES`. A fresh clone of `main` ran all six apps without error on Python 3.13, so the code was fine.
+- **Cause.** A running Streamlit Cloud app keeps its Python process across a git pull and reloads only files inside the app's own folder. Shared modules outside it (`common_engine.py`, `common_shared.py`, `dashboard_portfolio_tab.py`, `research/*`, `scripts/*`) stay in memory in their old version while `app.py` is new. Reproduced locally by loading the old `common_engine` / `cross_asset_engine` into `sys.modules` and running the current apps.
+- **Fix.** The six `app.py` files (hub and five dashboards) call `_refresh_repo_modules()` right after the `sys.path` setup: when any loaded repo module's file changed since the last run (and on the first run of a process) the repo's modules are dropped from `sys.modules`, so the imports below read the current code. Unchanged files are left alone (no re-import cost). With stale modules loaded, all five dashboards and the hub run without exceptions; a touched file is reloaded and an unchanged one is not.
+- **Note.** Because `app.py` is always read fresh, this takes effect on the next redeploy without a manual reboot. If an app still shows the old error, use Manage app > Reboot app once.
+
+---
+
 ## 2026-10-12 (evening): Skewness in the five Streamlit dashboards, their Portfolio tabs and the hub Cross-Asset tab
 
 - **One shared signal.** `research/engine.py`: `raw_signal_skewness_from_returns` (minus the rolling skewness of daily log returns over 252 observations, +1 if negative, -1 if positive), `raw_signal_skewness(log_price)` and `ratio_log_returns(f1c, f1r, f2r, phase)`. The dashboards' dollar-PnL `F1_continuous` is additively stitched, so `log(F1_continuous).diff()` divides by the adjusted level and is wrong (and undefined where the level is <= 0). `ratio_log_returns` rebuilds the exact ratio-stitched log return as log(1 + dollar change / price of the contract held at t-1); it reproduces the research series to 1e-15 on all 23 products (signal agreement 100%).

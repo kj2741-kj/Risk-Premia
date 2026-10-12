@@ -38,3 +38,7 @@ Momentum stays as the default 3-crossover composite (1,20)/(5,60)/(20,250) at ev
 ## Change log
 
 See `ENGINE_CHANGELOG.md` (dated, file-by-file) before changing data paths, roll rules or tenor pairs. As of 2026-10-11 research numbers use the 5th-trading-day-of-expiry-month roll (`ROLL_RULE` in `research/configs/*.py`), data from `data/Prices_0924`, and per-product tenor pairs via `carry_pairs(product)`.
+
+## Streamlit Cloud and shared modules (2026-10-12)
+
+A running Streamlit Cloud app keeps imported modules across a git pull and reloads only files inside the app's own folder, so a push that changes `common_engine.py`, `research/*` or `scripts/*` can leave a live app with the old module and a new `app.py` (ImportError / AttributeError at the import lines). Every `app.py` therefore calls `_refresh_repo_modules()` after the `sys.path` setup, which drops stale repo modules. Keep that call above the first repo import in any new app. If an app still shows the old error, reboot it once from Manage app.

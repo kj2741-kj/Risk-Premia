@@ -44,6 +44,31 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
 
+def _refresh_repo_modules(root=_REPO_ROOT):
+    """Streamlit Cloud keeps imported modules alive across a git pull and reloads only files inside the app's own folder, so a push that
+    changes a shared module (common_engine, research/*, scripts/*) breaks the running app until someone reboots it. Drop the repo's
+    modules when any of their files changed since the last run (and on the first run of a process); the imports below then read the
+    current code."""
+    current = {}
+    for name, mod in list(sys.modules.items()):
+        f = getattr(mod, "__file__", None)
+        if f and name != "__main__" and os.path.abspath(f).startswith(root + os.sep):
+            try:
+                current[name] = os.stat(f).st_mtime_ns
+            except OSError:
+                pass
+    previous = getattr(sys, "_rp_module_stamps", None)
+    if previous is None or any(previous.get(n, s) != s for n, s in current.items()):
+        for name in current:
+            sys.modules.pop(name, None)
+        sys._rp_module_stamps = dict(current)
+    else:
+        sys._rp_module_stamps = {**current, **previous}
+
+
+_refresh_repo_modules()
+
+
 from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
 from common_engine import (render_momentum_tab, render_carry_tab, render_value_tab, render_skewness_tab,

@@ -602,7 +602,7 @@ def _compute_roll_dates(
 #                           reportable number (run_regime_table.py, cross_asset_engine.py, the final dashboard).
 ROLL_RULES = ("ltd_minus_n", "expiry_month_nth_td")
 DEFAULT_ROLL_RULE = "ltd_minus_n"
-ROLL_FALLBACK_COUNT = {"n": 0}   # contracts whose Nth trading day was not before the last trade date (rolled the day before instead)
+ROLL_FALLBACK_COUNT = {"n": 0}   # contracts whose Nth trading day of the expiry month is not before the last trade date (see below)
 
 
 def _compute_roll_dates_expiry_month(
@@ -618,7 +618,10 @@ def _compute_roll_dates_expiry_month(
     Contracts whose last trade date is AFTER the last price date are not snapped to the last price date (the original rule
     did, which put a spurious roll in the final week): they get no last-trade/bridge date, and a roll only if their expiry
     month's Nth trading day is already inside the data. If the Nth trading day would not be before the last trade date the
-    roll is moved to the trading day before it (counted in ROLL_FALLBACK_COUNT; one contract on the current calendars).
+    roll is moved to the trading day before it; if there is no earlier trading day in the data the contract gets no roll at all.
+    Both cases are counted in ROLL_FALLBACK_COUNT. On the current data this happens once: Isobutane contract IBDX09 (last trade
+    2009-11-30), because the Isobutane price series has only one date in November 2009 (2009-11-10, then 2009-12-14), so that
+    contract gets no roll. It is at the very start of the history, before the 2011 reporting window.
     """
     roll_map: dict[pd.Timestamp, str] = {}
     ltd_set: set[pd.Timestamp] = set()

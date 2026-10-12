@@ -35,35 +35,60 @@ sys.path.insert(0, str(_THIS_DIR))
 sys.path.insert(0, str(_THIS_DIR / "configs"))
 sys.path.insert(0, str(_REPO_ROOT / "scripts"))
 
-from engine import (carry_v1v2_composite_position, carry_v4_position,  # noqa: E402
+from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, momentum_composite_position,
-                     value_v1_position)
+                     raw_signal_carry_v1, raw_signal_carry_v2,
+                     raw_signal_carrymom, value_v1_position)
 from regimes import REGIMES, REPORT_START  # noqa: E402
 
 TC_BPS = 5
 
+# Carry construction (2026-10-11, implementing "Readme Portfolio construction 10 Oct.md"): V2 (z-score on carry slope) only,
+# one signal per tenor pair, the pairs blended at SIGNAL level by sign-vote (sign of the mean of the per-pair signs; flat when the
+# pairs disagree), the execution lag applied once to the blend. Carry-Momentum (V3) is blended across the same pairs the same way.
+# Each product uses cfg.carry_pairs(product): Metals/Energy/NGL the same two pairs for every product, Precious/Agriculture the
+# short F1-F2 pair plus a per-product long pair. Set CARRY_VARIANTS to ("V1", "V2") to reproduce the older V1+V2 composite.
+CARRY_VARIANTS = ("V2",)
+INVERSE_VOL_WINDOW = 63   # trailing days for the Inverse Vol portfolio (matches dashboard_portfolio_tab / engine.combine_returns)
+
+
+def _carry_pairs(cfg, product):
+    return list(cfg.carry_pairs(product)) if hasattr(cfg, "carry_pairs") else list(cfg.CARRY_TENOR_PAIRS)
+
 
 def _strategy_defs(cfg):
-    defs = [("Momentum", None)]
-    for near, far in cfg.CARRY_TENOR_PAIRS:
-        defs.append((f"Carry (F{near[1:]}-F{far[1:]})", ("carry", near, far)))
-    for near, far in cfg.CARRY_TENOR_PAIRS:
-        defs.append((f"CarryMom (F{near[1:]}-F{far[1:]})", ("carrymom", near, far)))
-    defs.append(("Value", "value"))
-    return defs
+    return [("Momentum", None), ("Carry", ("carry",)), ("CarryMom", ("carrymom",)), ("Value", "value")]
 
 
-def _position_for(cfg, kind, raw_f1, curve):
+def _position_for(cfg, kind, raw_f1, curve, product=None):
     if kind is None:
         return momentum_composite_position(raw_f1, cfg.MOMENTUM_PAIRS, cfg.MOMENTUM_SHIFT_N)
     if kind == "value":
         return value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS,
                                   cfg.VALUE_THRESHOLD, cfg.VALUE_SHIFT_N)
-    tag, near, far = kind
+    pairs = _carry_pairs(cfg, product)
+    tag = kind[0]
     if tag == "carry":
-        return carry_v1v2_composite_position(curve, near, far, cfg.CARRY_ZSCORE_WINDOW, cfg.CARRY_SHIFT_N)
+        raws = []
+        for near, far in pairs:
+            sigs = []
+            if "V1" in CARRY_VARIANTS:
+                sigs.append(raw_signal_carry_v1(curve, near, far))
+            if "V2" in CARRY_VARIANTS:
+                sigs.append(raw_signal_carry_v2(curve, near, far, window=cfg.CARRY_ZSCORE_WINDOW))
+            raws.append(sigs[0] if len(sigs) == 1 else combine_positions(sigs, "equal_weight"))
+        raws = [r for r in raws if not r.empty]
+        if not raws:
+            return pd.Series(dtype=float)
+        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
+        return exec_shift(combo, cfg.CARRY_SHIFT_N).fillna(0)
     if tag == "carrymom":
-        return carry_v4_position(curve, cfg.CARRY_MOMENTUM_HORIZON, cfg.CARRY_MOMENTUM_SHIFT_N, near, far)
+        raws = [raw_signal_carrymom(curve, near, far, cfg.CARRY_MOMENTUM_HORIZON) for near, far in pairs]
+        raws = [r for r in raws if not r.empty]
+        if not raws:
+            return pd.Series(dtype=float)
+        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
+        return exec_shift(combo, cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0)
     raise ValueError(kind)
 
 
@@ -156,7 +181,7 @@ def build_strategy_net_series(cfg) -> tuple[dict[str, pd.Series], pd.Timestamp, 
             raw = logret_by_product[p]  # full own-history, not pre-sliced
             log_price = raw["log_price"]
             curve = curve_by_product[p]  # full own-history, not pre-sliced
-            pos = _position_for(cfg, kind, raw["F1_raw"], curve)
+            pos = _position_for(cfg, kind, raw["F1_raw"], curve, product=p)
             _, net = log_return_daily(pos, log_price, TC_BPS, raw["Phase"])
             net = net.loc[common_start:common_end].reindex(raw.loc[common_start:common_end].index).fillna(0.0)
             combined = net if combined is None else combined + net
@@ -165,6 +190,9 @@ def build_strategy_net_series(cfg) -> tuple[dict[str, pd.Series], pd.Timestamp, 
 
     ew_port = sum(strategy_net_series.values()) / len(strategy_net_series)
     strategy_net_series["EW PORT"] = ew_port
+    # Inverse Vol (added 2026-10-11): the four sleeves weighted by 1 / their own trailing INVERSE_VOL_WINDOW-day volatility, daily.
+    sleeve_list = [strategy_net_series[label] for label, _ in strategy_defs]
+    strategy_net_series["Inverse Vol"] = combine_returns(sleeve_list, "inverse_vol", vol_window=INVERSE_VOL_WINDOW)
 
     return strategy_net_series, common_start, common_end
 
@@ -174,12 +202,12 @@ def build_table(cfg):
     strategy_defs = _strategy_defs(cfg)
 
     full_rows = []
-    for label, _ in strategy_defs + [("EW PORT", None)]:
+    for label, _ in strategy_defs + [("EW PORT", None), ("Inverse Vol", None)]:
         m = _metrics(strategy_net_series[label].loc[REPORT_START:])
         full_rows.append(dict(name=label, **m))
 
     regime_rows = []
-    for label, _ in strategy_defs + [("EW PORT", None)]:
+    for label, _ in strategy_defs + [("EW PORT", None), ("Inverse Vol", None)]:
         series = strategy_net_series[label]
         row = dict(name=label)
         full_m = _metrics(series.loc[REPORT_START:])
@@ -202,7 +230,7 @@ def build_window_grid(cfg) -> dict[str, list[dict]]:
     selected horizon."""
     strategy_net_series, _, _ = build_strategy_net_series(cfg)
     strategy_defs = _strategy_defs(cfg)
-    labels = [label for label, _ in strategy_defs] + ["EW PORT"]
+    labels = [label for label, _ in strategy_defs] + ["EW PORT", "Inverse Vol"]
 
     grid: dict[str, list[dict]] = {}
     grid["full"] = [dict(name=label, **_metrics(strategy_net_series[label].loc[REPORT_START:])) for label in labels]
@@ -222,7 +250,7 @@ def _js_row(r: dict) -> str:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("asset_class", choices=["energy", "ngl", "metals", "precious"])
+    parser.add_argument("asset_class", choices=["energy", "ngl", "metals", "precious", "agri"])
     parser.add_argument("--window-grid", action="store_true",
                          help="Print JS-ready {window: [rows]} grid (ret/vol/ir per strategy per window) instead of the text tables.")
     args = parser.parse_args()

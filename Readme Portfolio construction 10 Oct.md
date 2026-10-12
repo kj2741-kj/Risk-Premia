@@ -98,6 +98,8 @@ What this shows, and what it does not:
 
 **This file is the rule and its specification. The code has not been changed yet.** `research/configs/*.py`, `dashboard_portfolio_tab.py`, `research/cross_asset_engine.py`, `research/run_regime_table.py` and `webapp/` still build Carry as the V1+V2 composite. Anyone implementing the rule should change all of them, plus regenerate every reported number that touches Carry (`python research/run_regime_table.py <metals|energy|precious|ngl>`), rather than hand-patching. Check `git branch --show-current` first: the Streamlit dashboards are on `main` and the React rebuild is on `feature/react-dashboard`.
 
+**Update 2026-10-11 (implementation).** `research/run_regime_table.py` now builds Carry and Carry-Momentum as specified here (V2 only, sign-vote across each product's tenor pairs, lag applied once) and adds an Inverse Vol row; `research/cross_asset_engine.py` has an opt-in `per_product_pairs` flag for per-product long pairs (Precious, Agriculture). Precious and Agriculture now use a short F1-F2 pair plus a long pair per product (see `research/configs/precious.py` and `agri.py`). `dashboard_portfolio_tab.py`, the Streamlit apps and `webapp/` were not changed in that update. Details and validation: `ENGINE_CHANGELOG.md`. The figures earlier in this file predate the 2026-10-11 roll-rule and data changes.
+
 ## Cost convention
 
 Roll cost: a position held through a `Roll_LTD` day is charged `tc_bps / 2` (2.5 bp), the same as a one-way trade. A physical roll has two legs, so this is arguably half the real cost. It is the project's existing convention and was not changed. A sensitivity at the full 5 bp has not been run.

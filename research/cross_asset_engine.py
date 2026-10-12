@@ -209,7 +209,8 @@ def _carry_composite_raw(curve: pd.DataFrame, near: str, far: str, window: int,
 
 
 def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
-                          carry_spec: CarrySpec | None = None) -> dict[str, dict[str, list]]:
+                          carry_spec: CarrySpec | None = None,
+                          per_product_pairs: bool = False) -> dict[str, dict[str, list]]:
     """Momentum / Combined Carry / Combined CarryMom / Value gross AND net
     daily log-return series PER PRODUCT (not yet combined across products)
     for one asset class, on the dashboard-filtered product universe.
@@ -234,8 +235,16 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
     it freely."""
     cfg = _get_cfg(asset_class)
     spec = resolve_carry_spec(asset_class, carry_spec)
-    tenor_pairs = list(spec.pairs)
     products = DASHBOARD_PRODUCTS.get(asset_class, cfg.PRODUCTS)
+    # per_product_pairs (added 2026-10-11, default False so every existing caller, including the Streamlit hub, is unchanged):
+    # when True each product uses its own pairs from cfg.carry_pairs(product) (Precious and Agriculture: the short F1-F2 pair plus
+    # a long pair about 12 months out whose far leg differs by product; the other asset classes return the uniform pairs) instead of
+    # one pair list for the whole asset class. spec.pairs is then ignored; zwindow / horizon / variants still come from `spec`.
+    if per_product_pairs:
+        pairs_by_product = {p: [(str(n), str(f)) for n, f in cfg.carry_pairs(p)] for p in products}
+    else:
+        pairs_by_product = {p: list(spec.pairs) for p in products}
+    tenor_pairs = list(dict.fromkeys(pr for v in pairs_by_product.values() for pr in v))   # union, for the data checks below
     out = {style: {"gross": [], "net": [], "names": []}
            for style in ("Momentum", "Combined Carry", "Combined CarryMom", "Value")}
     # n_pairs (added 2026-10-11): how many of the chosen tenor pairs actually had data for each product, index-aligned
@@ -256,8 +265,8 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
             out["Momentum"]["names"].append(p)
 
         carry_raws = [_carry_composite_raw(curve, near, far, spec.zwindow, spec.variants)
-                      for near, far in tenor_pairs]
-        for pair, r in zip(tenor_pairs, carry_raws):
+                      for near, far in pairs_by_product[p]]
+        for pair, r in zip(pairs_by_product[p], carry_raws):
             pair_has_data[pair] = pair_has_data[pair] or (not r.empty)
         carry_raws = [r for r in carry_raws if not r.empty]
         if carry_raws:
@@ -271,7 +280,7 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
                 out["Combined Carry"]["n_pairs"].append(len(carry_raws))
 
         cm_raws = [raw_signal_carrymom(curve, near, far, spec.horizon)
-                   for near, far in tenor_pairs]
+                   for near, far in pairs_by_product[p]]
         cm_raws = [r for r in cm_raws if not r.empty]
         if cm_raws:
             combo = cm_raws[0] if len(cm_raws) == 1 else combine_positions(cm_raws, "equal_weight")

@@ -600,7 +600,8 @@ def _common_truncated_series(products):
 def _rebuild_ratio_series(p, common_start, common_end):
     from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio
     raw = get_metal_rolling_f1_ratio(cfg.METAL_CODES[p], futures_file=cfg.CURVE_FILE,
-                                      calendar_file=cfg.CALENDAR_FILE, config=cfg.METALS_CONFIG, verbose=False)
+                                      calendar_file=cfg.CALENDAR_FILE, config=cfg.METALS_CONFIG, verbose=False,
+                                      roll_day=getattr(cfg, "ROLL_N", 5), roll_rule=getattr(cfg, "ROLL_RULE", "ltd_minus_n"))
     raw = raw.loc[common_start:common_end]
     raw = reanchor_f1_continuous_ratio(raw)
     log_price = np.log(raw["F1_continuous_ratio"].where(raw["F1_continuous_ratio"] > 0))

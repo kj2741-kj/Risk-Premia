@@ -90,6 +90,19 @@ CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3"), ("F1", "F13")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 
+# ── Roll rule (2026-10-11) ───────────────────────────────────────────────────
+# Every research number (run_regime_table.py, cross_asset_engine.py, Final_Research_Dashboard.html) rolls on the 5th trading day
+# of the month in which each contract's last trade date falls, not 5 trading days before it. See scripts/rolling_continuous.py
+# (ROLL_RULES). The Streamlit apps keep their own "Rolling Logic" selector and are unaffected.
+ROLL_RULE = "expiry_month_nth_td"
+ROLL_N = 5
+
+
+def carry_pairs(product: str) -> list[tuple[str, str]]:
+    """Carry / Carry-Momentum tenor pairs for one product (blended at signal level, sign-vote). Uniform across this asset class's
+    products: CARRY_TENOR_PAIRS."""
+    return list(CARRY_TENOR_PAIRS)
+
 # Carry momentum (V3): kept as ITS OWN separate strategy, not folded into the
 # Carry composite above -- it's a rate-of-change/momentum-on-carry construct,
 # a different economic hypothesis from V1/V2's level-based signal.
@@ -144,7 +157,8 @@ def load_f1_series(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown Metals product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1(METAL_CODES[product], futures_file=CURVE_FILE,
-                               calendar_file=CALENDAR_FILE, config=METALS_CONFIG, verbose=False)
+                               calendar_file=CALENDAR_FILE, config=METALS_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     return reanchor_f1_continuous(df)
 
@@ -159,7 +173,8 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown Metals product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1_ratio(METAL_CODES[product], futures_file=CURVE_FILE,
-                                     calendar_file=CALENDAR_FILE, config=METALS_CONFIG, verbose=False)
+                                     calendar_file=CALENDAR_FILE, config=METALS_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     df = reanchor_f1_continuous_ratio(df)
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)

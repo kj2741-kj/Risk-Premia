@@ -152,7 +152,11 @@ METAL_CONFIG: dict[str, dict] = {
 # -- the DEFAULT_FUTURES_FILE/DEFAULT_CALENDAR_FILE module constants above are
 # for METAL_CONFIG (Metals Futures Curve.csv) only.
 
-ENERGY_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Energy_Futures_Updated.xlsx")
+# 2026-10-11: price files moved from data/06-30 (through 2026-06-30) to data/Prices_0924 (2026-09-24 pull, through 2026-09-23).
+# The overlapping history is identical (Metals/Energy/Precious/NGL verified cell by cell); Gold/Silver only had their deepest
+# columns revised (Gold F14+, Silver F12+), which no code here reads. Calendars stay in data/06-30 (the 24-Sep consolidated
+# calendar agrees with them on every shared contract).
+ENERGY_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Energy_Futures_Updated.xlsx")
 ENERGY_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
 
 # LME base metals, refreshed through 2026-06-30 (README sheet inside the
@@ -162,7 +166,7 @@ ENERGY_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_2026070
 # Paired with the matching 2026-07-01-vintage calendar (same file Energy uses)
 # rather than the older expiry_calendars_20260526.xlsx, whose LME sheet names
 # ("LP - LME Copper") don't match this calendar's naming ("LP - Copper (LME)").
-METALS_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Metals_Futures_Curve_Updated.xlsx")
+METALS_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Metals_Futures_Curve_Updated.xlsx")
 METALS_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
 
 METALS_CONFIG: dict[str, dict] = {
@@ -225,7 +229,7 @@ ENERGY_CONFIG: dict[str, dict] = {
         "f1_col": 1, "f2_col": 2, "data_start_row": 2,
     },
     "QS": {
-        "name": "Singapore Gasoil (ICE)", "price_sheet": "Singapore Gasoil (ICE)",
+        "name": "Singapore Gasoil (ICE)", "price_sheet": "Low Sulphur Gasoil (ICE Europe)",   # 2026-10-11: sheet renamed in the 24-Sep file, data identical; QS is ICE Low Sulphur Gasoil (the "Singapore" label was wrong); product is excluded from every dashboard
         "calendar_sheet": "QS - Gasoil (ICE)",
         "f1_col": 1, "f2_col": 2, "data_start_row": 2,
     },
@@ -249,7 +253,7 @@ ENERGY_CONFIG: dict[str, dict] = {
     # it without a roll calendar. Excluded until a calendar is available.
 }
 
-PRECIOUS_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "Precious_Metals_Futures_Updated.xlsx")
+PRECIOUS_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Precious_Metals_Futures_Updated.xlsx")
 # Aligned 2026-10-10: GC/SI/PL/PA sheets keep only the contract months Bloomberg's
 # generic F1..Fn actually uses (Gold Feb/Apr/Jun/Aug/Oct/Dec, Silver Mar/May/Jul/Sep/Dec,
 # Platinum Jan/Apr/Jul/Oct, Palladium Mar/Jun/Sep/Dec); the original had all 12 months per metal,
@@ -285,7 +289,11 @@ PRECIOUS_CONFIG: dict[str, dict] = {
     },
 }
 
-NGL_FUTURES_FILE  = os.path.join(DATA_DIR, "06-30", "NGL_Futures_Updated.xlsx")
+# NGL: the raw 2026-09-24 file (NGL_Futures_Updated.xlsx) labels its Argus sheets wrongly (CAP/BAP/DAE/PCW cyclically shifted);
+# verified against EIA Mont Belvieu propane and published ethane/ethylene prices (see outputs/final_dashboard/ngl_label_check.py and the
+# README of the corrected workbook). NGL_Futures_Updated_labels_corrected.xlsx has identical data with the correct sheet names,
+# the same names NGL_CONFIG below uses.
+NGL_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "NGL_Futures_Updated_labels_corrected.xlsx")
 NGL_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
 
 # Calendar sheet names for NGL/petrochemical tickers use an em dash (—,
@@ -584,6 +592,76 @@ def _compute_roll_dates(
     return roll_map, ltd_set, ltd_to_contract
 
 
+# Roll rules (2026-10-11).
+#   "ltd_minus_n"         : roll N trading days before each contract's LAST_TRADEABLE_DT (original rule; still the default of
+#                           build_rolling_f1 / get_metal_rolling_f1, so the Streamlit apps' "N days before last trading day"
+#                           option is unchanged).
+#   "expiry_month_nth_td" : roll on the Nth (default 5th) trading day of the month in which the contract's LAST_TRADEABLE_DT
+#                           falls (the contract's own expiry month, not every calendar month). The bridge on the day after
+#                           LAST_TRADEABLE_DT is unchanged. Used by research/configs/*.py (ROLL_RULE) and so by every
+#                           reportable number (run_regime_table.py, cross_asset_engine.py, the final dashboard).
+ROLL_RULES = ("ltd_minus_n", "expiry_month_nth_td")
+DEFAULT_ROLL_RULE = "ltd_minus_n"
+ROLL_FALLBACK_COUNT = {"n": 0}   # contracts whose Nth trading day was not before the last trade date (rolled the day before instead)
+
+
+def _compute_roll_dates_expiry_month(
+    calendar: pd.DataFrame,
+    sorted_trading: list[pd.Timestamp],
+    price_date_set: set[pd.Timestamp],
+    nth_trading_day: int,
+) -> tuple[dict[pd.Timestamp, str], set[pd.Timestamp], dict[pd.Timestamp, str]]:
+    """
+    For each contract, roll date = the Nth trading day (in the price data) of the month in which the contract's
+    LAST_TRADEABLE_DT falls. Returns the same three objects as _compute_roll_dates.
+
+    Contracts whose last trade date is AFTER the last price date are not snapped to the last price date (the original rule
+    did, which put a spurious roll in the final week): they get no last-trade/bridge date, and a roll only if their expiry
+    month's Nth trading day is already inside the data. If the Nth trading day would not be before the last trade date the
+    roll is moved to the trading day before it (counted in ROLL_FALLBACK_COUNT; one contract on the current calendars).
+    """
+    roll_map: dict[pd.Timestamp, str] = {}
+    ltd_set: set[pd.Timestamp] = set()
+    ltd_to_contract: dict[pd.Timestamp, str] = {}
+    last = sorted_trading[-1]
+    pos = {t: i for i, t in enumerate(sorted_trading)}
+    by_month: dict[tuple[int, int], list[int]] = {}
+    for i, t in enumerate(sorted_trading):
+        by_month.setdefault((t.year, t.month), []).append(i)
+
+    for _, r in calendar.iterrows():
+        ltd_raw = r["roll_date"].normalize()
+        if ltd_raw > last:
+            idxs = by_month.get((ltd_raw.year, ltd_raw.month))
+            if idxs and len(idxs) >= nth_trading_day:
+                roll_map[sorted_trading[idxs[nth_trading_day - 1]]] = r["Contract"]
+            continue
+        snapped = _snap_to_trading_day(ltd_raw, sorted_trading)
+        if snapped is None:
+            continue
+        ltd_set.add(snapped)
+        ltd_to_contract[snapped] = r["Contract"]
+        li = pos[snapped]
+        idxs = by_month[(snapped.year, snapped.month)]
+        ri = idxs[nth_trading_day - 1] if len(idxs) >= nth_trading_day else idxs[-1]
+        if ri >= li:
+            ri = li - 1
+            ROLL_FALLBACK_COUNT["n"] += 1
+        if ri < 0:
+            continue
+        roll_map[sorted_trading[ri]] = r["Contract"]
+    return roll_map, ltd_set, ltd_to_contract
+
+
+def _roll_dates_for_rule(roll_rule, calendar, sorted_trading, price_date_set, roll_day):
+    """Dispatch on the roll rule (see ROLL_RULES)."""
+    if roll_rule == "ltd_minus_n":
+        return _compute_roll_dates(calendar, sorted_trading, price_date_set, n_days_before=roll_day)
+    if roll_rule == "expiry_month_nth_td":
+        return _compute_roll_dates_expiry_month(calendar, sorted_trading, price_date_set, nth_trading_day=roll_day)
+    raise ValueError(f"roll_rule must be one of {ROLL_RULES}, got {roll_rule!r}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. Core rolling algorithm
 # ─────────────────────────────────────────────────────────────────────────────
@@ -592,6 +670,7 @@ def build_rolling_f1(
     prices: pd.DataFrame,
     calendar: pd.DataFrame,
     roll_day: int = DEFAULT_ROLL_DAY,
+    roll_rule: str = DEFAULT_ROLL_RULE,
 ) -> pd.DataFrame:
     """
     Build a continuous rolling F1 price series using return-based stitching.
@@ -601,7 +680,9 @@ def build_rolling_f1(
     ----------
     prices   : DataFrame indexed by Date with columns F1_raw, F2_raw.
     calendar : DataFrame with columns Contract, roll_date, expiry_date.
-    roll_day : How many trading days before LAST_TRADEABLE_DT to roll (1–10, default 5).
+    roll_day : With roll_rule "ltd_minus_n": how many trading days before LAST_TRADEABLE_DT to roll (1–10, default 5).
+               With "expiry_month_nth_td": which trading day of the contract's expiry month to roll on (1–10, default 5).
+    roll_rule: "ltd_minus_n" (default, original) or "expiry_month_nth_td" (see ROLL_RULES).
 
     Returns
     -------
@@ -616,8 +697,8 @@ def build_rolling_f1(
     price_date_set = set(trading_dates)
     sorted_trading = sorted(price_date_set)
 
-    roll_map, ltd_set, ltd_to_contract = _compute_roll_dates(
-        calendar, sorted_trading, price_date_set, n_days_before=roll_day,
+    roll_map, ltd_set, ltd_to_contract = _roll_dates_for_rule(
+        roll_rule, calendar, sorted_trading, price_date_set, roll_day,
     )
     roll_set = set(roll_map.keys())
 
@@ -736,6 +817,7 @@ def get_metal_rolling_f1(
     verbose: bool      = True,
     config: dict | None = None,
     roll_day: int = DEFAULT_ROLL_DAY,
+    roll_rule: str = DEFAULT_ROLL_RULE,
 ) -> pd.DataFrame:
     """
     End-to-end loader + builder for any configured product.
@@ -755,8 +837,9 @@ def get_metal_rolling_f1(
                     format, f1_col/f2_col=1/2) with different column layouts,
                     so relying on a default here would silently read the wrong
                     columns for one of the two callers.
-    roll_day      : How many trading days before LAST_TRADEABLE_DT to roll
-                    (1–10, default 5).
+    roll_day      : With roll_rule "ltd_minus_n": how many trading days before LAST_TRADEABLE_DT to roll
+                    (1–10, default 5). With "expiry_month_nth_td": the trading day of the expiry month to roll on.
+    roll_rule     : "ltd_minus_n" (default) or "expiry_month_nth_td" (see ROLL_RULES).
 
     Returns
     -------
@@ -797,7 +880,7 @@ def get_metal_rolling_f1(
         print(f"[{metal_code}] {len(cal)} contracts in calendar")
         print(f"[{metal_code}] Building rolling F1 (LTD-{roll_day}) ...")
 
-    result = build_rolling_f1(prices, cal, roll_day=roll_day)
+    result = build_rolling_f1(prices, cal, roll_day=roll_day, roll_rule=roll_rule)
 
     if verbose:
         rolls   = result["is_roll_date"].sum()

@@ -105,6 +105,28 @@ CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 
+# ── Roll rule (2026-10-11) ───────────────────────────────────────────────────
+# Every research number (run_regime_table.py, cross_asset_engine.py, Final_Research_Dashboard.html) rolls on the 5th trading day
+# of the month in which each contract's last trade date falls, not 5 trading days before it. See scripts/rolling_continuous.py
+# (ROLL_RULES). The Streamlit apps keep their own "Rolling Logic" selector and are unaffected.
+ROLL_RULE = "expiry_month_nth_td"
+ROLL_N = 5
+
+# Two tenor pairs per product (2026-10-11, user's decision): short F1-F2 plus a long pair about 12 months out. The far leg depends on
+# each product's contract cycle: Corn/Wheat/Coffee five contracts a year (F6), Soybean seven (F8), Sugar four (F5), Soybean Oil eight
+# (F8 is only 10-11 months: its price file stops at F8). CARRY_TENOR_PAIRS holds the uniform SHORT pair (also what the Streamlit app
+# shows); the long pairs come from carry_pairs(product). Agriculture has had no liquidity study.
+CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"Corn": "F6", "Wheat": "F6", "Soybean": "F8", "SoybeanOil": "F8", "Coffee": "F6", "Sugar": "F5"}
+
+
+def carry_pairs(product: str) -> list[tuple[str, str]]:
+    """Short pair(s) from CARRY_TENOR_PAIRS plus the product's long pair (F1 to its far leg), if one is defined."""
+    pairs = list(CARRY_TENOR_PAIRS)
+    far = CARRY_LONG_FAR_BY_PRODUCT.get(product)
+    if far is not None and ("F1", far) not in pairs:
+        pairs.append(("F1", far))
+    return pairs
+
 # Carry momentum (V3): kept as its own separate strategy, same as every
 # other asset class -- horizon is asset-independent, tenor pair still
 # pending same as Carry above (CarryMom needs a (near, far) pair too).
@@ -150,7 +172,8 @@ def load_f1_series(product: str) -> pd.DataFrame:
     if product not in AGRI_CODES:
         raise ValueError(f"Unknown Agri product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1(AGRI_CODES[product], futures_file=CURVE_FILE,
-                               calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False)
+                               calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     return reanchor_f1_continuous(df)
 
@@ -164,7 +187,8 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     if product not in AGRI_CODES:
         raise ValueError(f"Unknown Agri product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1_ratio(AGRI_CODES[product], futures_file=CURVE_FILE,
-                                     calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False)
+                                     calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     df = reanchor_f1_continuous_ratio(df)
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)

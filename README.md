@@ -22,6 +22,10 @@ Two layers:
 | `run_regime_table.py` | Canonical full-sample + regime-conditional IR table builder — run this, not ad hoc scripts, for reportable numbers. |
 | `generate_tradebooks_logret.py` | Formula-driven Excel tradebooks (one workbook per strategy, one sheet per product) for auditing the engine. Asset class selected via `TRADEBOOK_ASSET_CLASS` env var. Outputs are gitignored (large, regeneratable) — see below. |
 
+## Engine update (2026-10-11)
+
+Read `ENGINE_CHANGELOG.md` first for the dated, file-by-file log. Summary: all five asset classes read the 2026-09-24 price files in `data/Prices_0924` (data through 2026-09-23; NGL via the label-corrected workbook); research numbers roll on the 5th trading day of each contract's expiry month (`ROLL_RULE` in `research/configs/*.py`; the original "N days before last trade date" rule is still the default of the roll builders and of the Streamlit apps); Carry and Carry-Momentum in `research/run_regime_table.py` follow the 10 Oct rule (V2-only, sign-vote across tenor pairs); Precious and Agriculture use a short F1-F2 pair plus a per-product long pair (`carry_pairs(product)` in their configs). The Status section below predates this update where they differ.
+
 ## Status (as of 2026-08-03)
 
 **IMPORTANT for anyone (human or AI agent) reading this repo: the engine's `configs/*.py` PRODUCTS lists and what the LIVE DASHBOARDS actually show/compute are deliberately different as of 2026-08-03.** See "Dashboard-only product exclusions" below before assuming a product that appears in a config file is also in the dashboard/Portfolio tab, or vice versa.

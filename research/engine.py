@@ -332,13 +332,16 @@ def carry_v1v2_composite_position(curve: pd.DataFrame, near: str = "F1", far: st
 # ═══════════════════════════════════════════════════════════════
 
 def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, threshold: float,
-                       shift_n: int = 2) -> pd.Series:
+                       shift_n: int = 2, min_periods: int | None = None) -> pd.Series:
+    """`min_periods` (default None = the original max(lookback // 2, min(lookback, 60))) is the number of F3 observations needed before the
+    moving average, and so the signal, becomes valid. The 2012-start variant uses 504 (two years); the main research uses the default."""
     if contract not in curve.columns:
         return pd.Series(dtype=float)
     fk = curve[contract].dropna()
     if len(fk) < max(lookback // 2, 60):
         return pd.Series(dtype=float)
-    ma = fk.rolling(lookback, min_periods=max(lookback // 2, min(lookback, 60))).mean()
+    mp = max(lookback // 2, min(lookback, 60)) if min_periods is None else min_periods
+    ma = fk.rolling(lookback, min_periods=mp).mean()
     dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan).dropna()
     sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                      index=dev.index)

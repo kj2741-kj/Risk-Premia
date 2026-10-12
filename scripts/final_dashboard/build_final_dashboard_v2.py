@@ -75,7 +75,7 @@ const CAL={metals:"LME futures. Roll calendar: expiry_calendars_20260701.xlsx (n
  precious:"COMEX/NYMEX futures. Roll calendar: expiry_calendars_20260701_aligned.xlsx (Bloomberg-matched months).",
  agri:"CBOT/ICE futures. Roll calendar: Agri_Rolling_Calendar_bloomberg_matched.xlsx (Bloomberg-matched months)."};
 const ORDER=[["metals","Metals"],["energy","Energy"],["energy_exng","Energy ex-NatGas"],["ngl","NGL"],["precious","Precious"],["agri","Agriculture"],
- ["all5","All 5: with NatGas"],["all5_exng","All 5: ex-NatGas"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]];
+ ["all5","All 5: with NatGas"],["all5_exng","All 5: ex-NatGas"],["bystyle","By Style"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]];
 const bar=document.getElementById("tabbar"),panels=document.getElementById("panels");
 ORDER.forEach(([k,l],i)=>{const b=document.createElement("button");b.className="tab-btn";b.setAttribute("role","tab");b.setAttribute("aria-selected",i==0?"true":"false");b.dataset.tab=k;b.textContent=l;bar.appendChild(b);});
 function addPanel(key,html,first){const p=document.createElement("div");p.className="tab-panel"+(first?" active":"");p.id="panel-"+key;p.innerHTML=html;panels.appendChild(p);return p;}
@@ -156,6 +156,14 @@ Object.keys(D.tabs).forEach((key,i)=>{const t=D.tabs[key];
   const p=addPanel(key,`<div class="card"><h2>${label}</h2><p class="note">Two-stage book: four sleeves into an asset-class portfolio, then the five asset-class portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across asset classes). Common window: ${c.common_first} to ${c.common_last}. "Reference" rows are each asset class's own EW PORT on that window.</p>
   <div class="window-row"><h3>Performance by horizon</h3><label>Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
   wireTable(p,"[data-hs]","[data-full]",w=>c.windows[w]);p.querySelector("[data-ir]").innerHTML=irTable(c.windows);renderEquity(p.querySelector("[data-eq]"),key);});
+
+/* ---------- by style ---------- */
+(function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value) is first equal-weighted across the five asset classes' own sleeves on their common dates, giving one cross-asset-class series per style. The four style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day). This is the reverse order to the "All 5" tabs, which combine sleeves within each asset class first.</p>
+  <div class="window-row"><label>Energy: <select class="window-select" data-bv><option value="with NatGas">with NatGas</option><option value="ex-NatGas">ex-NatGas</option></select></label><span class="note" style="margin:0" data-bn></span></div>
+  <div class="window-row"><h3>Performance by horizon</h3><label>Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
+  const bv=p.querySelector("[data-bv]"),hs=p.querySelector("[data-hs]"),tb=p.querySelector("[data-full]");
+  const draw=()=>{const c=D.bystyle[bv.value];p.querySelector("[data-bn]").textContent="Common window: "+c.common_first+" to "+c.common_last+".";tb.innerHTML=fullTable(c.windows[hs.value]);p.querySelector("[data-ir]").innerHTML=irTable(c.windows);renderEquity(p.querySelector("[data-eq]"),"bystyle "+bv.value);};
+  bv.addEventListener("change",draw);hs.addEventListener("change",draw);draw();})();
 
 /* ---------- cross-pair ---------- */
 (function(){const p=addPanel("crosspair",`<div class="card"><h2>Cross-Pair Portfolios</h2><p class="note">Each row blends two asset classes' own portfolios, 50/50 (Equal Weight) or by trailing 63-day inverse volatility (Inverse Vol); each asset-class portfolio is built with the same method. Series are aligned on the pair's common dates. Pairs involving Energy are shown with NatGas and ex-NatGas.</p>

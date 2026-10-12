@@ -91,6 +91,20 @@ for label, keys in KEYS.items():
     print("combined", label, res["combined"][label]["common_first"], res["combined"][label]["common_last"],
           {k: v["ir"] for k, v in zip(list({**books}.keys()), res["combined"][label]["windows"]["full"])}, flush=True)
 
+# by-style book: each style (sleeve) equal-weighted across the asset classes (common dates), then the four style series combined by EW and Inverse Vol
+res["bystyle"] = {}
+for label, keys in (("with NatGas", KEYS["all5"]), ("ex-NatGas", KEYS["all5_exng"])):
+    srows = {}
+    for st in STYLES:
+        al, _ = align_intersection([acs[k]["styles"][st] for k in keys])
+        srows[st] = combine_returns(al, "equal_weight")
+    lst = list(srows.values())
+    rows = {**srows, "EW PORT": combine_returns(lst, "equal_weight"), "Inverse Vol": combine_returns(lst, "inverse_vol", vol_window=63)}
+    first = max(r.first_valid_index() for r in srows.values())
+    res["bystyle"][label] = dict(windows=win(rows), members=keys, common_first=str(first.date()), common_last=str(min(r.index.max() for r in srows.values()).date()))
+    res["equity"]["bystyle " + label] = equity(rows)
+    print("bystyle", label, {r["name"]: r["ir"] for r in res["bystyle"][label]["windows"]["full"]}, flush=True)
+
 # cross-pair portfolios: two asset classes' own portfolios blended 50/50 (EW) or by Inverse Vol, on the pair's common dates
 PAIRS = [(a, b) for a, b in combinations(["metals", "energy", "precious", "ngl", "agri"], 2)]
 LABEL = {"metals": "Metals", "energy": "Energy", "energy_exng": "Energy ex-NatGas", "precious": "Precious", "ngl": "NGL", "agri": "Agriculture"}

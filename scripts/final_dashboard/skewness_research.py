@@ -42,6 +42,9 @@ for a, prods in PRODUCTS.items():
         print("skew", a, p, flush=True)
 
 
+pickle.dump((nets, meta), open("outputs/final_dashboard_2012/products_2012_skew_nets.pkl", "wb"))   # four sleeves + Skewness, reused by vti_research.py
+
+
 def align(lst):
     cum = [x.cumsum() for x in lst]
     idx = cum[0].index

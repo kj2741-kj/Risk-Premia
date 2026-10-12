@@ -12,7 +12,8 @@ import pandas as pd
 from engine import combine_returns
 from cross_asset_engine import combine_cross_asset
 from run_regime_table import _metrics
-from regimes import REGIMES, REPORT_START
+from regimes import REPORT_START
+from final_regimes import REGIMES   # three-regime scheme of 2026-10-12, Final Dashboard only
 
 OUT = Path("outputs/final_dashboard")
 nets, meta = pickle.load(open(OUT / "products_v2_nets.pkl", "rb"))

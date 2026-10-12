@@ -6,7 +6,15 @@ that led to it.
 
 ---
 
-## 2026-10-11 (latest): source-data fixes (Sugar, Brent) and WTI Momentum input
+## 2026-10-12 (latest): three regimes in the Final Research Dashboard
+
+- New `scripts/final_dashboard/final_regimes.py`: R1 2011-01-01 to 2016-12-31, R2 2017-01-01 to 2021-12-31, R3 2022-01-01 to the last price date (no overlap). Replaces the four regimes (2011-15, 2016-19, 2020-21, 2022-26) for this dashboard only; `research/regimes.py`, `run_regime_table.py` and the Streamlit apps keep the four-regime scheme.
+- `analyze_v2.py` and `analyze_twopair.py` import the windows from `final_regimes.py`; `build_final_dashboard_v2.py` has three regime columns (R1 2011-2016, R2 2017-2021, R3 2022-2026, plus Full and 2026 YTD) and a Regimes note on the Notes tab. Rebuilt `Analysis/Final_Research_Dashboard.html`. Only the horizon columns changed: every Full and 2026 figure, the equity curves and the correlations are identical to the previous build.
+- Check: all regime figures (return, volatility, max drawdown, IR) on the six asset-class tabs, the two All 5 books, By Style and Cross-Pair were recomputed with separate code from the saved sleeve series: 2,120 figures, 0 differences. Opened in Chrome: every tab renders, no console errors.
+
+---
+
+## 2026-10-11: source-data fixes (Sugar, Brent) and WTI Momentum input
 
 - `scripts/rolling_continuous.py`: new `DATA_FIXES` / `apply_data_fixes`, applied in `load_metal_prices` and in the Energy and Agriculture `load_curve`. Sugar No.11 F1 on 2025-06-30 (empty in the file) set to 15.48 (Jul-25 settle, supplied by the user); Brent's 2017-01-02 row (exchange holiday, empty curve) removed. Before the fix the Brent continuous series lost the 2016-12-30 to 2017-01-03 move, and Brent (2017-01-04 to 2017-12-20) and Sugar (2025-07-02 to 2026-06-30) Momentum were flat for 250 days because the 250-day average needs a full window.
 - `research/configs/energy.py`: `load_f1_series_logret("WTI")` now replaces `F1_raw` on 2020-04-20 (-37.63) with the imputed curve value (16.005), so Momentum uses the same corrected price as Carry and Value. The continuous series is unchanged.

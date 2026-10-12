@@ -19,14 +19,14 @@ else:
 css = re.search(r"<style>(.*?)</style>", base, re.S).group(1)
 res = json.load(open(R / "outputs/final_dashboard/final_v2.json"))
 two = json.load(open(R / "outputs/final_dashboard/twopair_v2.json"))
-COLS = [("full", "Full", "2011-2026"), ("r1", "R1", "2011-2015"), ("r2", "R2", "2016-2019"),
-        ("r3", "R3", "2020-2021"), ("r4", "R4", "2022-2026"), ("y26", "2026", "YTD")]
+COLS = [("full", "Full", "2011-2026"), ("r1", "R1", "2011-2016"), ("r2", "R2", "2017-2021"),
+        ("r3", "R3", "2022-2026"), ("y26", "2026", "YTD")]
 data = dict(res, twopair=two, cols=[dict(key=k, label=l, years=y) for k, l, y in COLS])
 
 BODY = r"""
 <div class="wrap">
 <h1>Risk Premia: Final Research Dashboard</h1>
-<div class="subtitle">Five commodity asset classes, four sleeves each (Momentum, Carry, Carry-Momentum, Value), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2011-01-01. All price data through 2026-09-23. Generated 2026-10-11.</div>
+<div class="subtitle">Five commodity asset classes, four sleeves each (Momentum, Carry, Carry-Momentum, Value), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2011-01-01. All price data through 2026-09-23. Generated 2026-10-12.</div>
 <div class="tabs" id="tabbar"></div>
 <div id="panels"></div>
 <div class="tab-panel" id="panel-notes"><div class="card"><h2>Method, data and what changed</h2>
@@ -51,6 +51,8 @@ BODY = r"""
 <li><b>NGL labels (verified):</b> the 24-Sep NGL file relabels its Argus sheets, and those sheet names are wrong; the underlying series are identical to the July file, whose labels are right. Checked against EIA's Mont Belvieu propane spot price (daily, via FRED series DPROPANEMBTX): the BAP series is propane (median price ratio 1.00, level correlation 0.995, 5-day change correlation 0.90), while the file calls it "Butane". CAP is ethane, not "Propane Far East": its 2012 average was 47% below 2011 (EIA reported ethane down 48%, propane 32%; BAP is down 31%), 24 cents per gallon on 19 Dec 2012 (reported 25 cents) and 13 cents on 16 Mar 2020 (reported 12.9 cents). DAE is normal butane (about 1.2 times propane; 2012 average down 10% against EIA's 5% for normal butane, allowing for swap versus spot) and IBD is isobutane (about 1.3 times propane). Products are mapped by ticker root: Ethane CAP, Propane BAP, Butane DAE, Isobutane IBD.</li>
 <li>Gold and Silver deep columns (Gold F14 to F20, Silver F12 to F16) were revised in the new file from mid 2025; no pair used here goes that deep.</li>
 <li>Roll calendars: Precious aligned to Bloomberg's contract months, Agriculture Bloomberg-matched, Metals, Energy and NGL on <code>expiry_calendars_20260701.xlsx</code> (it agrees with the 24-Sep consolidated calendar on every shared contract; those three were not Bloomberg-matched because no monthly files exist for them).</li></ul>
+<h3>Regimes</h3><ul class="steps">
+<li>Three regimes (set 2026-10-12, replacing the earlier four): <b>R1</b> 1 Jan 2011 to 31 Dec 2016, <b>R2</b> 1 Jan 2017 to 31 Dec 2021, <b>R3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap. The 2026 column (year to date) lies inside R3. Every horizon figure is computed on its own window: return and volatility annualised over that window, drawdown measured from the window's start.</li></ul>
 <h3>Checks</h3><ul class="steps">
 <li>With the old roll rule, the new price files reproduce the old continuous series exactly through May 2026 (Gold, Platinum, WTI, Copper, Corn, Ethane, Propane, Butane).</li>
 <li>Earlier versions of this analysis reproduced the August dashboard's Momentum and Value rows to three decimals for Metals, Energy and NGL.</li></ul>

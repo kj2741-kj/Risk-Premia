@@ -192,7 +192,10 @@ def build_rolling_f1(
             else:
                 f1_cont[i] = f1_prev
 
-            phase_labels[i] = f"Roll_TD{roll_day}"
+            # Same label as scripts/rolling_continuous.py (2026-10-11): the cost functions (common_shared.transaction_cost, research/engine.py,
+            # the Excel tradebook formulas) charge the roll-day cost only for phases starting with "Roll_LTD". This module used to write
+            # "Roll_TD<N>", which they did not recognise, so no roll-day cost was charged under the Nth-trading-day option.
+            phase_labels[i] = f"Roll_LTD-{roll_day}"
             is_roll[i] = True
             active_cont[i] = current_contract
             prev_f1 = f1v

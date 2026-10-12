@@ -29,10 +29,14 @@ Coffee, Sugar):
   the main engine's series (maximum difference 0). Roll counts, Gold 261 to 130, Silver 261 to 109, Platinum/Palladium 261 to 87, Corn/Wheat/Coffee
   261 to 109, Soybean 261 to 153, Soybean Oil 261 to 174, Sugar 261 to 88 (full history).
 
-**Open finding (not changed).** The Nth-trading-day option labels its roll days `Roll_TD<N>`, but the transaction-cost functions
-(`common_shared.py` line 321, `research/engine.py` lines 60 and 142) charge the roll-day cost only for phases starting with `Roll_LTD`. So with
-that option the apps charge no roll-day cost for positions held through a roll, whereas the "N days before" option and the research numbers do.
-Fixing it would change app results under that option, so it was left for a decision.
+**Roll-day cost fix (same day, separate commit).** The Nth-trading-day option labelled its roll days `Roll_TD<N>`, but the transaction-cost
+functions (`common_shared.py` line 321, `research/engine.py` lines 60 and 142, and the Excel tradebook formulas) charge the roll-day cost only for
+phases starting with `Roll_LTD`. So under that option the apps charged no roll-day cost for positions held through a roll, whereas the "N days
+before" option and the research numbers did (holding a constant long over the full history: Gold 0.11 against 50.01 in price units, Corn 0.05
+against 12.37, WTI 0.01 against 4.70, Copper 0.75 against 477.79). `scripts/rolling_continuous_5td.py` now labels roll days `Roll_LTD-<N>`, the same
+as `scripts/rolling_continuous.py`; no cost function was edited. After the change the option's phases, continuous series and constant-long cost
+equal the main engine's expiry-month rule exactly (Gold, Corn, WTI, Copper). **App results under this option now include the roll-day cost, so
+they are slightly lower than before.**
 
 ---
 

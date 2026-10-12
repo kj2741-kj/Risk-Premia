@@ -69,7 +69,7 @@ with st.sidebar:
     roll_method = st.selectbox(
         "Rolling Logic",
         ["N days before last trading day", "Nth trading day of the expiry month"],
-        index=0, key="energy_roll_method",
+        index=1, key="energy_roll_method",   # default: Nth trading day of the expiry month (same roll as the research numbers), 2026-10-11
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="energy_roll_n")
     st.caption("GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) are excluded, with no usable "

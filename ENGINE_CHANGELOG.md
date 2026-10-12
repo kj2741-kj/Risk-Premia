@@ -18,7 +18,7 @@ the research rule.
 - `scripts/rolling_continuous_5td.py`: roll dates now come from `rolling_continuous._compute_roll_dates_expiry_month` (Nth trading day of the
   month in which each contract's last trade date falls). Docstrings and the CLI help updated. `_nth_trading_days` (every month) is kept but unused.
 - The five apps (`metals_dashboard`, `energy_dashboard`, `ngl_dashboard`, `precious_metals_dashboard`, `agri_dashboard`): the option label is now
-  "Nth trading day of the expiry month". Defaults are unchanged (the selector still starts on "N days before last trading day").
+  "Nth trading day of the expiry month". The default was unchanged at first and was changed later the same day (see "Default" below).
 
 **Verified** (16 products: Copper, Zinc, WTI, NatGas, Ethane, Butane, Gold, Silver, Platinum, Palladium, Corn, Wheat, Soybean, Soybean Oil,
 Coffee, Sugar):
@@ -37,6 +37,13 @@ against 12.37, WTI 0.01 against 4.70, Copper 0.75 against 477.79). `scripts/roll
 as `scripts/rolling_continuous.py`; no cost function was edited. After the change the option's phases, continuous series and constant-long cost
 equal the main engine's expiry-month rule exactly (Gold, Corn, WTI, Copper). **App results under this option now include the roll-day cost, so
 they are slightly lower than before.**
+
+**Default (same day, separate commit).** The five apps now start on "Nth trading day of the expiry month" (`index=1` in each app's "Rolling Logic"
+selector, N = 5), so a new session uses the same roll as the research numbers and `Analysis/Final_Research_Dashboard.html`. "N days before last
+trading day" is still selectable. The change only affects new sessions (a session that already has a stored selection keeps it). Checked by running
+each app up to the point where its tabs begin (sidebar, roll selector, data and continuous-series build) with Streamlit's test runner: no exceptions
+or errors, the selector shows the expiry-month option and N = 5, for Metals, Energy, NGL, Precious and Agriculture. A full run of every tab was not
+possible headlessly (the tabs compute very large heatmaps), so the tabs themselves were not exercised.
 
 ---
 

@@ -58,7 +58,7 @@ _SCRIPTS_DIR = os.path.join(_REPO_ROOT, "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from rolling_continuous import (ENERGY_CALENDAR_FILE, ENERGY_CONFIG,  # noqa: E402
+from rolling_continuous import (apply_data_fixes, ENERGY_CALENDAR_FILE, ENERGY_CONFIG,  # noqa: E402
                                  ENERGY_FUTURES_FILE, get_metal_rolling_f1,
                                  reanchor_f1_continuous)
 from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio  # noqa: E402
@@ -171,6 +171,7 @@ def load_curve(product: str) -> pd.DataFrame:
             spread_21 = brent.loc[d21, "F1"] - curve.loc[d21, "F1"]
             avg_spread = (spread_17 + spread_21) / 2
             curve.loc[anomaly, "F1"] = brent.loc[anomaly, "F1"] - avg_spread
+    curve = apply_data_fixes(curve, SHEET_NAMES[product], "F1")   # source-data fixes, see rolling_continuous.DATA_FIXES
     return curve
 
 
@@ -199,4 +200,10 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     df = reanchor_f1_continuous_ratio(df)
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)
     df["log_price"] = np.log(price)
+    if product == "WTI":
+        # 2026-10-11: Momentum reads F1_raw, which still held the -37.63 print of 2020-04-20. Use the same imputed value load_curve() gives
+        # Carry and Value. Only the signal input changes; the continuous series (already on the second contract that day) is untouched.
+        anomaly = pd.Timestamp("2020-04-20")
+        if anomaly in df.index:
+            df.loc[anomaly, "F1_raw"] = load_curve("WTI").loc[anomaly, "F1"]
     return df

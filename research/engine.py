@@ -223,8 +223,17 @@ def exec_shift(sigbin: pd.Series, shift_n: int) -> pd.Series:
 # Copied from common_engine.py
 # ═══════════════════════════════════════════════════════════════
 
+MA_MIN_FRACTION = 0.9   # 2026-10-11: moving averages are computed once at least 90% of the window has prices, so one missing price no longer blanks them
+
+
+def _ma(price: pd.Series, window: int) -> pd.Series:
+    """Simple moving average over `window` observations, valid once at least MA_MIN_FRACTION of the window is present (a single missing price,
+    e.g. an exchange-holiday row, no longer disables the average for `window` days). Complete windows give exactly the plain rolling mean."""
+    return price.rolling(window, min_periods=max(1, int(np.ceil(MA_MIN_FRACTION * window)))).mean()
+
+
 def ma_crossover_position(f1r: pd.Series, fast: int, slow: int, shift_n: int = 1) -> pd.Series:
-    sig = np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
+    sig = np.sign(_ma(f1r, fast) - _ma(f1r, slow))
     return exec_shift(sig, shift_n).fillna(0)
 
 
@@ -247,7 +256,7 @@ def momentum_composite_position(f1r: pd.Series, pairs: tuple[tuple[int, int], ..
     n = len(pairs)
     total = None
     for fast, slow in pairs:
-        sig = np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
+        sig = np.sign(_ma(f1r, fast) - _ma(f1r, slow))
         total = sig if total is None else total + sig
     composite_sign = np.sign(total / n)
     return exec_shift(composite_sign, shift_n).fillna(0)
@@ -378,7 +387,7 @@ def statarb_spread_position(spread: pd.Series, lookback: int, threshold: float,
 
 def raw_signal_momentum(f1r: pd.Series, fast: int, slow: int) -> pd.Series:
     """Raw, pre-shift MA-crossover sign. Same formula as ma_crossover_position."""
-    return np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
+    return np.sign(_ma(f1r, fast) - _ma(f1r, slow))
 
 
 def raw_signal_carry_v1(curve: pd.DataFrame, near: str = "F1", far: str = "F2") -> pd.Series:
@@ -463,7 +472,7 @@ def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
     'inverse_vol' reweights daily: each series' weight is 1 / its own trailing `vol_window`-day
     realized vol (rolling std of ITS OWN return history, recomputed every day), normalized so
     the weights sum to 1 across series on that day. This is a rolling, look-ahead-free scheme --
-    day t's weights use only returns strictly before t via pandas rolling's own window semantics
+    day t's weights use only returns up to t-1 (the rolling volatility is lagged one observation)
     -- as opposed to fixing weights once from full-sample vol, which would leak future
     information into the weights applied to the past. The tradeoff is a `vol_window`-day burn-in
     before any weight (and therefore the combined series) is defined, on top of each leg's own
@@ -553,7 +562,8 @@ def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
         for s in net_returns[1:]:
             idx = idx.union(s.index)
         rets = pd.concat([s.reindex(idx) for s in net_returns], axis=1)
-        vol = rets.rolling(vol_window, min_periods=vol_window).std(ddof=1)
+        # 2026-10-11: weights are lagged one observation (shift(1)) so day t's weights use only returns up to t-1; before this the window included day t.
+        vol = rets.rolling(vol_window, min_periods=vol_window).std(ddof=1).shift(1)
         inv_vol = 1.0 / vol.replace(0.0, np.nan)
         w = inv_vol.div(inv_vol.sum(axis=1, skipna=False), axis=0)
         return (w * rets).sum(axis=1, skipna=False)

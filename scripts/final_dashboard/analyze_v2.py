@@ -119,7 +119,7 @@ for r in ROWS:
     al, idx = align_intersection([getter(k) for k in CORR_AC])
     df = pd.concat(al, axis=1, keys=CORR_AC).loc[REPORT_START:].dropna()
     cross[r] = [[round(float(x), 3) for x in rr] for rr in df.corr().values]
-    cross["_n"] = int(len(df))
+    cross.setdefault("_n", {})[r] = int(len(df))   # sample size per strategy row (Inverse Vol rows start later: NGL Inverse Vol is undefined before 2012-02-22)
 res["corr"]["cross"] = cross
 res["corr"]["rows"] = ROWS
 al, idx = align_intersection([acs[k]["ew"] for k in CORR_AC])
@@ -128,9 +128,9 @@ rc_series = {}
 for m1, nm in (("ew", "ew"), ("iv", "iv")):
     al, idx = align_intersection([acs[k][m1] for k in CORR_AC])
     df = pd.concat(al, axis=1, keys=CORR_AC).loc[REPORT_START:].dropna()
-    rc_series[nm] = {k: [round(float(x), 6) for x in df[k]] for k in CORR_AC}
-    rc_dates = [d.strftime("%Y-%m-%d") for d in df.index]
-res["corr"]["rolling"] = dict(dates=rc_dates, series=rc_series)
+    rc_series[nm] = dict(dates=[d.strftime("%Y-%m-%d") for d in df.index], series={k: [round(float(x), 6) for x in df[k]] for k in CORR_AC})   # dates kept per method: the two samples differ in length
+assert all(len(v["dates"]) == len(s) for v in rc_series.values() for s in v["series"].values())
+res["corr"]["rolling"] = rc_series
 res["meta"] = dict(data_last={a: min(meta[(a, p)]["last"] for p in PRODUCTS[a]) for a in PRODUCTS},
                    rolls={f"{a}|{p}": meta[(a, p)]["rolls"] for (a, p) in meta},
                    pairs={f"{a}|{p}": ["-".join(x) for x in meta[(a, p)]["pairs"]] for (a, p) in meta})

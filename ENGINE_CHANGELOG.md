@@ -6,6 +6,16 @@ that led to it.
 
 ---
 
+## 2026-10-11 (latest): source-data fixes (Sugar, Brent) and WTI Momentum input
+
+- `scripts/rolling_continuous.py`: new `DATA_FIXES` / `apply_data_fixes`, applied in `load_metal_prices` and in the Energy and Agriculture `load_curve`. Sugar No.11 F1 on 2025-06-30 (empty in the file) set to 15.48 (Jul-25 settle, supplied by the user); Brent's 2017-01-02 row (exchange holiday, empty curve) removed. Before the fix the Brent continuous series lost the 2016-12-30 to 2017-01-03 move, and Brent (2017-01-04 to 2017-12-20) and Sugar (2025-07-02 to 2026-06-30) Momentum were flat for 250 days because the 250-day average needs a full window.
+- `research/configs/energy.py`: `load_f1_series_logret("WTI")` now replaces `F1_raw` on 2020-04-20 (-37.63) with the imputed curve value (16.005), so Momentum uses the same corrected price as Carry and Value. The continuous series is unchanged.
+- Rebuilt `Analysis/Final_Research_Dashboard.html`. Only WTI Momentum, Brent (all sleeves) and Sugar (Momentum, Carry, Carry-Momentum) series changed; every other product is identical. Full-sample IR moves: Energy EW PORT 0.490 to 0.487, Agriculture Momentum -0.131 to -0.151, Agriculture EW PORT -0.205 to -0.212.
+- `research/engine.py` (same day, second change): (1) `combine_returns("inverse_vol")` now lags the rolling volatility one observation (`.shift(1)`), so day t's weights use returns up to t-1; the docstring already claimed this. Full-sample IR of the Inverse Vol portfolios: Metals 0.118 to 0.111, Energy 0.481 to 0.477, Energy ex-NatGas 0.604 to 0.606, NGL 1.100 to 1.107, Precious -0.230 to -0.214, Agriculture -0.248 to -0.243. `dashboard_portfolio_tab.py` (Streamlit) also calls this function, so its inverse-vol portfolios change the same way. (2) Momentum moving averages (`ma_crossover_position`, `momentum_composite_position`, `raw_signal_momentum`) use `_ma`, which needs at least 90% of the window (`MA_MIN_FRACTION`) instead of a full window; complete windows give identical values. With the Brent and Sugar data fixed, no product series changed (maximum difference 0).
+- Rolling-correlation fix (`scripts/final_dashboard/analyze_v2.py`, `build_final_dashboard_v2.py`): the Equal Weight and Inverse Vol rolling series have different lengths (3,886 from 2011-01-04 and 3,604 from 2012-02-24) but shared one date list taken from the Inverse Vol sample, so the Equal Weight chart was mis-dated and cut short. Dates are now stored with each method, with an assertion that dates and values have equal length; the page's sample-size note now lists days per strategy (Inverse Vol rows 3,604, others 3,886) instead of one number. A rolling value was checked against a direct pandas rolling correlation (identical).
+
+---
+
 ## 2026-10-11 (later): Streamlit "Nth trading day" roll option now rolls only in each contract's expiry month
 
 **Why.** Each Streamlit app has a "Rolling Logic" selector with a second option, "Nth trading day of the month", implemented in

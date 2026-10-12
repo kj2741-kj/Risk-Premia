@@ -471,6 +471,28 @@ AGRI_BBG_CONFIG: dict[str, dict] = {
 # 1. Data loaders
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Source-data fixes (2026-10-11), applied by load_metal_prices here and by the research configs' load_curve (energy, agri).
+# Sugar F1 on 2025-06-30 is empty in the file (expiring Jul-25 contract; settle 15.48 cents/lb supplied by the user); Brent's row on 2017-01-02 is an
+# exchange holiday with an empty curve, so the date is removed (with it in, the continuous series lost the 2016-12-30 to 2017-01-03 move).
+DATA_FIXES = {
+    "Sugar No.11 ICE": {"set_f1": {"2025-06-30": 15.48}},
+    "Brent Crude (ICE)": {"drop_dates": ["2017-01-02"]},
+}
+
+
+def apply_data_fixes(df: pd.DataFrame, sheet_name: str, f1_name: str) -> pd.DataFrame:
+    """Apply DATA_FIXES[sheet_name] to a frame indexed by Date whose front column is `f1_name`."""
+    fix = DATA_FIXES.get(sheet_name)
+    if not fix:
+        return df
+    for d, v in fix.get("set_f1", {}).items():
+        t = pd.Timestamp(d)
+        if t in df.index and pd.isna(df.loc[t, f1_name]):
+            df.loc[t, f1_name] = v
+    drop = [pd.Timestamp(d) for d in fix.get("drop_dates", []) if pd.Timestamp(d) in df.index]
+    return df.drop(index=drop) if drop else df
+
+
 def load_metal_prices(
     filepath: str,
     sheet_name: str,
@@ -503,7 +525,7 @@ def load_metal_prices(
     df = (df.dropna(subset=["Date"])
             .set_index("Date")
             .sort_index())
-    return df
+    return apply_data_fixes(df, sheet_name, "F1_raw") if f1_col == 1 else df
 
 
 def load_metal_calendar(

@@ -63,7 +63,7 @@ _SCRIPTS_DIR = os.path.join(_REPO_ROOT, "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from rolling_continuous import (AGRI_CALENDAR_FILE_BBG, AGRI_BBG_CONFIG as AGRI_CONFIG,  # noqa: E402
+from rolling_continuous import (apply_data_fixes, AGRI_CALENDAR_FILE_BBG, AGRI_BBG_CONFIG as AGRI_CONFIG,  # noqa: E402
                                  AGRI_FUTURES_FILE, get_metal_rolling_f1,
                                  reanchor_f1_continuous)
 from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio  # noqa: E402
@@ -161,6 +161,7 @@ def load_curve(product: str) -> pd.DataFrame:
     cols = {f"F{t + 1}": pd.to_numeric(raw[t + 1], errors="coerce").values for t in range(n_tenors)}
     curve = pd.DataFrame(cols, index=dates.values)
     curve = curve[curve.index.notna()].sort_index()
+    curve = apply_data_fixes(curve, SHEET_NAMES[product], "F1")   # source-data fixes, see rolling_continuous.DATA_FIXES
     return curve.loc[ANALYSIS_START:]
 
 

@@ -6,6 +6,36 @@ that led to it.
 
 ---
 
+## 2026-10-11 (later): Streamlit "Nth trading day" roll option now rolls only in each contract's expiry month
+
+**Why.** Each Streamlit app has a "Rolling Logic" selector with a second option, "Nth trading day of the month", implemented in
+`scripts/rolling_continuous_5td.py`. It rolled on the Nth trading day of **every calendar month**. For products with a contract expiring every
+month (LME metals, energy, NGL) that equals the new research rule, but for Gold, Silver, Platinum, Palladium and the agricultural products
+(contracts expire only in some months) it also rolled in months where nothing expires: 186 rolls over 2011 to mid-2026 against 62 to 108 under
+the research rule.
+
+**Change.**
+- `scripts/rolling_continuous_5td.py`: roll dates now come from `rolling_continuous._compute_roll_dates_expiry_month` (Nth trading day of the
+  month in which each contract's last trade date falls). Docstrings and the CLI help updated. `_nth_trading_days` (every month) is kept but unused.
+- The five apps (`metals_dashboard`, `energy_dashboard`, `ngl_dashboard`, `precious_metals_dashboard`, `agri_dashboard`): the option label is now
+  "Nth trading day of the expiry month". Defaults are unchanged (the selector still starts on "N days before last trading day").
+
+**Verified** (16 products: Copper, Zinc, WTI, NatGas, Ethane, Butane, Gold, Silver, Platinum, Palladium, Corn, Wheat, Soybean, Soybean Oil,
+Coffee, Sugar):
+- Metals and Energy: results identical to before (same rolls, same continuous series, same phases).
+- NGL: identical from 2011 (daily differences about 1e-16); one fewer roll in August 2009 (the old version rolled in a first partial month with no
+  expiring contract).
+- Precious and Agriculture: roll dates now equal the main engine's `roll_rule="expiry_month_nth_td"` exactly, and the continuous series equals
+  the main engine's series (maximum difference 0). Roll counts, Gold 261 to 130, Silver 261 to 109, Platinum/Palladium 261 to 87, Corn/Wheat/Coffee
+  261 to 109, Soybean 261 to 153, Soybean Oil 261 to 174, Sugar 261 to 88 (full history).
+
+**Open finding (not changed).** The Nth-trading-day option labels its roll days `Roll_TD<N>`, but the transaction-cost functions
+(`common_shared.py` line 321, `research/engine.py` lines 60 and 142) charge the roll-day cost only for phases starting with `Roll_LTD`. So with
+that option the apps charge no roll-day cost for positions held through a roll, whereas the "N days before" option and the research numbers do.
+Fixing it would change app results under that option, so it was left for a decision.
+
+---
+
 ## 2026-10-11: engine and configs updated to the Final Research Dashboard setup
 
 **One-line summary.** Every reportable number now uses the 2026-09-24 price files (data through 2026-09-23), rolls on the 5th trading day of each
@@ -49,7 +79,7 @@ Streamlit apps keep their existing roll default.
 5. All changed files compile and the configs import.
 
 ### Not changed / known follow-ups
-- **Streamlit apps** (`*_dashboard/app.py`, `dashboard_portfolio_tab.py`, `hub/app.py`) were not edited: they read the new data automatically through the constants in `scripts/rolling_continuous.py`, keep their "Rolling Logic" selector (default "N days before last trading day"), and use one uniform tenor-pair list per asset class, so they show Precious with the short F1-F2 pair only and Agriculture with F1-F2 only (no per-product long pair). Adding the new roll rule as a selector option and per-product pairs to those apps is a separate change.
+- **Streamlit apps** (`*_dashboard/app.py`, `dashboard_portfolio_tab.py`, `hub/app.py`) were not edited in the entry below (the "Nth trading day" option was changed in the later entry above): they read the new data automatically through the constants in `scripts/rolling_continuous.py`, keep their "Rolling Logic" selector (default "N days before last trading day"), and use one uniform tenor-pair list per asset class, so they show Precious with the short F1-F2 pair only and Agriculture with F1-F2 only (no per-product long pair). Adding the new roll rule as a selector option and per-product pairs to those apps is a separate change.
 - `webapp/` and the `feature/react-dashboard` branch were not touched.
 - Metals, Energy and NGL roll calendars are not Bloomberg-matched (no monthly single-contract files exist to check them).
 - Platinum/Palladium F5 and Gold F7 sit beyond the range the real-volume liquidity study found fully liquid; Agriculture has had no liquidity study.

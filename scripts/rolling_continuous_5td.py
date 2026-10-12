@@ -2,7 +2,17 @@
 rolling_continuous_5td.py
 ==========================
 Continuous rolling F1 price-series builder — rolls on the Nth trading day
-of every month (configurable, default N=5).
+of each contract's EXPIRY month (the month in which its LAST_TRADEABLE_DT
+falls; configurable, default N=5).
+
+Changed 2026-10-11: this module used to roll on the Nth trading day of EVERY
+calendar month. That is the same thing for products with a contract expiring
+every month (LME metals, energy, NGL), but for products that expire only in some
+months (Gold, Silver, Platinum, Palladium and the agricultural products) it also
+rolled in months where nothing expires. It now rolls only in months where a
+contract actually expires, which matches scripts/rolling_continuous.py with
+roll_rule="expiry_month_nth_td" (the rule the research configs use). Results for
+Metals, Energy and NGL are unchanged.
 
 Rolling logic (return-based / additive stitching):
 ---------------------------------------------------
@@ -12,7 +22,7 @@ of whichever raw contract the strategy is currently "holding":
   Normal days (holding front-month F1):
       F1_cont[t] = F1_cont[t-1] + (F1_raw[t] - F1_raw[t-1])
 
-  Roll day (Nth trading day of the month):
+  Roll day (Nth trading day of the contract's expiry month):
       We switch from the old F1 to the new F2.
       F1_cont[t] = F1_cont[t-1] + (F2_raw[t] - F2_raw[t-1])
       (Track F2's move on the roll day itself — the position
@@ -49,7 +59,7 @@ _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 DATA_DIR = os.path.join(_REPO_ROOT, "data")
 
 from rolling_continuous import (
-    load_metal_prices, load_metal_calendar,
+    load_metal_prices, load_metal_calendar, _compute_roll_dates_expiry_month,
     METAL_CONFIG, DEFAULT_FUTURES_FILE, DEFAULT_CALENDAR_FILE,
     ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE,
     PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE,
@@ -60,7 +70,8 @@ DEFAULT_ROLL_DAY = 5
 
 
 def _nth_trading_days(trading_dates: pd.DatetimeIndex, n: int) -> set[pd.Timestamp]:
-    """Return the set of Nth-trading-day-of-month dates."""
+    """Return the set of Nth-trading-day-of-month dates (EVERY calendar month). Legacy: no longer used by
+    build_rolling_f1 since 2026-10-11 (it rolls only in each contract's expiry month)."""
     result = set()
     current_ym = None
     count = 0
@@ -82,7 +93,7 @@ def build_rolling_f1(
 ) -> pd.DataFrame:
     """
     Build a continuous rolling F1 price series using the Nth trading day
-    of each month as the roll trigger.
+    of each contract's expiry month as the roll trigger.
 
     Parameters
     ----------
@@ -90,7 +101,7 @@ def build_rolling_f1(
     calendar : DataFrame with columns Contract, roll_date, expiry_date.
                roll_date = LAST_TRADEABLE_DT (used only to detect when the
                data file switches F1 from old to new contract).
-    roll_day : Which trading day of the month to roll on (1–10, default 5).
+    roll_day : Which trading day of the contract's expiry month to roll on (1–10, default 5).
 
     Returns
     -------
@@ -103,7 +114,10 @@ def build_rolling_f1(
 
     trading_dates = prices.index.normalize()
     price_date_set = set(trading_dates)
-    roll_set = _nth_trading_days(trading_dates, roll_day)
+    # Roll dates: the Nth trading day of the month in which each contract's last trade date falls (its expiry month), not of
+    # every calendar month (changed 2026-10-11; see the module docstring).
+    roll_map, _, _ = _compute_roll_dates_expiry_month(calendar, sorted(price_date_set), price_date_set, roll_day)
+    roll_set = set(roll_map.keys())
 
     # Snap each LAST_TRADEABLE_DT to the nearest prior trading day when the
     # exact calendar date isn't in the price data (holiday mismatch, data gap).
@@ -242,7 +256,7 @@ def get_rolling_f1(
     calendar_file : Path to the expiry calendars workbook.
     verbose       : Print progress messages if True.
     config        : Config registry (defaults to METAL_CONFIG).
-    roll_day      : Which trading day of the month to roll on (1–10, default 5).
+    roll_day      : Which trading day of the contract's expiry month to roll on (1–10, default 5).
     """
     if config is None:
         config = METAL_CONFIG
@@ -298,7 +312,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate verification Excel files for Nth-TD rolling.")
     parser.add_argument("--roll-day", type=int, default=DEFAULT_ROLL_DAY,
                         choices=range(1, 11), metavar="N",
-                        help="Roll on the Nth trading day of each month (1–10, default 5)")
+                        help="Roll on the Nth trading day of each contract's expiry month (1–10, default 5)")
     args = parser.parse_args()
     rd = args.roll_day
 

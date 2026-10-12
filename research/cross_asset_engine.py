@@ -88,7 +88,7 @@ for _p in (_RESEARCH_DIR, _CONFIGS_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from engine import (raw_signal_carry_v1, raw_signal_carry_v2, raw_signal_carrymom,
+from engine import (raw_signal_carry_v1, raw_signal_carry_v2, raw_signal_carrymom, raw_signal_skewness,
                      combine_positions, combine_returns, exec_shift, log_return_daily,
                      momentum_composite_position, value_v1_position)
 from risk_parity import rolling_erc_combine
@@ -208,9 +208,19 @@ def _carry_composite_raw(curve: pd.DataFrame, near: str, far: str, window: int,
     return sigs[0] if len(sigs) == 1 else combine_positions(sigs, "equal_weight")
 
 
+# Skewness (added 2026-10-12): optional FIFTH style, off by default so every validated function below
+# keeps its four-style output. Time-series form (one +1/-1 per product from minus the rolling skewness of
+# the ratio-stitched continuous series' daily log returns), same rule as scripts/final_dashboard/
+# skewness_research.py and the dashboards' Skewness tab (engine.raw_signal_skewness).
+SKEWNESS_STYLE = "Skewness"
+SKEWNESS_WINDOW_DEFAULT = 252
+SKEWNESS_SHIFT_N_DEFAULT = 1
+
+
 def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
                           carry_spec: CarrySpec | None = None,
-                          per_product_pairs: bool = False) -> dict[str, dict[str, list]]:
+                          per_product_pairs: bool = False,
+                          include_skewness: bool = False) -> dict[str, dict[str, list]]:
     """Momentum / Combined Carry / Combined CarryMom / Value gross AND net
     daily log-return series PER PRODUCT (not yet combined across products)
     for one asset class, on the dashboard-filtered product universe.
@@ -247,6 +257,11 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
     tenor_pairs = list(dict.fromkeys(pr for v in pairs_by_product.values() for pr in v))   # union, for the data checks below
     out = {style: {"gross": [], "net": [], "names": []}
            for style in ("Momentum", "Combined Carry", "Combined CarryMom", "Value")}
+    if include_skewness:
+        # include_skewness (2026-10-12, default False): also return a "Skewness" entry with the same
+        # gross/net/names layout. Callers that pass styles=None to asset_class_four_row() will then see
+        # five styles, so pass `styles` explicitly when only the original four are wanted.
+        out[SKEWNESS_STYLE] = {"gross": [], "net": [], "names": []}
     # n_pairs (added 2026-10-11): how many of the chosen tenor pairs actually had data for each product, index-aligned
     # with names, so a caller can flag a product that was blended on fewer pairs than the user chose.
     out["Combined Carry"]["n_pairs"], out["Combined CarryMom"]["n_pairs"] = [], []
@@ -299,6 +314,15 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
             out["Value"]["gross"].append(g)
             out["Value"]["net"].append(n)
             out["Value"]["names"].append(p)
+
+        if include_skewness:
+            sk_raw = raw_signal_skewness(log_price, getattr(cfg, "SKEWNESS_WINDOW", SKEWNESS_WINDOW_DEFAULT))
+            sk_pos = exec_shift(sk_raw, getattr(cfg, "SKEWNESS_SHIFT_N", SKEWNESS_SHIFT_N_DEFAULT)).fillna(0)
+            g, n = log_return_daily(sk_pos, log_price, tc_bps, phase)
+            if not n.empty:
+                out[SKEWNESS_STYLE]["gross"].append(g)
+                out[SKEWNESS_STYLE]["net"].append(n)
+                out[SKEWNESS_STYLE]["names"].append(p)
 
     dead = [f"{n}-{f}" for (n, f), ok in pair_has_data.items() if not ok]
     if dead:
@@ -467,8 +491,12 @@ def combine_cross_asset(series_list: list[pd.Series]) -> pd.Series:
 
 
 STYLE_NAMES = ("Momentum", "Combined Carry", "Combined CarryMom", "Value")
-STYLE_DISPLAY = {"Momentum": "Momentum", "Combined Carry": "Carry", "Combined CarryMom": "CarryMom", "Value": "Value"}
-CROSS_COMMODITY_COMBINE_METHODS = ("equal_weight", "risk_parity", "dynamic_risk_parity")
+ALL_STYLE_NAMES = STYLE_NAMES + (SKEWNESS_STYLE,)     # the four validated styles plus the optional fifth
+STYLE_DISPLAY = {"Momentum": "Momentum", "Combined Carry": "Carry", "Combined CarryMom": "CarryMom", "Value": "Value",
+                 SKEWNESS_STYLE: "Skewness"}
+# "inverse_vol" (2026-10-12): style-level Inverse Vol as in the Final Research Dashboard (1/trailing 63-day vol,
+# lagged one day, via engine.combine_returns). Appended last; the three original methods are unchanged.
+CROSS_COMMODITY_COMBINE_METHODS = ("equal_weight", "risk_parity", "dynamic_risk_parity", "inverse_vol")
 
 
 def cross_commodity_dynamic(tc_bps: int = TC_BPS,
@@ -524,6 +552,9 @@ def cross_commodity_dynamic(tc_bps: int = TC_BPS,
     elif combine_method == "risk_parity":
         g_port, _ = rolling_erc_combine(gross_styles, tilt=0.0)
         n_port, _ = rolling_erc_combine(net_styles, tilt=0.0)
+    elif combine_method == "inverse_vol":
+        g_port = combine_returns(list(gross_styles.values()), "inverse_vol", vol_window=63)
+        n_port = combine_returns(list(net_styles.values()), "inverse_vol", vol_window=63)
     else:  # "dynamic_risk_parity"
         g_port, _ = rolling_drp_combine(gross_styles)
         n_port, _ = rolling_drp_combine(net_styles)
@@ -559,6 +590,7 @@ def cross_n_portfolio(tc_bps: int = TC_BPS,
                        asset_classes: tuple[str, ...] = ("metals", "energy"),
                        per_product_fetcher=per_product_four_row,
                        combine_method: str = "equal_weight",
+                       styles: tuple[str, ...] | None = None,
                        ) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
     """Generalized Cross-Pair -> Cross-N: combination of 1-5 asset classes'
     own Equal Weight portfolios (Methodology doc Section 9's Cross-Pair
@@ -595,7 +627,9 @@ def cross_n_portfolio(tc_bps: int = TC_BPS,
         raise ValueError(f"combine_method must be one of {CROSS_N_COMBINE_METHODS}, got {combine_method!r}")
     gross_by_class, net_by_class = {}, {}
     for ac in asset_classes:
-        g4, n4 = asset_class_four_row(ac, tc_bps, per_product_fetcher=per_product_fetcher)
+        # `styles` (2026-10-12, default None = every style the fetcher returns, as before): lets a caller whose
+        # fetcher also returns "Skewness" choose whether each asset class's own portfolio uses four or five styles.
+        g4, n4 = asset_class_four_row(ac, tc_bps, styles, per_product_fetcher=per_product_fetcher)
         g_ew, n_ew = asset_class_ew_portfolio(g4, n4)
         gross_by_class[ASSET_CLASS_LABELS[ac]] = g_ew
         net_by_class[ASSET_CLASS_LABELS[ac]] = n_ew

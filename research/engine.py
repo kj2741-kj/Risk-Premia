@@ -433,6 +433,42 @@ def raw_signal_value(curve: pd.DataFrame, contract: str, lookback: int, threshol
     return sig.where(dev.notna())
 
 
+def raw_signal_skewness_from_returns(log_returns: pd.Series, window: int = 252) -> pd.Series:
+    """Raw, pre-shift Skewness sign from daily log returns (Fernandez-Perez, Fuertes and Miffre 2021,
+    Table 1, time-series form): minus the rolling skewness over `window` observations (full window
+    required). +1 when skewness is negative, -1 when positive, NaN during burn-in. pandas' rolling skew
+    is the bias-adjusted sample skewness; only its sign is used. Single source of truth for the signal:
+    the dashboards' Skewness tab and the Portfolio tab both call this."""
+    return np.sign(-log_returns.rolling(window).skew())
+
+
+def raw_signal_skewness(log_price: pd.Series, window: int = 252) -> pd.Series:
+    """Skewness signal from the roll-adjusted, ratio-stitched continuous log price (research series).
+    Same signal as scripts/final_dashboard/skewness_research.py. Roll jumps are not in the returns."""
+    return raw_signal_skewness_from_returns(log_price.diff(), window)
+
+
+def ratio_log_returns(f1c: pd.Series, f1r: pd.Series, f2r: pd.Series | None = None,
+                       phase: pd.Series | None = None) -> pd.Series:
+    """Daily log returns of the ratio-stitched continuous series, rebuilt from a dashboard's ADDITIVELY
+    stitched F1_continuous (a running sum of dollar changes, which is what the dollar-PnL tabs need).
+
+    Taking log(F1_continuous).diff() on the additive level is wrong: it divides the dollar change by the
+    ADJUSTED level instead of the price of the contract actually held, so returns are mis-scaled by
+    P_true/P_adjusted (several percent) and break down where the adjusted level is <= 0. The exact ratio
+    return is log(1 + dollar_change / price of the contract held at t-1): F1_raw(t-1) on F1_Tracking days,
+    F2_raw(t-1) on roll, F2_Tracking and bridge days. This reproduces research/ratio_continuous.py's
+    log returns to ~1e-15 (verified on Copper; see the Skewness integration notes). Without f2r/phase
+    the denominator falls back to F1_raw(t-1), exact on F1_Tracking days and within the F1-F2 basis otherwise."""
+    dc = f1c.diff()
+    den = f1r.shift(1)
+    if f2r is not None and phase is not None:
+        den = pd.Series(np.where(phase.reindex(f1c.index) == "F1_Tracking", f1r.shift(1), f2r.shift(1)),
+                         index=f1c.index)
+    ratio = 1.0 + dc / den.where(den > 0)
+    return np.log(ratio.where(ratio > 0))
+
+
 def combine_positions(raw_signals: list[pd.Series], method: str = "equal_weight",
                        weights: list[float] | None = None) -> pd.Series:
     """Combine several raw, pre-shift leg signs into one raw composite sign.

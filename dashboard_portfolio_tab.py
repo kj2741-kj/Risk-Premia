@@ -66,7 +66,7 @@ for _p in (_REPO_ROOT, _RESEARCH_DIR, _RESEARCH_CONFIGS_DIR):
 from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E402
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
-                     raw_signal_carrymom, raw_signal_momentum, raw_signal_value)
+                     raw_signal_carrymom, raw_signal_momentum, raw_signal_skewness, raw_signal_value)
 from risk_parity import rolling_erc_combine  # noqa: E402
 from drp import rolling_drp_combine  # noqa: E402
 
@@ -75,12 +75,16 @@ COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
 CARRY_TYPES = ["V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"]
 
-FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value"]
-FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry momentum", "Value": "Value"}
+FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
+FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry momentum", "Value": "Value",
+                "Skewness": "Skewness"}
+# Skewness (added 2026-10-12, Fernandez-Perez, Fuertes and Miffre 2021 Table 1, time-series form): window and lag
+# are the research settings (Analysis/Skewness_Research.html); a config may override via SKEWNESS_WINDOW / SKEWNESS_SHIFT_N.
+SKEWNESS_WINDOW_DEFAULT = 252
 # "Value": 1, changed from 2 -- user's decision 2026-08-04: shift_n=1 is now the locked
 # default for every strategy family, project-wide. See research/configs/metals.py's
 # VALUE_SHIFT_N comment for the full rationale.
-DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 1}
+DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 1, "Skewness": 1}
 
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
            "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
@@ -138,6 +142,8 @@ def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
         return {"leg_id": leg_id, "near": near, "far": far, "horizon": 20}
     if family == "Value":
         return {"leg_id": leg_id, "contract": "F3", "lookback": 1260, "threshold": 0.10}
+    if family == "Skewness":
+        return {"leg_id": leg_id, "window": SKEWNESS_WINDOW_DEFAULT}
     raise ValueError(f"Unknown family {family!r}")
 
 
@@ -174,6 +180,11 @@ def _build_reference_strategies(cfg) -> list[dict]:
         "legs": [{"leg_id": uuid.uuid4().hex[:8], "contract": cfg.VALUE_CONTRACT,
                   "lookback": cfg.VALUE_LOOKBACK_DAYS, "threshold": cfg.VALUE_THRESHOLD}],
         "shift_n": cfg.VALUE_SHIFT_N, "combine_method": "equal_weight",
+    })
+    instances.append({
+        "id": "skew", "family": "Skewness", "label": "Skewness",
+        "legs": [{"leg_id": uuid.uuid4().hex[:8], "window": getattr(cfg, "SKEWNESS_WINDOW", SKEWNESS_WINDOW_DEFAULT)}],
+        "shift_n": getattr(cfg, "SKEWNESS_SHIFT_N", DEFAULT_SHIFT_N["Skewness"]), "combine_method": "equal_weight",
     })
     return instances
 
@@ -216,12 +227,15 @@ def _reference_leg_seed(cfg, family: str) -> list[dict]:
     if family == "Value":
         return [{"leg_id": uuid.uuid4().hex[:8], "contract": cfg.VALUE_CONTRACT,
                  "lookback": cfg.VALUE_LOOKBACK_DAYS, "threshold": cfg.VALUE_THRESHOLD}]
+    if family == "Skewness":
+        return [{"leg_id": uuid.uuid4().hex[:8], "window": getattr(cfg, "SKEWNESS_WINDOW", SKEWNESS_WINDOW_DEFAULT)}]
     raise ValueError(f"Unknown family {family!r}")
 
 
 def _reference_shift_n(cfg, family: str) -> int:
     return {"Momentum": cfg.MOMENTUM_SHIFT_N, "Carry": cfg.CARRY_SHIFT_N,
-            "CarryMom": cfg.CARRY_MOMENTUM_SHIFT_N, "Value": cfg.VALUE_SHIFT_N}[family]
+            "CarryMom": cfg.CARRY_MOMENTUM_SHIFT_N, "Value": cfg.VALUE_SHIFT_N,
+            "Skewness": getattr(cfg, "SKEWNESS_SHIFT_N", DEFAULT_SHIFT_N["Skewness"])}[family]
 
 
 def _blank_draft() -> dict:
@@ -272,6 +286,11 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
         if contract is None or lookback is None or threshold is None:
             return pd.Series(dtype=float)
         return raw_signal_value(curve, contract, int(lookback), float(threshold))
+    if family == "Skewness":
+        window = leg.get("window")
+        if window is None:
+            return pd.Series(dtype=float)
+        return raw_signal_skewness(product_data["log_price"], int(window))
     raise ValueError(f"Unknown family {family!r}")
 
 
@@ -435,6 +454,8 @@ def _describe_leg(family: str, leg: dict) -> str:
     if family == "Value":
         return (f"contract={leg.get('contract')}, lookback={leg.get('lookback')}d, "
                 f"threshold=+-{leg.get('threshold')}")
+    if family == "Skewness":
+        return f"Minus rolling skewness of daily log returns, window={leg.get('window')}d (long if negative skew)"
     return str(leg)
 
 
@@ -556,6 +577,16 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
                                                 value=float(leg.get("threshold", 0.10)), step=0.01,
                                                 format="%.2f", key=f"{key_prefix}_threshold")
         with c4:
+            st.write("")
+            return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
+
+    if family == "Skewness":
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            leg["window"] = st.number_input("Window (days)", min_value=20, max_value=1000,
+                                             value=int(leg.get("window", SKEWNESS_WINDOW_DEFAULT)), step=1,
+                                             key=f"{key_prefix}_window")
+        with c2:
             st.write("")
             return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
 
@@ -791,6 +822,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V1+V2 composite")
         _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum")
         _render_reference_strategy(by_id["value"])
+        _render_reference_strategy(by_id["skew"])
 
     section_header("Portfolio construction")
     st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
@@ -901,6 +933,9 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                                "Combined CarryMom": ccm_gross, "Value": raw_gross["Value"]}
             instance_net = {"Momentum": raw_net["Momentum"], "Combined Carry": cc_net,
                              "Combined CarryMom": ccm_net, "Value": raw_net["Value"]}
+            if "Skewness" in raw_net:
+                instance_gross["Skewness"] = raw_gross["Skewness"]
+                instance_net["Skewness"] = raw_net["Skewness"]
         else:
             instance_gross, instance_net = dict(raw_gross), dict(raw_net)
     else:
@@ -922,11 +957,23 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         # pointing at the SAME row across a combine_method switch, so the
         # existing selection just updates in place.
         agg_label = "Portfolio (all reference strategies)"
-        agg_gross, agg_net = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
+        # Skewness (added 2026-10-12) is kept OUT of the original aggregate so that row still reproduces
+        # the four-strategy numbers reported before; a separate row below adds it as a fifth sleeve.
+        core_gross = {k: v for k, v in instance_gross.items() if k != "Skewness"}
+        core_net = {k: v for k, v in instance_net.items() if k != "Skewness"}
+        agg_gross, agg_net = _combine_sleeves(core_gross, core_net, combine_method, vol_window,
                                                tilt=return_tilt)
+        skew_agg = None
+        if "Skewness" in instance_net:
+            skew_agg = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
+                                         tilt=return_tilt)
         instance_gross[agg_label] = agg_gross
         instance_net[agg_label] = agg_net
-        st.caption(f"\"{agg_label}\" below is currently combined via **{combine_method}** "
+        agg5_label = "Portfolio (all reference strategies + Skewness)"
+        if skew_agg is not None:
+            instance_gross[agg5_label], instance_net[agg5_label] = skew_agg
+        st.caption(f"\"{agg_label}\" (Momentum, Carry, Carry momentum, Value) and \"{agg5_label}\" "
+                   f"(the same four plus Skewness) below are currently combined via **{combine_method}** "
                    f"(change it with the \"Combine strategies via\" dropdown above).")
 
     for p in portfolios:

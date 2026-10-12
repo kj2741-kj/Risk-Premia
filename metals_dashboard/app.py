@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
 
 from common_shared import inject_css, section_header
 from common_curve_loader import load_curve_simple
-from common_engine import render_momentum_tab, render_carry_tab, render_value_tab, render_comparison_tab
+from common_engine import (render_momentum_tab, render_carry_tab, render_value_tab, render_skewness_tab,
+                           render_comparison_tab)
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
                                  METALS_CONFIG, METALS_FUTURES_FILE, METALS_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
@@ -52,7 +53,7 @@ METAL_OPTIONS = {
 
 with st.sidebar:
     st.markdown('<p class="main-title">⚙️ Metals Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value, Skewness</p>', unsafe_allow_html=True)
     st.divider()
     metal = st.radio("Metal", list(METAL_OPTIONS.keys()), key="metal_choice")
     st.divider()
@@ -90,8 +91,8 @@ st.markdown(f'<p class="main-title">⚙️ Metals Risk Premia: {metal}</p>', uns
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
-tab_mom, tab_carry, tab_val, tab_compare, tab_portfolio = st.tabs(
-    ["⚡ Momentum", "📐 Carry", "📏 Value", "🔀 Comparison", "🧮 Portfolio"])
+tab_mom, tab_carry, tab_val, tab_skew, tab_compare, tab_portfolio = st.tabs(
+    ["⚡ Momentum", "📐 Carry", "📏 Value", "📉 Skewness", "🔀 Comparison", "🧮 Portfolio"])
 
 key_prefix = f"metals_{cfg['code']}"
 
@@ -106,13 +107,17 @@ with tab_val:
     value_positions = render_value_tab(curve, f1r, f1c, metal, cfg["unit"], key_prefix=key_prefix,
                                         contracts=contracts, phase=phase)
 
+with tab_skew:
+    skew_positions = render_skewness_tab(f1r, f1c, metal, cfg["unit"], key_prefix=key_prefix, phase=phase,
+                                       f2r=f1_df["F2_raw"])
+
 with tab_compare:
     render_comparison_tab(f1r, f1c, metal, cfg["unit"], key_prefix=key_prefix, phase=phase,
                            strategy_groups={"Momentum": mom_positions, "Carry": carry_positions,
-                                            "Value": value_positions})
+                                            "Value": value_positions, "Skewness": skew_positions})
 
 with tab_portfolio:
     st.caption("Combines all 4 Metals products (Copper, Aluminium, Lead, Zinc) into one "
                "asset-class-level portfolio, independent of the sidebar's Metal selection above, "
-               "which only affects the Momentum/Carry/Value/Comparison tabs.")
+               "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs.")
     render_portfolio_tab(metals_research_cfg, key_prefix="metals_portfolio")

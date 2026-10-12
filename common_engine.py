@@ -469,6 +469,185 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
 
 
 # ═══════════════════════════════════════════════════════════════
+# SKEWNESS: MINUS ROLLING SKEWNESS OF DAILY LOG RETURNS
+# ═══════════════════════════════════════════════════════════════
+
+SKEWNESS_DEFAULT_WINDOWS = [126, 252, 504]
+SKEWNESS_FEATURE_WINDOW = 252          # the research window (Skewness_Research.html); featured by default
+
+try:
+    from engine import raw_signal_skewness_from_returns, ratio_log_returns
+except ImportError:                    # research/ not yet on sys.path (the app files add it; this covers other callers)
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "research"))
+    from engine import raw_signal_skewness_from_returns, ratio_log_returns
+
+
+def skewness_position(log_returns: pd.Series, window: int, shift_n: int = 1) -> pd.Series:
+    """Position from the shared signal (research/engine.py::raw_signal_skewness_from_returns) with this
+    module's execution lag. `log_returns` = ratio_log_returns(...) of the dashboard's series."""
+    return exec_shift(raw_signal_skewness_from_returns(log_returns, window), shift_n).fillna(0)
+
+
+@st.cache_data(show_spinner="Computing skewness window sweep...")
+def skewness_window_sweep(log_returns: pd.Series, f1c: pd.Series, start: str, end: str, shift_n: int,
+                           windows: tuple[int, ...]) -> pd.DataFrame:
+    """Gross active-day Sharpe of the Skewness rule for each look-back window, over [start, end].
+    Signals are computed on the full history (so every window is warmed up) and only the PnL is
+    sliced to the range, unlike the momentum heatmap, which slices first."""
+    delta = f1c.diff()
+    mask = (f1c.index >= pd.Timestamp(start)) & (f1c.index <= pd.Timestamp(end))
+    rows = []
+    for w in windows:
+        pos = skewness_position(log_returns, w, shift_n)
+        pnl = (pos * delta)[mask]
+        active = pnl[(pos[mask] != 0) & pnl.notna()]
+        sharpe = float(active.mean() / active.std() * np.sqrt(252)) if len(active) > 20 and active.std() > 0 else np.nan
+        rows.append({"window": w, "sharpe": sharpe})
+    return pd.DataFrame(rows)
+
+
+def render_skewness_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label: str,
+                         key_prefix: str, phase: pd.Series | None = None, f2r: pd.Series | None = None):
+    """Skewness tab, built like the Momentum tab: year-range toggle, benchmark look-back windows plus a
+    custom one, Sharpe-by-window chart, rolling skewness of the featured window, multi-strategy equity
+    curve, rolling Sharpe, performance metrics, TC filter. Returns the {label: position} dict of the
+    active strategies, for the Comparison tab."""
+    yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
+    # exact ratio-adjusted log returns (same as the research series), not log() of the additive level
+    lret = ratio_log_returns(f1c, f1r, f2r, phase)
+
+    section_header(f"SKEWNESS: {product}")
+    st.caption("signal(t) = sign[ −skewness of the daily log returns of the roll-adjusted (ratio-stitched) continuous series over the "
+               "past N observations ]. Long when skewness is negative, short when positive (Fernandez-Perez, "
+               "Fuertes and Miffre 2021, Table 1, time-series form: one position per product, not a "
+               "cross-sectional sort). N = 252 is the research window.")
+
+    tc_col, timing_col, _ = st.columns([1, 1, 2])
+    with tc_col:
+        tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
+        tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_skew_tc")
+        tc_bps = tc_map[tc_label]
+    with timing_col:
+        timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_skew_timing")
+        shift_n = TIMING_SHIFT[timing]
+
+    # ── Strategies to Compare: benchmark windows + custom ──
+    st.markdown("**Strategies to Compare**")
+    ss_key = f"{key_prefix}_skew_active"
+    if ss_key not in st.session_state:
+        st.session_state[ss_key] = list(SKEWNESS_DEFAULT_WINDOWS)
+
+    bcol1, bcol2, bcol3 = st.columns([1, 1, 1])
+    with bcol1:
+        cw = st.number_input("Custom Window (days)", min_value=20, max_value=1000, value=189, step=1,
+                              key=f"{key_prefix}_skew_cw")
+    with bcol2:
+        st.write("")
+        st.write("")
+        if st.button("Add Custom Window", key=f"{key_prefix}_skew_add"):
+            if int(cw) not in st.session_state[ss_key]:
+                st.session_state[ss_key] = sorted(st.session_state[ss_key] + [int(cw)])
+    with bcol3:
+        st.write("")
+        st.write("")
+        if st.button("Reset to Defaults", key=f"{key_prefix}_skew_reset"):
+            st.session_state[ss_key] = list(SKEWNESS_DEFAULT_WINDOWS)
+
+    active = st.session_state[ss_key]
+    chosen = st.multiselect(
+        "Active strategies (performance metrics / equity curve / rolling Sharpe below)",
+        options=active, default=active, format_func=lambda w: f"Skew({w})",
+        key=f"{key_prefix}_skew_multiselect",
+    )
+
+    st.divider()
+
+    hm_yr = st.slider("Year range for performance metrics / window chart", yr0, yr1, (yr0, yr1),
+                       key=f"{key_prefix}_skew_yr")
+    range_start, range_end = pd.Timestamp(f"{hm_yr[0]}-01-01"), pd.Timestamp(f"{hm_yr[1]}-12-31")
+    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
+    f1r_scoped = f1r[range_mask]
+    f1c_scoped = f1c.reindex(f1r_scoped.index)
+    phase_scoped = phase.reindex(f1r_scoped.index) if phase is not None else None
+
+    st.markdown("**Performance Metrics**")
+    feature_window = None
+    if not chosen:
+        st.info("Select at least one strategy above to see its performance metrics.")
+    else:
+        default_feature = SKEWNESS_FEATURE_WINDOW if SKEWNESS_FEATURE_WINDOW in chosen else chosen[0]
+        feature_window = st.selectbox(
+            "Strategy to feature", options=chosen, index=chosen.index(default_feature),
+            format_func=lambda w: f"Skew({w})", key=f"{key_prefix}_skew_feature",
+        )
+        if len(f1r_scoped) < 40:
+            st.info("Not enough data in the selected year range.")
+        else:
+            # signal warmed up on full history, then sliced to the range
+            feature_pos = skewness_position(lret, feature_window, shift_n).reindex(f1r_scoped.index).fillna(0)
+            m = pos_metrics_generic(feature_pos, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1:
+                metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
+            with c2:
+                metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
+            with c3:
+                metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+            with c4:
+                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+            with c5:
+                metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+
+    st.divider()
+
+    # ── Sharpe by look-back window (the 1-D analogue of the momentum heatmap) ──
+    st.markdown("**Gross Sharpe by Look-back Window**")
+    st.caption("Every window from 40 to 760 trading days in steps of 20, over the year range above. "
+               "Signals use full history, so every window is warmed up at the start of the range.")
+    sweep = skewness_window_sweep(lret, f1c, f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n,
+                                   tuple(range(40, 761, 20)))
+    if sweep["sharpe"].notna().any():
+        fig_sw = go.Figure(go.Bar(
+            x=sweep["window"], y=sweep["sharpe"],
+            marker_color=[COLORS["green"] if (v == v and v >= 0) else COLORS["secondary"] for v in sweep["sharpe"]],
+            hovertemplate="Window: %{x}d<br>Gross Sharpe: %{y:.3f}<extra></extra>",
+        ))
+        fig_sw.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
+        fig_sw.update_layout(**CHART_LAYOUT, height=320, xaxis_title="Look-back window (days)",
+                              yaxis_title="Gross Sharpe", title=dict(text=f"{product}: Sharpe by Skewness Window",
+                                                                      font=dict(size=13)))
+        st.plotly_chart(fig_sw, use_container_width=True, key=f"{key_prefix}_skew_sweep")
+        best = sweep.loc[sweep["sharpe"].idxmax()]
+        st.caption(f"Best in range {hm_yr[0]}-{hm_yr[1]}: {int(best['window'])} days, gross Sharpe {best['sharpe']:+.2f}.")
+    else:
+        st.info("Not enough data in the selected year range to compute the window chart.")
+
+    # ── Rolling skewness of the featured window ──
+    if feature_window is not None:
+        st.markdown(f"**Rolling Skewness ({feature_window}-day) of Daily Log Returns**")
+        st.caption("The signal is long where this line is below zero and short where it is above zero.")
+        sk = lret.rolling(feature_window).skew()
+        fig_sk = go.Figure()
+        fig_sk.add_trace(go.Scatter(x=sk.index, y=sk.values, mode="lines", name=f"Skewness ({feature_window}d)",
+                                     line=dict(color=COLORS["primary"], width=1.3)))
+        fig_sk.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
+        fig_sk.update_layout(**CHART_LAYOUT, height=300, yaxis_title="Skewness")
+        st.plotly_chart(fig_sk, use_container_width=True, key=f"{key_prefix}_skew_rolling")
+
+    if not chosen:
+        st.divider()
+        st.info("Select at least one strategy above to see its equity curve.")
+        return {}
+
+    positions = {f"Skew({w})": skewness_position(lret, w, shift_n) for w in chosen}
+    _render_multi_strategy_block(
+        positions, f1r, f1c, tc_bps, key_prefix + "_skew", unit_label, show_metrics=False, phase=phase,
+    )
+    return positions
+
+
+# ═══════════════════════════════════════════════════════════════
 # CARRY: V1 CARRY SLOPE, V2 Z-SCORE ON CARRY SLOPE, V3 CARRY MOMENTUM
 # ═══════════════════════════════════════════════════════════════
 

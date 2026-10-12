@@ -109,9 +109,21 @@ def _wti_inventory():
 # Streamlit-free while still being cacheable at this layer). This is what makes switching
 # styles or asset-class selection near-instant after the first load of a given asset class.
 @st.cache_data(ttl=3600, show_spinner="Loading curve data and computing signals...")
-def _cached_per_product_four_row(asset_class: str, tc_bps: int, carry_spec=None):
+def _cached_per_product_four_row(asset_class: str, tc_bps: int, carry_spec=None, per_product_pairs: bool = False):
     # carry_spec: a cae.CarrySpec (hashable, so it is part of the cache key). None = the rule default.
-    return cae.per_product_four_row(asset_class, tc_bps, carry_spec)
+    # per_product_pairs: use each product's own tenor pairs (cfg.carry_pairs), see _uses_product_pairs.
+    # include_skewness=True (2026-10-12): the result also carries a "Skewness" entry. Every consumer below passes its
+    # `styles` explicitly, so the four-style defaults are unchanged unless Skewness is chosen.
+    return cae.per_product_four_row(asset_class, tc_bps, carry_spec, per_product_pairs=per_product_pairs,
+                                    include_skewness=True)
+
+
+def _uses_product_pairs(asset_class: str, spec) -> bool:
+    """True when the tenor pairs are the untouched rule default for this asset class. Then each product uses its own
+    pairs from cfg.carry_pairs(product) (2026-10-12), as in Final_Research_Dashboard.html: Precious and Agriculture add a
+    long pair whose far leg differs by product (the other asset classes give the same pairs for every product, so nothing
+    changes for them). Any edit to the pairs in the Carry settings panel switches back to one uniform pair list (CUSTOM)."""
+    return spec is None or tuple(spec.pairs) == tuple(cae.default_carry_spec(asset_class).pairs)
 
 
 def _carry_fetcher(specs_key):
@@ -120,7 +132,8 @@ def _carry_fetcher(specs_key):
     specs = dict(specs_key)
 
     def fetch(asset_class: str, tc_bps: int):
-        return _cached_per_product_four_row(asset_class, tc_bps, specs.get(asset_class))
+        spec = specs.get(asset_class)
+        return _cached_per_product_four_row(asset_class, tc_bps, spec, _uses_product_pairs(asset_class, spec))
     return fetch
 
 
@@ -142,6 +155,15 @@ def _cached_cross_commodity_drp(tc_bps: int, specs_key=()):
     return n["Portfolio"]
 
 
+@st.cache_data(ttl=3600, show_spinner="Computing Skewness cross-commodity rows...")
+def _cached_cross_commodity_skew(tc_bps: int, specs_key=()):
+    """Extra correlation rows (2026-10-12): the Skewness style on its own, and the Equal Weight portfolio of all five
+    styles (the four validated ones plus Skewness), each equal-weighted across all five asset classes."""
+    _, n = cae.cross_commodity_dynamic(tc_bps, tuple(cae.ALL_ASSET_CLASSES), cae.ALL_STYLE_NAMES, "equal_weight",
+                                       per_product_fetcher=_carry_fetcher(specs_key))
+    return {"Skewness": n["Skewness"], "EW PORT + Skewness": n["Portfolio"]}
+
+
 @st.cache_data(ttl=3600, show_spinner="Loading traditional-asset benchmark data...")
 def _cached_benchmark_returns():
     return benchmarks.load_benchmark_returns()
@@ -152,7 +174,7 @@ PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
 
 ASSET_LABEL_TO_KEY = {v: k for k, v in cae.ASSET_CLASS_LABELS.items()}
 STYLE_LABEL_TO_KEY = {"Momentum": "Momentum", "Carry": "Combined Carry",
-                       "CarryMom": "Combined CarryMom", "Value": "Value"}
+                       "CarryMom": "Combined CarryMom", "Value": "Value", "Skewness": "Skewness"}
 
 
 def _ca_fmt(x, fmt_spec: str) -> str:
@@ -501,7 +523,11 @@ with tab_crossasset:
         st.caption("Default is the 10 Oct rule: Carry = V2 (Z-score on carry slope) only, the asset class's "
                    "tenor pairs blended at signal level (shift applied once). Change anything below to "
                    "customise; every portfolio and the correlation section on this tab then use it. "
-                   "Tenor pairs apply to both Carry and Carry momentum. Momentum and Value are unaffected.")
+                   "Tenor pairs apply to both Carry and Carry momentum. Momentum and Value are unaffected. "
+                   "With the pairs left at their defaults, Precious and Agriculture also blend each product's own long "
+                   "pair (Gold F1-F7, Silver F1-F6, Platinum/Palladium F1-F5; Corn/Wheat/Coffee F1-F6, Soybean/Soybean Oil "
+                   "F1-F8, Sugar F1-F5) with the F1-F2 shown, exactly as in the Final Research Dashboard. Editing any pair "
+                   "below replaces that with one uniform pair list for the asset class.")
         k1, k2, k3 = st.columns([2, 1, 1])
         with k1:
             var_labels = st.multiselect(
@@ -550,7 +576,7 @@ with tab_crossasset:
             for ac in cae.ALL_ASSET_CLASSES}
         notes = []
         for ac in cae.ALL_ASSET_CLASSES:
-            pp = _cached_per_product_four_row(ac, tc_bps, specs[ac])
+            pp = _cached_per_product_four_row(ac, tc_bps, specs[ac], _uses_product_pairs(ac, specs[ac]))
             total = len(pp["Momentum"]["names"])
             for style, label in (("Combined Carry", "Carry"), ("Combined CarryMom", "Carry momentum")):
                 got = pp[style]["names"]
@@ -596,12 +622,16 @@ with tab_crossasset:
             default=list(cae.ASSET_CLASS_LABELS.values()), key="cc_assets")
     with cc2:
         cc_styles_labels = st.multiselect(
-            "Styles", ["Momentum", "Carry", "CarryMom", "Value"],
-            default=["Momentum", "Carry", "CarryMom", "Value"], key="cc_styles")
+            "Styles", ["Momentum", "Carry", "CarryMom", "Value", "Skewness"],
+            default=["Momentum", "Carry", "CarryMom", "Value"], key="cc_styles",
+            help="Skewness (added 2026-10-12) is an optional fifth style, off by default so the headline book is the "
+                 "validated four-style one: one +1/-1 per product from minus the 252-day rolling skewness of daily "
+                 "log returns (Fernandez-Perez, Fuertes and Miffre 2021, Table 1, time-series form).")
     with cc3:
         cc_combine = st.selectbox(
-            "Combine method", ["Equal Weight", "Risk Parity", "Dynamic Risk Parity"], key="cc_combine",
-            help="Equal Weight: fixed equal split across the selected styles. Risk Parity: rolling "
+            "Combine method", ["Equal Weight", "Inverse Vol", "Risk Parity", "Dynamic Risk Parity"], key="cc_combine",
+            help="Equal Weight: fixed equal split across the selected styles. Inverse Vol: each style weighted by "
+                 "1 / its own trailing 63-day volatility, lagged one day (as in the Final Research Dashboard). Risk Parity: rolling "
                  "Equal Risk Contribution over the full covariance matrix (research/risk_parity.py). "
                  "Dynamic Risk Parity: inverse-EWMA-vol weighting (20-day vol / 60-day covariance "
                  "half-lives, correlations shrunk 50% toward zero), rescaled to match Equal Weight's "
@@ -614,7 +644,7 @@ with tab_crossasset:
     else:
         cc_asset_keys = tuple(ASSET_LABEL_TO_KEY[l] for l in cc_assets_labels)
         cc_style_keys = tuple(STYLE_LABEL_TO_KEY[l] for l in cc_styles_labels)
-        cc_combine_key = {"Equal Weight": "equal_weight", "Risk Parity": "risk_parity",
+        cc_combine_key = {"Equal Weight": "equal_weight", "Inverse Vol": "inverse_vol", "Risk Parity": "risk_parity",
                            "Dynamic Risk Parity": "dynamic_risk_parity"}[cc_combine]
         cc_gross, cc_net = cae.cross_commodity_dynamic(
             tc_bps, cc_asset_keys, cc_style_keys, cc_combine_key,
@@ -629,11 +659,17 @@ with tab_crossasset:
                "one to see that asset class's own EW Portfolio number on its own, matching its "
                "individual dashboard's Portfolio tab.")
 
-    cn1, cn2 = st.columns([3, 1])
+    cn1, cn2, cn3 = st.columns([3, 1, 1.4])
     with cn1:
         cn_assets_labels = st.multiselect(
             "Asset classes (choose 1-5)", list(cae.ASSET_CLASS_LABELS.values()),
             default=["Metals", "Energy"], key="cn_assets")
+    with cn3:
+        st.write("")
+        cn_skew = st.checkbox("Add Skewness as a fifth style", value=False, key="cn_skew",
+                              help="Off (default): each asset class's own portfolio is the Equal Weight of the four "
+                                   "validated styles. On: Skewness is added as a fifth equal-weighted style inside "
+                                   "each asset class before the asset classes are combined.")
     with cn2:
         cn_combine = st.selectbox(
             "Combine method", ["Equal Weight", "Dynamic Risk Parity"], key="cn_combine",
@@ -649,7 +685,8 @@ with tab_crossasset:
         cn_combine_key = "equal_weight" if cn_combine == "Equal Weight" else "dynamic_risk_parity"
         cn_gross, cn_net = cae.cross_n_portfolio(
             tc_bps, cn_asset_keys, per_product_fetcher=carry_fetcher,
-            combine_method=cn_combine_key)
+            combine_method=cn_combine_key,
+            styles=cae.ALL_STYLE_NAMES if cn_skew else cae.STYLE_NAMES)
         _render_equity_and_metrics(cn_gross, cn_net, key_prefix="cn")
 
     st.divider()
@@ -667,6 +704,8 @@ with tab_crossasset:
 
     corr_strategy_net = dict(_cached_cross_commodity_portfolio(tc_bps, carry_specs_key))
     corr_strategy_net["Dynamic Risk Parity"] = _cached_cross_commodity_drp(tc_bps, carry_specs_key)
+    corr_default_strats = list(corr_strategy_net.keys())          # the original rows stay the default view
+    corr_strategy_net.update(_cached_cross_commodity_skew(tc_bps, carry_specs_key))   # Skewness rows: pick them below
     corr_bench_returns = _cached_benchmark_returns()
 
     corr_all_years = []
@@ -690,7 +729,7 @@ with tab_crossasset:
     with corr_c2:
         corr_strat_labels = st.multiselect(
             "Strategies shown", list(corr_strategy_net.keys()),
-            default=list(corr_strategy_net.keys()), key="corr_strats_shown",
+            default=corr_default_strats, key="corr_strats_shown",
         )
 
     if not corr_strat_labels:

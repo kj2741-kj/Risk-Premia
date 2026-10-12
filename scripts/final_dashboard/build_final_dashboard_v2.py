@@ -26,7 +26,7 @@ data = dict(res, twopair=two, cols=[dict(key=k, label=l, years=y) for k, l, y in
 BODY = r"""
 <div class="wrap">
 <h1>Risk Premia: Final Research Dashboard</h1>
-<div class="subtitle">Five commodity asset classes, four sleeves each (Momentum, Carry, Carry-Momentum, Value), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2011-01-01. All price data through 2026-09-23. Generated 2026-10-12.</div>
+<div class="subtitle">Five commodity asset classes, five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2011-01-01. All price data through 2026-09-23. Generated 2026-10-12.</div>
 <div class="tabs" id="tabbar"></div>
 <div id="panels"></div>
 <div class="tab-panel" id="panel-notes"><div class="card"><h2>Method, data and what changed</h2>
@@ -34,7 +34,8 @@ BODY = r"""
 <li><b>Momentum:</b> average of the signs of three moving-average crossovers, (1,20), (5,60), (20,250), on the raw front-month price; 1-day lag.</li>
 <li><b>Carry (V2):</b> z-score of the carry slope, (near - far) / near, against its own trailing 252 days. With two tenor pairs, each pair gives a sign and the two signs are averaged then signed again (sign-vote): the position is flat when the pairs disagree. The lag is applied once to the blended signal.</li>
 <li><b>Carry-Momentum (V3):</b> sign of the 20-day change in the same slope, blended across the same two tenor pairs by the same sign-vote rule.</li>
-<li><b>Value:</b> F3 price against its own 1,260-day average, long below -10%, short above +10%.</li></ul>
+<li><b>Value:</b> F3 price against its own 1,260-day average, long below -10%, short above +10%.</li>
+<li><b>Skewness:</b> minus the skewness of the product's daily log returns (roll-adjusted series) over the past 252 observations; long when negative, short when positive; 2-day lag (after Fernandez-Perez, Fuertes and Miffre 2021, time-series version).</li></ul>
 <h3>Tenor pairs</h3><ul class="steps">
 <li>Metals and Energy: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14.</li>
 <li>Precious: F1-F2 plus a long pair about 12 months out: Gold F1-F7, Silver F1-F6, Platinum F1-F5, Palladium F1-F5.</li>
@@ -44,7 +45,7 @@ BODY = r"""
 <li>Contracts whose last trade date is after the last price date no longer produce a spurious roll in the final week (the previous rule snapped them to the last price date).</li></ul>
 <h3>How things are combined</h3><ul class="steps">
 <li>Products inside a sleeve are equally weighted on common dates (a dropped date's move is carried into the next shared date).</li>
-<li>Each asset-class portfolio combines its four sleeves by <b>EW PORT</b> (equal weight) or <b>Inverse Vol</b> (weights from each sleeve's trailing 63-day volatility, recomputed daily).</li>
+<li>Each asset-class portfolio combines its five sleeves by <b>EW PORT</b> (equal weight) or <b>Inverse Vol</b> (weights from each sleeve's trailing 63-day volatility, recomputed daily).</li>
 <li><b>Combined books</b> are two-stage: sleeves into an asset-class portfolio, then the five asset-class portfolios into one book; all four EW / Inverse Vol pairs are shown, with and without NatGas. <b>Cross-pair portfolios</b> blend two asset classes' portfolios the same way. Series are aligned on common dates before weighting.</li></ul>
 <h3>Data and calendars</h3><ul class="steps">
 <li>Prices: <code>data/Prices_0924</code>, all five asset classes through 2026-09-23 (previously June 30 for four of them). Reporting still starts 2011-01-01, so 2026 year-to-date now covers nearly nine months.</li>
@@ -126,7 +127,7 @@ function renderEquity(host,key){
 /* ---------- asset-class tabs ---------- */
 function productSection(p,key){
   const asset=ASSET[key],t=D.tabs[key];
-  const sleeves=["Momentum","Carry","CarryMom","Value"];
+  const sleeves=["Momentum","Carry","CarryMom","Value","Skewness"];
   p.querySelector("[data-prod]").innerHTML=`<div class="window-row"><h3>By product</h3><label>Horizon: <select class="window-select" data-ph>${horizonOpts}</select> Metric: <select class="window-select" data-pm><option value="ir">IR</option><option value="ret">Return (%)</option><option value="vol">Vol (%)</option><option value="mdd">Max drawdown (%)</option></select></label></div><div class="table-scroll"><table data-pt></table></div>`;
   const ph=p.querySelector("[data-ph]"),pm=p.querySelector("[data-pm]"),pt=p.querySelector("[data-pt]");
   const draw=()=>{const m=pm.value;pt.innerHTML="<thead><tr><th>Product</th>"+sleeves.map(s=>`<th>${s==="Carry"?"Carry (V2)":s==="CarryMom"?"CarryMom (V3)":s}</th>`).join("")+"<th>Tenor pairs</th><th>Roll events</th></tr></thead><tbody>"+t.products.map(pr=>{const d=D.products[asset+"|"+pr];return `<tr><td>${pr}</td>`+sleeves.map(s=>{const v=d[s][ph.value][m];return m==="ir"?`<td>${ir(v)}</td>`:`<td>${f(v,2)}</td>`;}).join("")+`<td style="text-align:left">${D.meta.pairs[asset+"|"+pr].join(", ")}</td><td>${D.meta.rolls[asset+"|"+pr]}</td></tr>`;}).join("")+"</tbody>";};
@@ -155,12 +156,12 @@ Object.keys(D.tabs).forEach((key,i)=>{const t=D.tabs[key];
 
 /* ---------- combined books ---------- */
 [["all5","All 5 asset classes (Energy with NatGas)"],["all5_exng","All 5 asset classes (Energy ex-NatGas)"]].forEach(([key,label])=>{const c=D.combined[key];
-  const p=addPanel(key,`<div class="card"><h2>${label}</h2><p class="note">Two-stage book: four sleeves into an asset-class portfolio, then the five asset-class portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across asset classes). Common window: ${c.common_first} to ${c.common_last}. "Reference" rows are each asset class's own EW PORT on that window.</p>
+  const p=addPanel(key,`<div class="card"><h2>${label}</h2><p class="note">Two-stage book: five sleeves into an asset-class portfolio, then the five asset-class portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across asset classes). Common window: ${c.common_first} to ${c.common_last}. "Reference" rows are each asset class's own EW PORT on that window.</p>
   <div class="window-row"><h3>Performance by horizon</h3><label>Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
   wireTable(p,"[data-hs]","[data-full]",w=>c.windows[w]);p.querySelector("[data-ir]").innerHTML=irTable(c.windows);renderEquity(p.querySelector("[data-eq]"),key);});
 
 /* ---------- by style ---------- */
-(function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value) is first equal-weighted across the five asset classes' own sleeves on their common dates, giving one cross-asset-class series per style. The four style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day). This is the reverse order to the "All 5" tabs, which combine sleeves within each asset class first.</p>
+(function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value, Skewness) is first equal-weighted across the five asset classes' own sleeves on their common dates, giving one cross-asset-class series per style. The five style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day). This is the reverse order to the "All 5" tabs, which combine sleeves within each asset class first.</p>
   <div class="window-row"><label>Energy: <select class="window-select" data-bv><option value="with NatGas">with NatGas</option><option value="ex-NatGas">ex-NatGas</option></select></label><span class="note" style="margin:0" data-bn></span></div>
   <div class="window-row"><h3>Performance by horizon</h3><label>Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
   const bv=p.querySelector("[data-bv]"),hs=p.querySelector("[data-hs]"),tb=p.querySelector("[data-full]");
@@ -182,7 +183,7 @@ function corrTxt(v){return Math.min(Math.abs(v),1)<0.5?"var(--text-primary)":"#f
 function corrMatrix(el,labels,m){el.innerHTML="<thead><tr><th></th>"+labels.map(l=>`<th>${l}</th>`).join("")+"</tr></thead><tbody>"+m.map((row,i)=>`<tr><td>${labels[i]}</td>`+row.map(v=>`<td><span class="corr-cell" style="background:${corrCol(v)};color:${corrTxt(v)}">${v.toFixed(2)}</span></td>`).join("")+"</tr>").join("")+"</tbody>";}
 (function(){
   const PAIRS=[];for(let i=0;i<CAC.length;i++)for(let j=i+1;j<CAC.length;j++)PAIRS.push([CAC[i],CAC[j],CLAB[i]+" - "+CLAB[j]]);
-  const p=addPanel("corr",`<div class="card"><p class="note"><strong>Methodology:</strong> Pearson correlations on daily net log-return series (Momentum, Carry, Carry-Momentum, Value, EW PORT, Inverse Vol), 2011-2026. Within-asset-class matrices use each asset class's own calendar; cross-asset-class and rolling figures use the intersection of trading dates across the five asset classes (days per strategy: ${D.corr.rows.map(r=>r+" "+D.corr.cross._n[r]).join(", ")}; the Inverse Vol rows start later because NGL's Inverse Vol series is undefined before 23 Feb 2012).</p></div>
+  const p=addPanel("corr",`<div class="card"><p class="note"><strong>Methodology:</strong> Pearson correlations on daily net log-return series (Momentum, Carry, Carry-Momentum, Value, Skewness, EW PORT, Inverse Vol), 2011-2026. Within-asset-class matrices use each asset class's own calendar; cross-asset-class and rolling figures use the intersection of trading dates across the five asset classes (days per strategy: ${D.corr.rows.map(r=>r+" "+D.corr.cross._n[r]).join(", ")}; the Inverse Vol rows start later because NGL's Inverse Vol series is undefined before 23 Feb 2012).</p></div>
   <div class="card"><h2>Section 1: Within-Asset-Class Correlation</h2><div class="window-row"><h3>Select asset class</h3><label>Asset class: <select class="window-select" data-w>${Object.keys(LABEL).map(k=>`<option value="${k}">${LABEL[k]}</option>`).join("")}</select></label></div><div class="table-scroll"><table class="corr" data-wt></table></div></div>
   <div class="card"><h2>Section 2: Cross-Asset-Class Correlation</h2><div class="window-row"><h3>Select strategy</h3><label>Strategy: <select class="window-select" data-c>${D.corr.rows.map(r=>`<option value="${r}">${r}</option>`).join("")}</select></label></div><div class="table-scroll"><table class="corr" data-ct></table></div>
    <div class="legend-row"><span><span class="legend-swatch" style="background:var(--pos-strong)"></span>strong positive (&ge;0.5)</span><span><span class="legend-swatch" style="background:var(--pos-weak)"></span>weak positive (0.15-0.5)</span><span><span class="legend-swatch" style="background:var(--neutral)"></span>near zero (&lt;0.15)</span><span><span class="legend-swatch" style="background:var(--neg-weak)"></span>weak negative</span><span><span class="legend-swatch" style="background:var(--neg-strong)"></span>strong negative</span></div></div>

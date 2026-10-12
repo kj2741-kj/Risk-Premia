@@ -20,10 +20,10 @@ for a,prods in P.items():
     def ac(key): return combine_cross_asset([nets[(a,p)][key] for p in prods])
     legs={"Carry single (previous)":ac("carry_single_prev"),"Carry short F1-F2":ac("carry_short"),"Carry long":ac("carry_long"),"Carry two-pair":ac("Carry"),
           "CarryMom single (previous)":ac("cm_single_prev"),"CarryMom short F1-F2":ac("cm_short"),"CarryMom long":ac("cm_long"),"CarryMom two-pair":ac("CarryMom")}
-    mom,val=ac("Momentum"),ac("Value")
+    mom,val,skw=ac("Momentum"),ac("Value"),ac("Skewness")
     port={}
     for tag,(c,m) in {"single":("Carry single (previous)","CarryMom single (previous)"),"two":("Carry two-pair","CarryMom two-pair")}.items():
-        lst=[mom,legs[c],legs[m],val]
+        lst=[mom,legs[c],legs[m],val,skw]
         port[f"EW PORT {tag}"]=combine_returns(lst,"equal_weight"); port[f"Inverse Vol {tag}"]=combine_returns(lst,"inverse_vol",vol_window=63)
     res[a]=win({**legs,**port})
     print(a,{k:res[a]["full"][k]["ir"] for k in res[a]["full"]})

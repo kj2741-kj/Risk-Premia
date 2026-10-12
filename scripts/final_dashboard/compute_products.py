@@ -1,6 +1,7 @@
 """Per-product sleeve net returns for the rebuilt final dashboard.
 Data: data/Prices_0924 (through 2026-09-23). Roll: 5th trading day of the last-trade-date month (research configs' ROLL_RULE). 5 bps costs (roll days charged).
-Sleeves: Momentum (3-way MA composite), Carry = V2 sign-vote blend across tenor pairs, CarryMom = sign-vote blend across tenor pairs, Value.
+Sleeves: Momentum (3-way MA composite), Carry = V2 sign-vote blend across tenor pairs, CarryMom = sign-vote blend across tenor pairs, Value,
+Skewness (added 2026-10-12: sign of minus the skewness of the continuous series' daily log returns over 252 observations; long if negative; 2-day lag).
 Tenor pairs:
   Metals / Energy : F1-F3 + F1-F13           NGL : F2-F4 + F2-F14
   Precious        : F1-F2 + long (Gold F7, Silver F6, Platinum F5, Palladium F5)
@@ -18,6 +19,7 @@ from engine import (raw_signal_carry_v2, raw_signal_carrymom, combine_positions,
 
 OUT = Path("outputs/final_dashboard")
 TC = 5
+SKEW_WINDOW, SKEW_SHIFT_N = 252, 1
 cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "ngl", "precious", "agri")}   # repo defaults: data, roll rule, pairs
 import rolling_continuous as rc
 OUT.mkdir(parents=True, exist_ok=True)
@@ -54,6 +56,7 @@ for a, prods in PRODUCTS.items():
         ds = [raw_signal_carrymom(curve, n, f, H) for n, f in pr]
         v["CarryMom"] = run(exec_shift(combine_positions(ds, "equal_weight"), cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0))
         v["Value"] = run(value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS, cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N))
+        v["Skewness"] = run(exec_shift(np.sign(-lp.diff().rolling(SKEW_WINDOW).skew()), SKEW_SHIFT_N).fillna(0))
         if a in ("precious", "agri"):
             v["carry_short"] = run(exec_shift(zs[0], cfg.CARRY_SHIFT_N).fillna(0))
             v["carry_long"] = run(exec_shift(zs[1], cfg.CARRY_SHIFT_N).fillna(0))

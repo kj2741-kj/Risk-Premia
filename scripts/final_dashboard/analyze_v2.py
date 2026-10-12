@@ -17,7 +17,7 @@ from final_regimes import REGIMES   # three-regime scheme of 2026-10-12, Final D
 
 OUT = Path("outputs/final_dashboard")
 nets, meta = pickle.load(open(OUT / "products_v2_nets.pkl", "rb"))
-STYLES = ("Momentum", "Carry", "CarryMom", "Value")
+STYLES = ("Momentum", "Carry", "CarryMom", "Value", "Skewness")
 PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
             "ngl": ["Ethane", "Propane", "Butane", "Isobutane"], "precious": ["Gold", "Silver", "Platinum", "Palladium"],
             "agri": ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]}

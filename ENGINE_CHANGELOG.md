@@ -6,6 +6,15 @@ that led to it.
 
 ---
 
+## 2026-10-12 (later): Skewness added as a fifth sleeve; separate research pages
+
+- **Skewness sleeve** (after Fernandez-Perez, Fuertes and Miffre 2021, Table 1; time-series version): per product, signal = minus the skewness of the continuous series' daily log returns over 252 observations, +1 if negative, -1 if positive, 2-day lag, 5 bps costs. Added in `scripts/final_dashboard/compute_products.py` (`v["Skewness"]`); `analyze_v2.py` (`STYLES`), `analyze_twopair.py` and `build_final_dashboard_v2.py` now treat five sleeves: asset-class EW PORT and Inverse Vol, combined books, By Style, Cross-Pair, correlations and the page text. Existing sleeves unchanged (maximum difference 0). `Final_Research_Dashboard.html` and `Final_Research_Dashboard_2012.html` regenerated (the 2012 page via `run_2012_variant.py`).
+- Separate research pages, not part of the dashboards: `Skewness_Research.html` (`skewness_research.py`), `VTI_Research.html` (`vti_research.py`), `OI_Research.html` (`oi_research.py`, not pushed). VTI (inverse-variance style weights, 60 months) and OI (power, exponential, mean-variance, minimum-variance) did not beat Equal Weight or the existing Inverse Vol, so they were not added to the dashboards.
+- `paper_check.py`: cross-sectional rebuild of the paper's TS, Momentum and Skewness styles on our five energy products. Term structure and the correlation structure agree with the paper's Tables 3 and 4 (Sharpe 0.67 vs 0.57; correlations Skewness-TS 0.33 (0.28), Skewness-Mom 0.21 (0.13), TS-Mom 0.69 (0.66)); Momentum agrees in the first two sub-periods and not the last (-0.44 vs 0.18); Skewness does not match (Sharpe 0.44 vs -0.02 full sample; the paper finds it insignificant). Universe (5 contracts against about 10), data vendor and sample (ours from 2007) differ.
+- Methodology document: Section 5.8 (Skewness), five sleeves throughout.
+
+---
+
 ## 2026-10-12 (latest): three regimes in the Final Research Dashboard
 
 - New `scripts/final_dashboard/final_regimes.py`: R1 2011-01-01 to 2016-12-31, R2 2017-01-01 to 2021-12-31, R3 2022-01-01 to the last price date (no overlap). Replaces the four regimes (2011-15, 2016-19, 2020-21, 2022-26) for this dashboard only; `research/regimes.py`, `run_regime_table.py` and the Streamlit apps keep the four-regime scheme.

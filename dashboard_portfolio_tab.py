@@ -67,7 +67,7 @@ from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E40
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_skewness, raw_signal_value)
-from carry_zsum import carry_z, summed_signal  # noqa: E402  (2026-10-13: V2 legs are combined by summing z-scores, see research/carry_zsum.py)
+from carry_zsum import carry_slope_change, carry_z, summed_signal  # noqa: E402  (2026-10-13: V2 legs are combined by summing z-scores, see research/carry_zsum.py)
 from risk_parity import rolling_erc_combine  # noqa: E402
 from drp import rolling_drp_combine  # noqa: E402
 
@@ -321,6 +321,12 @@ def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Serie
         raws = [r for r in raws if not r.empty]
         if zs:
             raws.append(summed_signal(zs, product_data["log_price"].index))
+    elif instance["family"] == "CarryMom" and len(legs) >= 2:
+        # Two or more Carry-momentum legs in one sleeve: SUM their raw slope changes into ONE signal (sign of the sum, last signal kept if a value is missing).
+        parts = [carry_slope_change(product_data["curve"], leg["near"], leg["far"], int(leg["horizon"]))
+                 for leg in legs if leg.get("near") is not None and leg.get("far") is not None and leg.get("horizon") is not None]
+        parts = [p_ for p_ in parts if not p_.empty]
+        raws = [summed_signal(parts, product_data["log_price"].index)] if parts else []
     else:
         raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in legs]
         raws = [r for r in raws if not r.empty]
@@ -391,6 +397,15 @@ def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict]
             if not groups:
                 continue
             combo = groups[0] if len(groups) == 1 else combine_positions(groups, "equal_weight")
+        elif family == "CarryMom":
+            # 2026-10-13: the tenor pairs' raw slope changes are SUMMED, then the sign (last signal kept if a value is missing)
+            parts = [carry_slope_change(product_data["curve"], leg["near"], leg["far"], int(leg["horizon"]))
+                     for inst in tenor_instances for leg in inst["legs"]
+                     if leg.get("near") is not None and leg.get("far") is not None and leg.get("horizon") is not None]
+            parts = [p_ for p_ in parts if not p_.empty]
+            if not parts:
+                continue
+            combo = summed_signal(parts, product_data["log_price"].index)
         else:
             raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
             raws = [r for r in raws if not r.empty]
@@ -513,7 +528,7 @@ def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str
     with st.expander(label, expanded=False):
         for near, far in tenor_pairs:
             st.markdown(f"- {note} ({near}-{far})")
-        st.caption("Combine tenor pairs via: sum of z-scores, then the sign" if "z-score" in note else "Combine tenor pairs via: Equal Weight")
+        st.caption("Combine tenor pairs via: sum of z-scores, then the sign" if "z-score" in note else "Combine tenor pairs via: sum of slope changes, then the sign" if "slope changes" in note else "Combine tenor pairs via: Equal Weight")
 
 
 # Leg rendering (shared by every editable leg list -- currently only the
@@ -860,7 +875,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         by_id = {inst["id"]: inst for inst in reference_strategies}
         _render_reference_strategy(by_id["mom"])
         _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V2 (z-scores summed across the pairs)")
-        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum")
+        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum (slope changes summed across the pairs)")
         _render_reference_strategy(by_id["value"])
         _render_reference_strategy(by_id["skew"])
 

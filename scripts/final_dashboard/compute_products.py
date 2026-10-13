@@ -1,6 +1,6 @@
 """Per-product sleeve net returns for the rebuilt final dashboard.
 Data: data/Prices_0924 (through 2026-09-23). Roll: 5th trading day of the last-trade-date month (research configs' ROLL_RULE). 5 bps costs (roll days charged).
-Sleeves: Momentum (3-way MA composite), Carry = V2 SUMMED z-scores of the tenor pairs then sign (CARRY_COMBINE=vote: the earlier sign-vote), CarryMom = SUMMED raw slope changes then sign, Value,
+Sleeves: Momentum (3-way MA composite), Carry = V2 SUMMED z-scores of the tenor pairs then sign (the earlier sign-vote was replaced on 2026-10-13), CarryMom = SUMMED raw slope changes then sign, Value,
 Skewness (added 2026-10-12: sign of minus the skewness of the continuous series' daily log returns over 252 observations; long if negative; 2-day lag).
 Tenor pairs:
   Metals / Energy : F1-F3 + F1-F13           NGL : F2-F4 + F2-F14
@@ -20,7 +20,6 @@ from engine import (raw_signal_carry_v2, raw_signal_carrymom, combine_positions,
 
 OUT = Path("outputs/final_dashboard")
 TC = 5
-CARRY_COMBINE = os.environ.get("CARRY_COMBINE", "zsum")   # default since 2026-10-13: "zsum" (see research/carry_zsum.py); "vote" reproduces the earlier sign-vote
 SKEW_WINDOW, SKEW_SHIFT_N = 252, 1
 cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "ngl", "precious", "agri")}   # repo defaults: data, roll rule, pairs
 import rolling_continuous as rc
@@ -55,15 +54,11 @@ for a, prods in PRODUCTS.items():
         v = {}
         v["Momentum"] = run(momentum_composite_position(f1r, cfg.MOMENTUM_PAIRS, shift_n=cfg.MOMENTUM_SHIFT_N))
         zs = [raw_signal_carry_v2(curve, n, f, window=W) for n, f in pr]
-        if CARRY_COMBINE == "zsum":      # Carry V2: SUM the pairs' z-scores, then the sign; last signal kept if a z-score is missing
-            v["Carry"] = run(exec_shift(summed_signal([carry_z(curve, n, f, W) for n, f in pr], lp.index), cfg.CARRY_SHIFT_N).fillna(0))
-        else:
-            v["Carry"] = run(exec_shift(combine_positions(zs, "equal_weight"), cfg.CARRY_SHIFT_N).fillna(0))
+        # Carry V2: SUM the pairs' z-scores, then the sign; last signal kept if a z-score is missing (since 2026-10-13; earlier: sign-vote, see ENGINE_CHANGELOG)
+        v["Carry"] = run(exec_shift(summed_signal([carry_z(curve, n, f, W) for n, f in pr], lp.index), cfg.CARRY_SHIFT_N).fillna(0))
         ds = [raw_signal_carrymom(curve, n, f, H) for n, f in pr]
-        if CARRY_COMBINE == "zsum":      # Carry-Momentum: SUM the pairs' raw 20-observation slope changes, then the sign
-            v["CarryMom"] = run(exec_shift(summed_signal([carry_slope_change(curve, n, f, H) for n, f in pr], lp.index), cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0))
-        else:
-            v["CarryMom"] = run(exec_shift(combine_positions(ds, "equal_weight"), cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0))
+        # Carry-Momentum: SUM the pairs' raw 20-observation slope changes, then the sign
+        v["CarryMom"] = run(exec_shift(summed_signal([carry_slope_change(curve, n, f, H) for n, f in pr], lp.index), cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0))
         v["Value"] = run(value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS, cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N))
         v["Skewness"] = run(exec_shift(np.sign(-lp.diff().rolling(SKEW_WINDOW).skew()), SKEW_SHIFT_N).fillna(0))
         if a in ("precious", "agri"):

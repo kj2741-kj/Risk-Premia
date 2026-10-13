@@ -91,6 +91,7 @@ for _p in (_RESEARCH_DIR, _CONFIGS_DIR):
 from engine import (raw_signal_carry_v1, raw_signal_carry_v2, raw_signal_carrymom, raw_signal_skewness,
                      combine_positions, combine_returns, exec_shift, log_return_daily,
                      momentum_composite_position, value_v1_position)
+from carry_zsum import combined_carry_signal, combined_carrymom_signal
 from risk_parity import rolling_erc_combine
 from drp import rolling_drp_combine
 from run_regime_table import _metrics
@@ -279,33 +280,30 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
             out["Momentum"]["net"].append(n)
             out["Momentum"]["names"].append(p)
 
-        carry_raws = [_carry_composite_raw(curve, near, far, spec.zwindow, spec.variants)
-                      for near, far in pairs_by_product[p]]
-        for pair, r in zip(pairs_by_product[p], carry_raws):
-            pair_has_data[pair] = pair_has_data[pair] or (not r.empty)
-        carry_raws = [r for r in carry_raws if not r.empty]
-        if carry_raws:
-            combo = carry_raws[0] if len(carry_raws) == 1 else combine_positions(carry_raws, "equal_weight")
+        # 2026-10-13: the pairs' z-scores are SUMMED before the sign (research/carry_zsum.py); last signal kept if a value is missing
+        carry_combo, carry_n_pairs, carry_has = combined_carry_signal(curve, pairs_by_product[p], spec.zwindow, spec.variants, log_price.index)
+        for pair, ok in carry_has.items():
+            pair_has_data[pair] = pair_has_data[pair] or ok
+        if not carry_combo.empty:
+            combo = carry_combo
             pos = exec_shift(combo, cfg.CARRY_SHIFT_N).fillna(0)
             g, n = log_return_daily(pos, log_price, tc_bps, phase)
             if not n.empty:
                 out["Combined Carry"]["gross"].append(g)
                 out["Combined Carry"]["net"].append(n)
                 out["Combined Carry"]["names"].append(p)
-                out["Combined Carry"]["n_pairs"].append(len(carry_raws))
+                out["Combined Carry"]["n_pairs"].append(carry_n_pairs)
 
-        cm_raws = [raw_signal_carrymom(curve, near, far, spec.horizon)
-                   for near, far in pairs_by_product[p]]
-        cm_raws = [r for r in cm_raws if not r.empty]
-        if cm_raws:
-            combo = cm_raws[0] if len(cm_raws) == 1 else combine_positions(cm_raws, "equal_weight")
+        cm_combo, cm_n_pairs = combined_carrymom_signal(curve, pairs_by_product[p], spec.horizon, log_price.index)   # raw slope changes summed, then the sign
+        if not cm_combo.empty:
+            combo = cm_combo
             pos = exec_shift(combo, cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0)
             g, n = log_return_daily(pos, log_price, tc_bps, phase)
             if not n.empty:
                 out["Combined CarryMom"]["gross"].append(g)
                 out["Combined CarryMom"]["net"].append(n)
                 out["Combined CarryMom"]["names"].append(p)
-                out["Combined CarryMom"]["n_pairs"].append(len(cm_raws))
+                out["Combined CarryMom"]["n_pairs"].append(cm_n_pairs)
 
         val_pos = value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS,
                                      cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N)

@@ -35,6 +35,7 @@ sys.path.insert(0, str(_THIS_DIR))
 sys.path.insert(0, str(_THIS_DIR / "configs"))
 sys.path.insert(0, str(_REPO_ROOT / "scripts"))
 
+from carry_zsum import combined_carry_signal, combined_carrymom_signal  # noqa: E402
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, momentum_composite_position,
                      raw_signal_carry_v1, raw_signal_carry_v2,
@@ -69,25 +70,15 @@ def _position_for(cfg, kind, raw_f1, curve, product=None):
     pairs = _carry_pairs(cfg, product)
     tag = kind[0]
     if tag == "carry":
-        raws = []
-        for near, far in pairs:
-            sigs = []
-            if "V1" in CARRY_VARIANTS:
-                sigs.append(raw_signal_carry_v1(curve, near, far))
-            if "V2" in CARRY_VARIANTS:
-                sigs.append(raw_signal_carry_v2(curve, near, far, window=cfg.CARRY_ZSCORE_WINDOW))
-            raws.append(sigs[0] if len(sigs) == 1 else combine_positions(sigs, "equal_weight"))
-        raws = [r for r in raws if not r.empty]
-        if not raws:
+        # 2026-10-13: Carry V2 SUMS the pairs' z-scores before the sign (research/carry_zsum.py); last signal kept if a value is missing
+        combo, _, _ = combined_carry_signal(curve, pairs, cfg.CARRY_ZSCORE_WINDOW, CARRY_VARIANTS, raw_f1.index)
+        if combo.empty:
             return pd.Series(dtype=float)
-        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
         return exec_shift(combo, cfg.CARRY_SHIFT_N).fillna(0)
     if tag == "carrymom":
-        raws = [raw_signal_carrymom(curve, near, far, cfg.CARRY_MOMENTUM_HORIZON) for near, far in pairs]
-        raws = [r for r in raws if not r.empty]
-        if not raws:
+        combo, _ = combined_carrymom_signal(curve, pairs, cfg.CARRY_MOMENTUM_HORIZON, raw_f1.index)   # raw slope changes of the pairs summed, then the sign
+        if combo.empty:
             return pd.Series(dtype=float)
-        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
         return exec_shift(combo, cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0)
     raise ValueError(kind)
 

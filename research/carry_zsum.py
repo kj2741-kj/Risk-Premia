@@ -1,5 +1,5 @@
 """Carry and Carry-Momentum combined by SUMMING the pair signals' underlying values before taking the sign. DEFAULT for the Final dashboard pipeline since 2026-10-13
-(scripts/final_dashboard/compute_products.py, CARRY_COMBINE="zsum"; "vote" reproduces the earlier sign-vote of engine.combine_positions, which was flat whenever the pairs disagreed).
+(scripts/final_dashboard/compute_products.py, run_regime_table.py, cross_asset_engine.py and the Streamlit portfolio tab; no switch: the earlier sign-vote of engine.combine_positions, flat whenever the pairs disagreed, is in Git history and ENGINE_CHANGELOG).
 The other functions in this file (standardised, per-month, no-z-score, z-score-difference) are the sandbox alternatives tested on 2026-10-12/13 and not adopted.
 
 Carry V2: for each tenor pair the z-score of the carry slope (near - far) / near against its trailing `window` observations (the same z-score as
@@ -14,7 +14,33 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from engine import _carry_base
+from engine import _carry_base, combine_positions, raw_signal_carry_v1
+
+
+def combined_carry_signal(curve: pd.DataFrame, pairs: list, window: int, variants: tuple, index: pd.Index):
+    """Pre-shift Carry signal across tenor `pairs` for one product (the rule used everywhere since 2026-10-13): V2 = sign of the SUM of the pairs' z-scores. If "V1" is also in
+    `variants`, the V1 slope signs form one sign-vote group and the two groups are averaged with equal weight (V1 is optional and off by default). Returns (signal, number of
+    pairs with data, {pair: has data})."""
+    v1 = [raw_signal_carry_v1(curve, n, f) for n, f in pairs] if "V1" in variants else []
+    zs = [carry_z(curve, n, f, window) for n, f in pairs] if "V2" in variants else []
+    has = {pair: (bool(v1) and not v1[i].empty) or (bool(zs) and not zs[i].empty) for i, pair in enumerate(pairs)}
+    v1, zs = [s for s in v1 if not s.empty], [z for z in zs if not z.empty]
+    groups = []
+    if v1:
+        groups.append(v1[0] if len(v1) == 1 else combine_positions(v1, "equal_weight"))
+    if zs:
+        groups.append(summed_signal(zs, index))
+    if not groups:
+        return pd.Series(dtype=float), 0, has
+    return (groups[0] if len(groups) == 1 else combine_positions(groups, "equal_weight")), max(len(v1), len(zs)), has
+
+
+def combined_carrymom_signal(curve: pd.DataFrame, pairs: list, horizon: int, index: pd.Index):
+    """Pre-shift Carry-Momentum signal across tenor `pairs` for one product: sign of the SUM of the pairs' raw `horizon`-observation slope changes. Returns (signal, number of pairs with data)."""
+    parts = [p for p in (carry_slope_change(curve, n, f, horizon) for n, f in pairs) if not p.empty]
+    if not parts:
+        return pd.Series(dtype=float), 0
+    return summed_signal(parts, index), len(parts)
 
 
 def carry_z(curve: pd.DataFrame, near: str, far: str, window: int = 252) -> pd.Series:

@@ -29,7 +29,11 @@ If you're asked to add a product, remove one, or change a product list, check al
 
 `python research/run_regime_table.py <metals|energy|precious|ngl>` is the canonical full-sample + regime-conditional table builder — use this (or `--window-grid` for the JS-ready format `Analysis/Research_Dashboard_F3.html` consumes), not ad hoc scripts, when you need reportable numbers. Changing a `configs/*.py` parameter (Value contract, Carry tenor pairs, etc.) changes every downstream number that touches that strategy, including every portfolio combine method — regenerate rather than hand-patch when parameters change.
 
-## Carry rule (2026-10-10)
+## Carry rule (2026-10-13 update of the 2026-10-10 rule)
+
+**Current default (Final dashboard pipeline):** Carry V2 sums the tenor pairs' z-scores and takes the sign; Carry-Momentum sums the pairs' raw 20-observation slope changes and takes the sign; last signal kept if a value is missing (`research/carry_zsum.py`, `compute_products.py`). The sign-vote described below is the previous rule (`CARRY_COMBINE=vote`) and is still what `run_regime_table.py`, `cross_asset_engine.py`, `dashboard_portfolio_tab.py` and the Streamlit apps use until they are updated.
+
+## Carry rule (2026-10-10, superseded for the Final dashboard)
 
 Portfolio-level Carry at every level (per asset class and cross-asset) is V2 (z-score on carry slope) only, signal-level blend of the short and long tenor pairs. Spec, tenors per asset class, Energy ex-NatGas and implementation status are in `Readme Portfolio construction 10 Oct.md`. Read it before touching any Carry sleeve.
 

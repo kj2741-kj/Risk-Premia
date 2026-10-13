@@ -26,6 +26,20 @@ that led to it.
 
 ---
 
+## 2026-10-13: Carry and Carry-Momentum now SUM the tenor pairs before the sign (new default for the Final dashboard pipeline)
+
+**Decision (user, 2026-10-13).** The sign-vote (each pair's sign, averaged, then signed) left the position flat whenever the two pairs disagreed (16% of days in Metals, 23% Energy, 32% NGL, 29% Precious, 33% Agriculture). New default: **Carry V2 = sign of the SUM of the pairs' z-scores; Carry-Momentum = sign of the SUM of the pairs' raw 20-observation slope changes.** If a pair's value is missing on a day the last signal is kept (flat only before the first signal). Flat days from 2012: 0%. Lag applied once to the combined signal. Single-pair legs (the Precious/Agriculture short, long and "previous" comparison rows) are unchanged.
+
+**Code.** New `research/carry_zsum.py` (`carry_z`, `carry_slope_change`, `summed_signal`, plus the sandbox alternatives below). `scripts/final_dashboard/compute_products.py` uses it by default (`CARRY_COMBINE=zsum`; `CARRY_COMBINE=vote` reproduces the old results). `build_final_dashboard_v2.py` page text updated. `run_2012_variant.py` and `rankings_page.py`: the default now uses the main results; the `ZSUM=2..5` environment modes are the sandbox alternatives (outputs in `outputs/final_dashboard_2012_<suffix>/`, pages `*_zsum_std`, `*_zsum_pm`, `*_rawcarry`, `*_zdiff`, plus `*_zsum` = the adopted combination). Pages regenerated: `Final_Research_Dashboard.html`, `Final_Research_Dashboard_2012.html`, `Commodity_Rankings.html`. The previous results are kept locally in `outputs/vote_backup/`.
+
+**Effect (full-sample IR).** 2012-26: All-5 EW/EW with NatGas 0.77 to 0.87, ex-NatGas 0.88 to 0.93; Carry up in every asset class (Energy 0.29 to 0.46, NGL 0.91 to 1.08, Precious -0.24 to -0.08, Metals 0.02 to 0.13, Agriculture -0.05 to 0.01); Carry-Momentum up in Energy (0.60 to 0.78) and NGL (0.66 to 0.72), unchanged in Metals, down in Precious (-0.09 to -0.23) and Agriculture (-0.10 to -0.34). 2011-26 (main page): All-5 EW/EW 0.73 to 0.84. In-sample, not significance-tested.
+
+**Alternatives tested and not adopted** (2012-26 portfolio IR, All-5 EW/EW with NatGas, adopted = 0.87): Carry-Momentum with each pair's change standardised by its trailing 252-observation standard deviation 0.85; per-month price spread (exact months between the two legs from the expiry calendars, `research/contract_months.py`) 0.86, the only version that fixes Agriculture Carry-Momentum (0.02) but lowers Energy and NGL; change of the Carry z-scores 0.77; Carry as the sign of the summed raw slopes with no z-score 0.79 (Agriculture Carry 0.49 but NGL 0.33 and Metals -0.42).
+
+**Not yet changed (still the sign-vote / older composites):** `research/run_regime_table.py`, `research/cross_asset_engine.py`, `dashboard_portfolio_tab.py`, the Streamlit apps, `webapp/`. **Stale until regenerated:** `Skewness_Research.html`, `VTI_Research.html` (built on the sign-vote Carry), the Copper Carry tradebook (`tradebooks/Metals/Copper_Carry_V2_Tradebook.xlsx`, sign-vote), the Wheat tradebook. Docs updated: `Readme Portfolio construction 10 Oct.md`, `CLAUDE.md`, methodology document Sections 5.3, 5.4 and the decisions table.
+
+---
+
 ## 2026-10-12 (later): Skewness added as a fifth sleeve; separate research pages
 
 - **Skewness sleeve** (after Fernandez-Perez, Fuertes and Miffre 2021, Table 1; time-series version): per product, signal = minus the skewness of the continuous series' daily log returns over 252 observations, +1 if negative, -1 if positive, 2-day lag, 5 bps costs. Added in `scripts/final_dashboard/compute_products.py` (`v["Skewness"]`); `analyze_v2.py` (`STYLES`), `analyze_twopair.py` and `build_final_dashboard_v2.py` now treat five sleeves: asset-class EW PORT and Inverse Vol, combined books, By Style, Cross-Pair, correlations and the page text. Existing sleeves unchanged (maximum difference 0). `Final_Research_Dashboard.html` and `Final_Research_Dashboard_2012.html` regenerated (the 2012 page via `run_2012_variant.py`).

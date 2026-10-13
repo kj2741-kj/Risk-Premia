@@ -32,8 +32,8 @@ BODY = r"""
 <div class="tab-panel" id="panel-notes"><div class="card"><h2>Method, data and what changed</h2>
 <h3>Sleeves (per product)</h3><ul class="steps">
 <li><b>Momentum:</b> average of the signs of three moving-average crossovers, (1,20), (5,60), (20,250), on the raw front-month price; 1-day lag.</li>
-<li><b>Carry (V2):</b> z-score of the carry slope, (near - far) / near, against its own trailing 252 days. With two tenor pairs, each pair gives a sign and the two signs are averaged then signed again (sign-vote): the position is flat when the pairs disagree. The lag is applied once to the blended signal.</li>
-<li><b>Carry-Momentum (V3):</b> sign of the 20-day change in the same slope, blended across the same two tenor pairs by the same sign-vote rule.</li>
+<li><b>Carry (V2):</b> z-score of the carry slope, (near - far) / near, against its own trailing 252 days. With two tenor pairs, the z-scores of the pairs are summed and the sign of the sum is the signal, so a day is flat only if the sum is exactly zero (until 2026-10-13 the signs were averaged instead, a sign-vote that was flat whenever the pairs disagreed); if a z-score is missing the last signal is kept. The lag is applied once to the combined signal.</li>
+<li><b>Carry-Momentum (V3):</b> change of the carry slope over 20 observations, summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.</li>
 <li><b>Value:</b> F3 price against its own 1,260-day average, long below -10%, short above +10%.</li>
 <li><b>Skewness:</b> minus the skewness of the product's daily log returns (roll-adjusted series) over the past 252 observations; long when negative, short when positive; 2-day lag (after Fernandez-Perez, Fuertes and Miffre 2021, time-series version).</li></ul>
 <h3>Tenor pairs</h3><ul class="steps">

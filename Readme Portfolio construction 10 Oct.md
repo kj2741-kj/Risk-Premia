@@ -1,5 +1,8 @@
 # Carry Construction Rule: V2 Blend of Short and Long Tenor (plus Momentum: keep default)
 
+> **UPDATE 2026-10-13 (supersedes the sign-vote below).** User decision: Carry V2 now **sums the z-scores of the tenor pairs and takes the sign of the sum**, so a day is flat only if the sum is exactly zero (the sign-vote below was flat whenever the pairs disagreed, 16-33% of days). Carry-Momentum **sums the pairs' raw 20-observation slope changes and takes the sign**. If a pair is missing on a day the last signal is kept (flat only before the first signal). Lag applied once to the combined signal. Implemented in `research/carry_zsum.py`, used by `scripts/final_dashboard/compute_products.py` (`CARRY_COMBINE=vote` reproduces the old rule). Not yet changed: `research/run_regime_table.py`, `research/cross_asset_engine.py`, `dashboard_portfolio_tab.py`, the Streamlit apps and `webapp/` still use the sign-vote / older composites. Alternatives tested and not adopted: standardised pair changes, per-month spread, z-score differences, Carry with no z-score. See `ENGINE_CHANGELOG.md` (2026-10-13).
+
+
 Rules adopted 2026-10-10 (user decisions). Read this before building or changing any Carry or Momentum sleeve, or any portfolio that contains one. The Carry rule is the main body; the Momentum rule is the short section further down.
 
 ## The rule

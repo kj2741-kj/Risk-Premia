@@ -9,7 +9,15 @@ import sys
 from pathlib import Path
 
 D = Path("scripts/final_dashboard")
-OUT = "outputs/final_dashboard_2012"
+import os
+_MODE = os.environ.get("ZSUM", "")   # "1": sum raw pair values; "2": Carry-Momentum slope changes standardised before summing
+ZSUM, STD, PM, RAWC = _MODE in ("2", "3", "4", "5"), _MODE == "2", _MODE == "3", _MODE == "4"   # since 2026-10-13 the DEFAULT (no ZSUM) already uses summed z-scores / summed raw slope changes (compute_products.py); modes 2-5 are the sandbox alternatives
+ZDIFF = _MODE == "5"   # "5": Carry-Momentum = sum over pairs of (z-score today - z-score 20 observations ago), Carry as in "1"   # "4": Carry = sign of the sum of the pairs' raw slopes (no z-score), Carry-Momentum as in "1"
+#   # "3": Carry-Momentum on the per-month price spread (research/contract_months.py)
+SFX = "_zdiff" if ZDIFF else "_rawcarry" if RAWC else ("_zsum_pm" if PM else "_zsum_std")
+# research variant: Carry and Carry-Momentum sum the pairs' z-scores / slope changes before the sign (research/carry_zsum.py)
+OUT = "outputs/final_dashboard_2012" + SFX if ZSUM else "outputs/final_dashboard_2012"
+HTML = f"Analysis/Final_Research_Dashboard_2012{SFX}.html" if ZSUM else "Analysis/Final_Research_Dashboard_2012.html"
 Path(OUT).mkdir(parents=True, exist_ok=True)
 
 
@@ -18,7 +26,10 @@ import pickle
 import pandas as pd
 sys.path[:0] = ["research", "research/configs", "scripts"]
 import importlib
-from engine import log_return_daily, value_v1_position
+from engine import exec_shift, log_return_daily, value_v1_position
+if ZSUM:
+    from carry_zsum import carry_z, carry_slope_change, carry_slope_change_std, carry_pm_change, carry_slope, carry_z_diff, summed_signal
+    from contract_months import months_between
 
 nets, meta = pickle.load(open("outputs/final_dashboard/products_v2_nets.pkl", "rb"))
 for (a, p) in list(nets):
@@ -29,6 +40,14 @@ for (a, p) in list(nets):
     d = (new - nets[(a, p)]["Value"]).abs().loc["2012-01-01":].max()
     print(f"Value min {VALUE_MIN}: {a} {p} max change since 2012 = {0 if pd.isna(d) else round(float(d), 4)}", flush=True)
     nets[(a, p)]["Value"] = new
+    if ZSUM:
+        lp, ph, curve, pr = raw["log_price"], raw["Phase"], cfg.load_curve(p), meta[(a, p)]["pairs"]
+        sc = summed_signal([carry_slope(curve, n, f_) if RAWC else carry_z(curve, n, f_, cfg.CARRY_ZSCORE_WINDOW) for n, f_ in pr], lp.index)
+        sm = summed_signal([carry_z_diff(curve, n, f_, cfg.CARRY_ZSCORE_WINDOW, cfg.CARRY_MOMENTUM_HORIZON) if ZDIFF else carry_pm_change(curve, n, f_, months_between(a, p, n, f_, curve.index), cfg.CARRY_MOMENTUM_HORIZON) if PM else (carry_slope_change_std if STD else carry_slope_change)(curve, n, f_, cfg.CARRY_MOMENTUM_HORIZON) for n, f_ in pr], lp.index)
+        for nm, sg, sh in (("Carry", sc, cfg.CARRY_SHIFT_N), ("CarryMom", sm, cfg.CARRY_MOMENTUM_SHIFT_N)):
+            nets[(a, p)][nm] = log_return_daily(exec_shift(sg, sh).fillna(0), lp, 5, ph)[1]
+            flat = float((exec_shift(sg, sh).fillna(0).loc["2012-01-01":] == 0).mean())
+            print(f"  zsum {nm}: {a} {p} flat share since 2012 = {flat:.3f}", flush=True)
 pickle.dump((nets, meta), open(f"{OUT}/products_2012_nets.pkl", "wb"))
 
 
@@ -69,8 +88,14 @@ srcs = {
          "Three periods in this variant: <b>P1</b> 1 Jan 2012 to 31 Dec 2016, <b>P2</b> 1 Jan 2017 to 31 Dec 2021, <b>P3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap."),
         ("), 2011-2026. Within-asset-class", "), 2012-2026. Within-asset-class"),
         ("2011 onward. Blue is positive", "2012 onward. Blue is positive"),
-        ('out = R / "Analysis/Final_Research_Dashboard.html"', 'out = R / "Analysis/Final_Research_Dashboard_2012.html"'),
-        ("Risk Premia: Final Research Dashboard", "Risk Premia: Final Research Dashboard (2012 start, three periods)")]),
+        ('out = R / "Analysis/Final_Research_Dashboard.html"', f'out = R / "{HTML}"'),
+        ("Risk Premia: Final Research Dashboard", "Risk Premia: Final Research Dashboard (2012 start, three periods" + (", Carry: summed raw slopes (no z-score)" if RAWC else ", Carry-Momentum standardised" if STD else ", Carry-Momentum per-month spread" if PM else ", Carry-Momentum z-score difference" if ZDIFF else "") + ")")]
+        + ([("z-score of the carry slope, (near - far) / near, against its own trailing 252 days. With two tenor pairs, the z-scores of the pairs are summed",
+             "raw carry slope, (near - far) / near, with no z-score. With two tenor pairs, the raw slopes of the pairs are summed")] if RAWC else [])
+        + ([("change of the carry slope over 20 observations, summed across the tenor pairs (raw changes, not standardised) and signed",
+             "the 20-day change of each pair's Carry z-score (z-score today minus the z-score 20 observations ago), summed across the pairs and signed" if ZDIFF else
+             "the 20-day change of each pair's per-month spread, (near price - far price) divided by the exact months between the two legs on that date, summed across the pairs and signed" if PM else
+             "the 20-day change of each pair's carry slope divided by its own trailing 252-day standard deviation, summed across the pairs and signed")] if (STD or PM or ZDIFF) else [])),
 }
 for name in ("analyze_v2.py", "analyze_twopair.py", "build_final_dashboard_v2.py"):
     print("==", name, flush=True)

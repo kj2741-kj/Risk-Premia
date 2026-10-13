@@ -67,6 +67,7 @@ from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E40
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_skewness, raw_signal_value)
+from carry_zsum import carry_z, summed_signal  # noqa: E402  (2026-10-13: V2 legs are combined by summing z-scores, see research/carry_zsum.py)
 from risk_parity import rolling_erc_combine  # noqa: E402
 from drp import rolling_drp_combine  # noqa: E402
 
@@ -74,6 +75,7 @@ COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", 
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
 CARRY_TYPES = ["V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"]
+V2_TYPE = "V2 - Z-score on carry slope"
 
 FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
 FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry momentum", "Value": "Value",
@@ -136,7 +138,7 @@ def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
     if family == "Momentum":
         return {"leg_id": leg_id, "fast": 5, "slow": 60}
     if family == "Carry":
-        return {"leg_id": leg_id, "type": "V1 - Carry slope", "near": near, "far": far,
+        return {"leg_id": leg_id, "type": "V2 - Z-score on carry slope", "near": near, "far": far,
                 "zwindow": 252, "horizon": 20}
     if family == "CarryMom":
         return {"leg_id": leg_id, "near": near, "far": far, "horizon": 20}
@@ -160,9 +162,8 @@ def _build_reference_strategies(cfg) -> list[dict]:
     for near, far in cfg.CARRY_TENOR_PAIRS:
         instances.append({
             "id": f"carry_{near}{far}", "family": "Carry", "label": f"Carry ({near}-{far})",
+            # 2026-10-13: V2 is the default and the reference Carry is V2 only (as in the dashboards since 10 Oct); the tenor pairs are combined by summing z-scores
             "legs": [
-                {"leg_id": uuid.uuid4().hex[:8], "type": "V1 - Carry slope", "near": near, "far": far,
-                 "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
                 {"leg_id": uuid.uuid4().hex[:8], "type": "V2 - Z-score on carry slope", "near": near, "far": far,
                  "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
             ],
@@ -216,8 +217,6 @@ def _reference_leg_seed(cfg, family: str) -> list[dict]:
     near, far = cfg.CARRY_TENOR_PAIRS[0] if getattr(cfg, "CARRY_TENOR_PAIRS", None) else ("F1", "F3")
     if family == "Carry":
         return [
-            {"leg_id": uuid.uuid4().hex[:8], "type": "V1 - Carry slope", "near": near, "far": far,
-             "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
             {"leg_id": uuid.uuid4().hex[:8], "type": "V2 - Z-score on carry slope", "near": near, "far": far,
              "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
         ]
@@ -294,6 +293,14 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
     raise ValueError(f"Unknown family {family!r}")
 
 
+def _leg_z(leg: dict, product_data: dict) -> pd.Series:
+    """Raw (unsigned) V2 z-score of one Carry leg, for combining several V2 legs by SUMMING z-scores (2026-10-13). Empty if the leg is not a complete V2 leg."""
+    near, far = leg.get("near"), leg.get("far")
+    if leg.get("type") != V2_TYPE or near is None or far is None:
+        return pd.Series(dtype=float)
+    return carry_z(product_data["curve"], near, far, int(leg.get("zwindow") or 252))
+
+
 def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Series:
     """Pre-shift combined raw signal for one strategy family on one product --
     the leg-combination step shared by _instance_product_returns, exposed
@@ -304,8 +311,19 @@ def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Serie
     not average two tenor pairs' already-shifted PnL series)."""
     if not instance["legs"]:
         return pd.Series(dtype=float)
-    raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
-    raws = [r for r in raws if not r.empty]
+    legs = instance["legs"]
+    v2_legs = [leg for leg in legs if instance["family"] == "Carry" and leg.get("type") == V2_TYPE]
+    if len(v2_legs) >= 2:
+        # Two or more V2 legs in one Carry sleeve: SUM their z-scores into ONE combined V2 signal (sign of the sum, last signal kept if a z-score is
+        # missing). V1 / V3 legs stay sign legs and are averaged with it as before.
+        zs = [z for z in (_leg_z(leg, product_data) for leg in v2_legs) if not z.empty]
+        raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in legs if leg not in v2_legs]
+        raws = [r for r in raws if not r.empty]
+        if zs:
+            raws.append(summed_signal(zs, product_data["log_price"].index))
+    else:
+        raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in legs]
+        raws = [r for r in raws if not r.empty]
     if not raws:
         return pd.Series(dtype=float)
     return raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
@@ -352,11 +370,33 @@ def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict]
     shift_n = cfg.CARRY_SHIFT_N if family == "Carry" else cfg.CARRY_MOMENTUM_SHIFT_N
     grosses, nets = [], []
     for product_data in data.values():
-        raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
-        raws = [r for r in raws if not r.empty]
-        if not raws:
-            continue
-        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
+        if family == "Carry":
+            # 2026-10-13: V1 legs of all tenor pairs form ONE signal (sign-vote across the pairs, as before); the V2 legs form ONE signal by SUMMING their
+            # z-scores across the pairs; the two (plus any other leg type, as one group) are averaged with equal weight, so V1 and V2 keep their 50/50 balance.
+            v1, v2z, other = [], [], []
+            for inst in tenor_instances:
+                for leg in inst["legs"]:
+                    t = leg.get("type", "V1 - Carry slope")
+                    if t == V2_TYPE:
+                        z = _leg_z(leg, product_data)
+                        if not z.empty:
+                            v2z.append(z)
+                    else:
+                        r_ = _leg_raw_signal("Carry", leg, product_data)
+                        if not r_.empty:
+                            (v1 if t == "V1 - Carry slope" else other).append(r_)
+            groups = [g_[0] if len(g_) == 1 else combine_positions(g_, "equal_weight") for g_ in (v1, other) if g_]
+            if v2z:
+                groups.append(summed_signal(v2z, product_data["log_price"].index))
+            if not groups:
+                continue
+            combo = groups[0] if len(groups) == 1 else combine_positions(groups, "equal_weight")
+        else:
+            raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
+            raws = [r for r in raws if not r.empty]
+            if not raws:
+                continue
+            combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
         pos = exec_shift(combo, shift_n).fillna(0)
         g, n = log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
         if not n.empty:
@@ -473,7 +513,7 @@ def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str
     with st.expander(label, expanded=False):
         for near, far in tenor_pairs:
             st.markdown(f"- {note} ({near}-{far})")
-        st.caption("Combine tenor pairs via: Equal Weight")
+        st.caption("Combine tenor pairs via: sum of z-scores, then the sign" if "z-score" in note else "Combine tenor pairs via: Equal Weight")
 
 
 # Leg rendering (shared by every editable leg list -- currently only the
@@ -503,7 +543,7 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
         i = 0
         with cols[i]:
             leg_type = st.selectbox("Type", CARRY_TYPES,
-                                     index=_safe_index(CARRY_TYPES, leg.get("type", "V1 - Carry slope")),
+                                     index=_safe_index(CARRY_TYPES, leg.get("type", V2_TYPE)),
                                      key=f"{key_prefix}_type")
             leg["type"] = leg_type
         i += 1
@@ -819,7 +859,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     else:
         by_id = {inst["id"]: inst for inst in reference_strategies}
         _render_reference_strategy(by_id["mom"])
-        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V1+V2 composite")
+        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V2 (z-scores summed across the pairs)")
         _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum")
         _render_reference_strategy(by_id["value"])
         _render_reference_strategy(by_id["skew"])

@@ -1,6 +1,6 @@
 # Imputed tenors (Heating Oil F13, Isobutane F14)
 
-`imputed_tenors_ho_isobutane.csv` holds the 33 prices that are missing in the source files inside the 2012 sample, for the two tenors that a Carry long pair depends on. Observed prices are never changed, and the source files in `data/Prices_0924` are untouched. Nothing in the research pipeline reads this file yet: the stored sleeve returns and the dashboards still treat these days as missing (flat Carry and Carry-Momentum positions).
+`imputed_tenors_ho_isobutane.csv` holds the 33 prices that are missing in the source files inside the 2012 sample, for the two tenors that a Carry long pair depends on. Observed prices are never changed, and the source files in `data/Prices_0924` are untouched. Nothing in the research pipeline reads this file yet: the stored sleeve returns and the dashboards still treat these days as missing. Under the sign-vote rule that meant flat Carry and Carry-Momentum positions; since 2026-10-13 (summed z-scores) a missing value keeps the last signal, so the effect figures below were measured under the sign-vote rule and have not been re-run.
 
 Rule (same-grade fill, missing cells only)
 

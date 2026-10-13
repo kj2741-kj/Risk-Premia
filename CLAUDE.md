@@ -31,7 +31,7 @@ If you're asked to add a product, remove one, or change a product list, check al
 
 ## Carry rule (2026-10-13 update of the 2026-10-10 rule)
 
-**Current default (Final dashboard pipeline):** Carry V2 sums the tenor pairs' z-scores and takes the sign; Carry-Momentum sums the pairs' raw 20-observation slope changes and takes the sign; last signal kept if a value is missing (`research/carry_zsum.py`, `compute_products.py`). The same rule is now used by `compute_products.py`, `run_regime_table.py`, `cross_asset_engine.py` and `dashboard_portfolio_tab.py` (no switch; the sign-vote described below is the previous rule and only exists in Git history). The Streamlit apps use one short pair for Precious Metals and Agriculture, unlike the dashboard's per-product long pairs.
+**Current default (Final dashboard pipeline):** Carry V2 sums the tenor pairs' z-scores and takes the sign; Carry-Momentum sums the pairs' raw 20-observation slope changes and takes the sign; last signal kept if a value is missing (`research/carry_zsum.py`, `compute_products.py`). The same rule is now used by `compute_products.py`, `run_regime_table.py`, `cross_asset_engine.py` and `dashboard_portfolio_tab.py` (no switch; the sign-vote described below is the previous rule and only exists in Git history). The Portfolio tab (since 2026-10-13) and the hub use each Precious Metals / Agriculture product's own long pair, as the dashboard does.
 
 ## Carry rule (2026-10-10, superseded for the Final dashboard)
 

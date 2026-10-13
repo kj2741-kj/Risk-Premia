@@ -67,7 +67,7 @@ from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E40
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_skewness, raw_signal_value)
-from carry_zsum import carry_slope_change, carry_z, summed_signal  # noqa: E402  (2026-10-13: V2 legs are combined by summing z-scores, see research/carry_zsum.py)
+from carry_zsum import carry_slope_change, carry_z, combined_carry_signal, combined_carrymom_signal, summed_signal  # noqa: E402  (2026-10-13: V2 legs are combined by summing z-scores, see research/carry_zsum.py)
 from risk_parity import rolling_erc_combine  # noqa: E402
 from drp import rolling_drp_combine  # noqa: E402
 
@@ -361,6 +361,12 @@ def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd
     return gross_agg, net_agg
 
 
+def _per_product_pairs(cfg) -> bool:
+    """True for Precious Metals and Agriculture (2026-10-13): their Carry / Carry-Momentum use the short pair F1-F2 plus a long pair that differs by product
+    (cfg.CARRY_LONG_FAR_BY_PRODUCT, e.g. Gold F1-F7, Corn F1-F6), as in the Final dashboard; cfg.carry_pairs(product) gives each product's list."""
+    return hasattr(cfg, "carry_pairs") and bool(getattr(cfg, "CARRY_LONG_FAR_BY_PRODUCT", None))
+
+
 def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict],
                                     data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
     """Signal-level Combined Carry / Combined CarryMom (Dimil's construction,
@@ -375,8 +381,18 @@ def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict]
     (F1-F13)"), each contributing one raw composite signal per product."""
     shift_n = cfg.CARRY_SHIFT_N if family == "Carry" else cfg.CARRY_MOMENTUM_SHIFT_N
     grosses, nets = [], []
-    for product_data in data.values():
-        if family == "Carry":
+    for product, product_data in data.items():
+        if _per_product_pairs(cfg):
+            # Precious Metals / Agriculture: each product's own tenor pairs (short F1-F2 plus its long pair), summed z-scores for Carry, summed slope changes for CarryMom
+            pairs_p = [(str(n_), str(f_)) for n_, f_ in cfg.carry_pairs(product)]
+            idx = product_data["log_price"].index
+            if family == "Carry":
+                combo, _, _ = combined_carry_signal(product_data["curve"], pairs_p, cfg.CARRY_ZSCORE_WINDOW, ("V2",), idx)
+            else:
+                combo, _ = combined_carrymom_signal(product_data["curve"], pairs_p, cfg.CARRY_MOMENTUM_HORIZON, idx)
+            if combo.empty:
+                continue
+        elif family == "Carry":
             # 2026-10-13: V1 legs of all tenor pairs form ONE signal (sign-vote across the pairs, as before); the V2 legs form ONE signal by SUMMING their
             # z-scores across the pairs; the two (plus any other leg type, as one group) are averaged with equal weight, so V1 and V2 keep their 50/50 balance.
             v1, v2z, other = [], [], []
@@ -522,12 +538,14 @@ def _render_reference_strategy(instance: dict) -> None:
         st.caption(f"Execution lag (shift_n): {instance['shift_n']}  |  Combine legs via: Equal Weight")
 
 
-def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str]], note: str) -> None:
+def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str]], note: str, extra: str = "") -> None:
     """Read-only card for a Combined Carry / Combined CarryMom reference row --
     equal-weight of the per-tenor-pair legs it's built from."""
     with st.expander(label, expanded=False):
         for near, far in tenor_pairs:
             st.markdown(f"- {note} ({near}-{far})")
+        if extra:
+            st.markdown(f"- plus each product's long pair: {extra}")
         st.caption("Combine tenor pairs via: sum of z-scores, then the sign" if "z-score" in note else "Combine tenor pairs via: sum of slope changes, then the sign" if "slope changes" in note else "Combine tenor pairs via: Equal Weight")
 
 
@@ -852,9 +870,10 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                "comparison. Read-only; use Portfolio Construction below to combine them: "
                "switching a family on there pre-fills it with these exact same parameters.")
 
-    has_multi_tenor = len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2
+    per_product_pairs = _per_product_pairs(cfg)
+    has_multi_tenor = len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2 or per_product_pairs
     separate_tenor_carry = False
-    if has_multi_tenor:
+    if has_multi_tenor and not per_product_pairs:
         separate_tenor_carry = st.checkbox(
             "Treat Carry / Carry momentum tenor pairs as separate strategies",
             value=False, key=f"{key_prefix}_pf_separate_tenor",
@@ -867,6 +886,9 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                  "below, the strategy pickers further down, and the reference-strategy "
                  "portfolio aggregate.")
 
+    if per_product_pairs:
+        st.caption("Carry and Carry momentum for this asset class combine the short pair F1-F2 with a long pair that differs by product ("
+                   + ", ".join(f"{p_} F1-{f_}" for p_, f_ in cfg.CARRY_LONG_FAR_BY_PRODUCT.items()) + "), as in the Final dashboard.")
     reference_strategies = _build_reference_strategies(cfg)
     if separate_tenor_carry or not has_multi_tenor:
         for instance in reference_strategies:
@@ -874,8 +896,9 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     else:
         by_id = {inst["id"]: inst for inst in reference_strategies}
         _render_reference_strategy(by_id["mom"])
-        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V2 (z-scores summed across the pairs)")
-        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum (slope changes summed across the pairs)")
+        _long = ", ".join(f"{p_} F1-{f_}" for p_, f_ in getattr(cfg, "CARRY_LONG_FAR_BY_PRODUCT", {}).items()) if per_product_pairs else ""
+        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V2 (z-scores summed across the pairs)", _long)
+        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum (slope changes summed across the pairs)", _long)
         _render_reference_strategy(by_id["value"])
         _render_reference_strategy(by_id["skew"])
 

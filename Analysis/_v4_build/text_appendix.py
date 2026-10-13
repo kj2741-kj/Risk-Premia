@@ -1,6 +1,7 @@
 from facts3 import *
 
 W4 = [("Full", "full"), ("2012-16", "p1"), ("2017-21", "p2"), ("2022-26", "p3")]
+PNAME = {"HeatingOil": "Heating Oil", "NatGas": "Natural Gas", "SoybeanOil": "Soybean Oil"}
 NAME = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value", "Skewness": "Skewness", "EW PORT": "Equal Weight", "Inverse Vol": "Inverse Vol"}
 
 
@@ -24,27 +25,27 @@ def appendix():
         a, prods = VARIANTS[v]
         table(f"{nm}: Strategy Information Ratios by Period", H4, per_rows(sl(v), SLEEVES))
         table(f"{nm}: Portfolio Construction Information Ratios by Period", H4, per_rows(sl(v), ["EW PORT", "Inverse Vol"]))
-        table(f"{nm}: Individual-{unit} Information Ratios, All Strategies (Full Sample)", [""] + prods,
+        table(f"{nm}: Individual-{unit} Information Ratios, All Strategies (Full Sample)", [""] + [PNAME.get(p, p) for p in prods],
               [[NAME[k]] + [I(pst(a, p, k)["ir"]) for p in prods] for k in SLEEVES])
         if v == "energy":
             table("Energy ex-NatGas: Strategy and Portfolio Information Ratios by Period", H4, per_rows(sl("energy_exng"), SLEEVES + ["EW PORT", "Inverse Vol"]))
     v = "precious"; a, prods = VARIANTS[v]
     table("Precious Metals: Strategy Information Ratios by Period", H4, per_rows(sl(v), SLEEVES))
     table("Precious Metals: Portfolio Construction Information Ratios by Period", H4, per_rows(sl(v), ["EW PORT", "Inverse Vol"]))
-    table("Precious Metals: Individual-Metal Information Ratios, All Strategies (Full Sample)", [""] + prods, [[NAME[k]] + [I(pst(a, p, k)["ir"]) for p in prods] for k in SLEEVES])
+    table("Precious Metals: Individual-Metal Information Ratios, All Strategies (Full Sample)", [""] + [PNAME.get(p, p) for p in prods], [[NAME[k]] + [I(pst(a, p, k)["ir"]) for p in prods] for k in SLEEVES])
     tt = tenor_table(v)
-    table("Precious Metals: Carry Tenor Pairs, Full-Sample Information Ratios", ["", "Previous single pair (F1-F3)", "Short pair (F1-F2)", "Long pair alone", "Two-pair blend"],
+    table("Precious Metals: Carry Tenor Pairs, Full-Sample Information Ratios", ["", "Previous single pair (F1-F3)", "Short pair (F1-F2)", "Long pair alone", "Two-pair sum"],
           [["Carry"] + [I(tt["Carry"][k]) for k in ("prev", "short", "long", "two")], ["Carry-Momentum"] + [I(tt["CarryMom"][k]) for k in ("prev", "short", "long", "two")]])
     v = "ngl"; a, prods = VARIANTS[v]
     table("NGL: Strategy Information Ratios by Period", H4, per_rows(sl(v), SLEEVES))
     table("NGL: Portfolio Construction Information Ratios by Period", H4, per_rows(sl(v), ["EW PORT", "Inverse Vol"]))
-    table("NGL: Individual-Product Information Ratios, All Strategies (Full Sample)", [""] + prods, [[NAME[k]] + [I(pst(a, p, k)["ir"]) for p in prods] for k in SLEEVES])
+    table("NGL: Individual-Product Information Ratios, All Strategies (Full Sample)", [""] + [PNAME.get(p, p) for p in prods], [[NAME[k]] + [I(pst(a, p, k)["ir"]) for p in prods] for k in SLEEVES])
     v = "agri"; a, prods = VARIANTS[v]
     table("Agriculture: Strategy Information Ratios by Period", H4, per_rows(sl(v), SLEEVES))
     table("Agriculture: Portfolio Construction Information Ratios by Period", H4, per_rows(sl(v), ["EW PORT", "Inverse Vol"]))
-    table("Agriculture: Individual-Product Information Ratios, All Strategies (Full Sample)", [""] + prods, [[NAME[k]] + [I(pst(a, p, k)["ir"]) for p in prods] for k in SLEEVES])
+    table("Agriculture: Individual-Product Information Ratios, All Strategies (Full Sample)", [""] + [PNAME.get(p, p) for p in prods], [[NAME[k]] + [I(pst(a, p, k)["ir"]) for p in prods] for k in SLEEVES])
     tt = tenor_table(v)
-    table("Agriculture: Carry Tenor Pairs, Full-Sample Information Ratios", ["", "Previous single pair (F1-F2)", "Long pair alone", "Two-pair blend"],
+    table("Agriculture: Carry Tenor Pairs, Full-Sample Information Ratios", ["", "Previous single pair (F1-F2)", "Long pair alone", "Two-pair sum"],
           [["Carry"] + [I(tt["Carry"][k]) for k in ("prev", "long", "two")], ["Carry-Momentum"] + [I(tt["CarryMom"][k]) for k in ("prev", "long", "two")]])
     bs = bystyle(False); bx = bystyle(True)
     cb = {k: bench_corr(bs[k]) for k in SER7}
@@ -65,7 +66,7 @@ def appendix():
         a, prods = VARIANTS[v]
         for p in prods:
             lg = legs(a, p)["full"]
-            rows.append([f"{SHORT[v]}: {p}", U(lg["long_pct"], 0) + "%", N(lg["long_pnl"]), N(lg["short_pnl"]), I(pst(a, p, "Skewness")["ir"])])
+            rows.append([f"{SHORT[v]}: {PNAME.get(p, p)}", U(lg["long_pct"], 0) + "%", N(lg["long_pnl"]), N(lg["short_pnl"]), I(pst(a, p, "Skewness")["ir"])])
     table("Skewness: Share of Days Long and Log Return of the Long and Short Legs, by Product (Full Sample, Gross of Costs)", ["Product", "Days long", "Long-leg log return", "Short-leg log return", "IR (net)"], rows)
     rows = []
     for v in ("metals", "energy", "energy_exng", "precious", "ngl", "agri"):
@@ -96,37 +97,40 @@ def appendix():
 
 
 def verification():
-    blocks = [("h2", "Appendix: Verification Log (v3_2012 to v4)")]
+    blocks = [("h2", "Appendix: Verification Log (v3_2012 to v5)")]
     B = blocks.append
-    B(("p", "Every figure in this document was recomputed from the per-product net returns of the pipeline in scripts/final_dashboard (rebuilt locally; the embedded dataset of Final_Research_Dashboard_2012.html is reproduced exactly) and cross-checked: 3,504 numbers (asset-class tabs, all 23 products, both combined books, By Style and all cross-pair portfolios) "
-            "agree with the dashboard to within 0.0005, and the Skewness sleeve agrees with Skewness_Research.html and with the Streamlit dashboards' Portfolio tabs and the hub's Cross-Asset tab. Figures are formatted from full-precision values, so a second-decimal digit can differ by 0.01 from v3, which rounded twice (for example Zinc Momentum, Energy Carry-Momentum in P3 and Corn Value in P1). "
-            "External facts were re-checked against sources on 12 October 2026. Statements changed or corrected in v4:"))
+    B(("p", "Every figure in this document was recomputed from the per-product net returns of the pipeline in scripts/final_dashboard (rebuilt locally with the Carry rule adopted on 13 October 2026; the embedded dataset of Final_Research_Dashboard_2012.html is reproduced exactly) and cross-checked: 3,504 numbers "
+            "(every asset-class tab, all 23 products, both combined books, the by-style portfolios and all Cross-Pair portfolios) were recomputed with separate code and agree with the dashboard to within 0.0005, and the Skewness sleeve agrees with Skewness_Research.html and with the Streamlit dashboards' Portfolio tabs and the hub's Cross-Asset tab. "
+            "Figures are formatted from full-precision values, so a second-decimal digit can differ from the dashboard's three-decimal rounding. External facts were re-checked against sources on 13 October 2026. "
+            "Statements changed or corrected in v4 and carried into v5, and the statements changed by the 13 October 2026 Carry rule, are listed below."))
     rows = [
-        ["Copper 'record $14,851 on 22 Sep 2026'", "Kept as the high of our series; LME three-month record reported at about $14,875 on 10 Sep 2026", "Series check; market reports (Yahoo Finance, Discovery Alert, Erbakir)"],
-        ["Aluminium peak '$3,876 on 4 Mar 2022'", "Kept as the settlement peak of our series; LME intraday record about $4,070 to $4,074 on 7 Mar 2022 added", "Series check; Harbor Aluminum, Credit Suisse via FXStreet, MetalCharts"],
-        ["WTI '$105 in June 2014'", "$107 on 20 June 2014 in our series; $26 on 11 Feb 2016 confirmed", "Series check; RBN Energy (late-June high about $107)"],
+        ["Copper 'record $14,851 on 22 Sep 2026'", "Kept as the high of our series; market sources put the LME three-month record at about $14,800 to $14,875 on 9 to 10 Sep 2026 (sources differ by contract and time of day)", "Series check; Bloomberg (record $14,802.50, reported 10 Sep), Erbakir and Discovery Alert ($14,875 on 10 Sep)"],
+        ["Aluminium peak '$3,876 on 4 Mar 2022'", "Kept as the settlement peak of our series; LME intraday record of about $4,070 to $4,073 in March 2022 added (the exact day is not confirmed)", "Series check; Harbor Aluminum, MetalCharts"],
+        ["WTI '$105 in June 2014'", "$107 on 20 June 2014 in our series; $26 on 11 Feb 2016", "Series check"],
         ["Energy Momentum 'March 2022 spike (a further 14% of the total)'", "14% is calendar 2022; March 2022 alone is 7%", "Recomputed from sleeve returns"],
         ["Gold 'sleeve lost 0.45 in 2025'", "It is Gold's Value position (-0.45); the Precious Metals Value sleeve lost 0.31", "Recomputed"],
-        ["Producer hedge book '182 tonnes at end-2024'", "182 tonnes was the first WGC estimate; revised to about 194 tonnes. 218 tonnes in Q3 2017 confirmed", "World Gold Council Gold Demand Trends"],
-        ["Mont Belvieu propane discount '$0.89/gal (Hydrocarbon Engineering)'", "Figure confirmed; source is EIA Today in Energy", "EIA"],
-        ["LPG 'nearly 40% of global export supply (OPIS, 10 June 2026)'", "Not confirmed; replaced by about 30% of global LPG supply (Veson Nautical) and the record 3.3 million b/d of US LPG exports in April 2026 (S&P Global)", "Veson Nautical via OilPrice, S&P Global"],
-        ["Propane exports 'record 2.011 million b/d in November'", "EIA: record 1.8 million b/d average in 2024; first month above 2 million b/d is April 2026 at a record 2.1 million b/d", "EIA Today in Energy"],
-        ["Ethane 492,000 b/d vs 65,000 b/d; butane 491,000 vs 97,000", "Confirmed (normal butane)", "OPIS citing EIA"],
-        ["Arabica 'lifted by 32% in a week' (July 2021)", "+34% from 19 to 26 July 2021 in our series; highest front-month since October 2014 confirmed", "Series check; Reuters, Bloomberg"],
-        ["Coffee 'record $4.39/lb on 13 Feb 2025'", "Our series' high; market sources put the Feb 2025 record near $4.30 and the later all-time high at $4.38 (23 Oct 2025)", "Series check; Barchart, Bloomberg"],
-        ["Gold 'fell 28% in 2013'", "Confirmed in our series (-28.3%); Reuters reported nearly 30% for the year; gold ETF holdings fell 32%", "Series check; Reuters, Bloomberg"],
+        ["Producer hedge book '182 tonnes at end-2024'", "182 tonnes was the first WGC estimate; with the end-2025 estimate of about 120 tonnes after a fall of 74 tonnes, the implied revised end-2024 figure is about 194 tonnes. 218 tonnes in Q3 2017 confirmed", "World Gold Council Gold Demand Trends Q3 2017, full-year 2024 and full-year 2025 (supply pages)"],
+        ["Mont Belvieu propane discount '$0.89/gal (Hydrocarbon Engineering)'", "Figure confirmed; source is EIA Today in Energy (November 2015)", "EIA Today in Energy, id 23612"],
+        ["LPG 'nearly 40% of global export supply (OPIS, 10 June 2026)'", "Not confirmed as worded; replaced by about 30% of global LPG supply (Veson Nautical; Argus gives 30% of seaborne exports, Drewry 40%) and the record 3.3 million b/d of US LPG exports in April 2026 (S&P Global Commodities at Sea; Vortexa puts it at 2.8 million b/d)", "Veson Nautical via Naftemporiki, Argus, S&P Global"],
+        ["Propane exports 'record 2.011 million b/d in November'", "EIA: record 1.8 million b/d average in 2024; exports first topped 2 million b/d in November 2024; record 2.1 million b/d in April 2026 (the October 2026 EIA note also says April 2026 was the first month above 2 million b/d, which conflicts with the 2025 note, so the document states only the April 2026 record)", "EIA Today in Energy, id 64724 and id 68244"],
+        ["Arabica 'lifted by 32% in a week' (July 2021)", "+34% from 19 to 26 July 2021 in our series; highest front-month since October 2014 confirmed", "Series check; Reuters, 26 July 2021"],
+        ["Coffee 'record $4.39/lb on 13 Feb 2025'; later 'all-time high $4.38 on 23 Oct 2025'", "Our series is the front-month (March) contract, settle $4.389 on 13 Feb 2025; the most active contract set its record at about $4.30 that month (Barchart $4.2995 intraday, Reuters above $4.30). The $4.38 record of 23 Oct 2025 could not be confirmed and was removed", "Series check; Barchart; Reuters"],
+        ["Henry Hub 2012 'mild winter, record storage'", "EIA describes high, not record, storage; the text now says high storage", "EIA Today in Energy, id 9490"],
+        ["Gold 'fell 28% in 2013'", "Confirmed in our series (-28.3%); Reuters reported a 28% fall, the largest since 1981; gold ETF holdings fell about 33%", "Series check; Reuters, Bloomberg"],
         ["Gold/real-yield correlation, P3 '-0.25'; P3 real yield '1.61%'", "-0.24 and 1.60% on FRED DFII10 data downloaded 12 Oct 2026 (end date 23 Sep 2026)", "FRED"],
         ["NGL F2-F4 slope '+3.8% / -1.6%'", "+3.7% / -1.7% on the pooled product-days", "Recomputed from curves"],
-        ["Henry Hub 2012 average $2.77, lowest since 1999", "Confirmed", "EIA"],
-        ["IEA 'largest disruption in the history of the oil market'; war from 28 Feb 2026", "Confirmed", "IEA Oil Market Reports (March, April 2026); CNBC"],
-        ["Aluminium queues of more than two years", "Confirmed: longest wait 748 days (LME, May 2014)", "LME report via Reuters"],
-        ["Corn record, USDA August 2012", "Confirmed: season-average price forecast $7.50 to $8.90", "USDA WASDE, 10 Aug 2012"],
-        ["FAO food price index peak March 2022 and fall in 2023", "Confirmed: 159.3 points in March 2022; 2023 average 13.7% below 2022", "FAO"],
-        ["Central banks 863 tonnes in 2025 vs 473 tonnes 2010-2021 average", "Confirmed", "World Gold Council"],
         ["Page footer listed the old four regimes (R1 2011-2015 to R4 2022-2026)", "Replaced by the three periods used throughout the document (P1 2012-2016, P2 2017-2021, P3 2022-2026)", "Consistency fix (the same footer is in v2 and v3)"],
         ["Cross-commodity benchmark correlations", "Recomputed on refreshed ETF prices; unchanged four-sleeve values differ by at most 0.01 from v3", "Yahoo Finance via yfinance"],
+        ["v4: Carry and Carry-Momentum combine the two tenor pairs by a sign vote", "Replaced on 13 October 2026 by the sign of the summed z-scores (Carry) and of the summed raw 20-observation slope changes (Carry-Momentum); the last signal is kept when a value is missing. Every Carry, Carry-Momentum, portfolio, ranking, correlation and cross-commodity figure is re-derived", "Pipeline commit 446b360; reproduced locally, dataset identical, 3,504 numbers verified"],
+        ["v4: Energy ex-NatGas 'improves every sleeve'", "No longer true: it improves Momentum, Value and Skewness but lowers Carry (+0.46 to +0.40) and Carry-Momentum (+0.78 to +0.72)", "Recomputed"],
+        ["v4: Agriculture 'every core strategy is net negative'", "Carry is now flat (+0.01); Momentum, Carry-Momentum and Value remain negative", "Recomputed"],
+        ["v4: NGL 'Inverse Vol has the shallower drawdown'", "Equal Weight now has the shallower drawdown (-20.9% against -21.5%); Inverse Vol keeps the marginally lower volatility", "Recomputed"],
+        ["v4: Metals Carry P1 'concentrated in Aluminium and Zinc'", "Aluminium, Zinc and Lead all earn it (IR +0.62, +0.36, +0.36); Copper loses (-0.29)", "Recomputed; slopes from the curves"],
+        ["v4: negative asset-class pairs 'negative in both P2 and P3 under Equal Weight'", "Negative in P3 under both constructions; P2 is close to zero or slightly positive for two of the three", "Recomputed"],
+        ["v4: Inverse Vol pulls Precious Metals-NGL down most", "NGL-Agriculture is now the pair it pulls down most (+1.02 to +0.72)", "Recomputed"],
+        ["Cross-commodity correlation text: 'joint lowest under Equal Weight'; Value/Skewness 'because'; Carry-Momentum 'most genuinely diversifying'", "Reworded: the same pair is the lowest under both constructions; interpretations stated as consistent with the results, not a test; Value and Skewness positions in Precious Metals measured (daily position correlation -0.81 in Palladium, -0.33 in Gold)", "Recomputed from positions"],
     ]
-    B(("tbl", ["v3 statement", "v4 treatment", "Source"], rows))
+    B(("tbl", ["Earlier statement", "Treatment", "Source"], rows))
     return blocks
 
 

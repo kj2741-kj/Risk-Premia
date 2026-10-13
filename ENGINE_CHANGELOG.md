@@ -6,6 +6,12 @@ that led to it.
 
 ---
 
+## 2026-10-13 (later): Heating Oil F13 and Isobutane F14 gaps filled in the data everywhere
+
+- **Decision (user and Dimil, 2026-10-13).** The only two tenor gaps inside the 2012 sample that a Carry long pair depends on are filled with a same-grade rule, missing cells only: Heating Oil F13 on 2012-04-02 to 04-27 (19 days; in April 2012 F13 is the May 2013 contract, the first ULSD-grade month, not yet listed) = F12 - 2.805 cents/gal (March 2012 mean spread), and Isobutane F14 on 2013-03-01 to 03-20 (14 days) = F13 (the provider repeats F13 as F14). No grade premium is added for Heating Oil because it is only visible after the gap (look-ahead). Soybean Oil's one Good Friday day (2012-04-06, F2/F3/F8) and NGL F1 (unused) are not filled.
+- **Code.** New `research/imputed_tenors.py` (reads `data/Imputed_Tenors/imputed_tenors_ho_isobutane.csv`, never overwrites a present price). Applied in `research/configs/energy.py` and `ngl.py` `load_curve` and in `common_curve_loader.load_curve_simple`, so the pipeline, the Final dashboards, the rankings and Skewness pages, the portfolio tab, the hub and the five standalone Streamlit dashboards all see the same prices. Tested: exactly 19 + 14 cells change, all were NaN, nothing else.
+- **Effect (measured under the summed Carry rule before the switch).** Product Carry IR changes by at most 0.004, Isobutane Carry-Momentum 0.543 to 0.521, Energy and NGL sleeve IRs by 0.007 or less; no conclusion changes. Pages regenerated: see the commit.
+
 ## 2026-10-12 (night): Streamlit Cloud kept stale shared modules after a push; apps now refresh them
 
 - **Symptom.** After the Skewness push (80884c8) every Streamlit Cloud app failed: the five dashboards with `ImportError: cannot import name 'render_skewness_tab' from 'common_engine'` and the hub with `AttributeError` on `cae.ALL_ASSET_CLASSES`. A fresh clone of `main` ran all six apps without error on Python 3.13, so the code was fine.

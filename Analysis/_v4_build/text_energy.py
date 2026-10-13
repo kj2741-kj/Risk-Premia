@@ -13,9 +13,9 @@ def energy():
     cw = corr_within(v)
     chk(all(x > 0 for x in pm + pc + pcm), "energy Momentum/Carry/CarryMom positive in every period")
     chk(cm["ir"] > mom["ir"] > car["ir"] > 0 > val["ir"], "energy CarryMom strongest, Value only negative of core")
-    chk(pc[2] < 0.05 and pc[2] < min(pc[0], pc[1]), "energy Carry weakest in P3")
+    chk(pc[2] < 0.3 and pc[2] < min(pc[0], pc[1]), "energy Carry weakest in P3")
     cpp = {p: pst(a, p, "Carry", "p3")["ir"] for p in pr}
-    chk(cpp["WTI"] < 0 and cpp["Brent"] < 0 and cpp["HeatingOil"] > 0.8, "energy Carry P3 by product")
+    chk(cpp["WTI"] < 0 and cpp["Brent"] < 0 and cpp["HeatingOil"] > 0.7, "energy Carry P3 by product")
     chk(pv[0] < 0 and pv[2] < 0 and pv[1] > 0, "energy Value period pattern")
     # Momentum concentration
     mseries = CS[v]["Momentum"].loc["2012-01-01":].dropna()
@@ -26,13 +26,14 @@ def energy():
     chk(round(share4) == 95 and round(share22) == 14 and round(share26) == 23, f"energy Momentum concentration {share4:.1f} {share22:.1f} {share26:.1f}")
     # ex-NatGas improvements
     sx = {k: st(vx, k) for k in SLEEVES}
-    chk(all(sx[k]["ir"] > st(v, k)["ir"] for k in SLEEVES), "energy ex-NatGas improves every sleeve")
+    chk(all(sx[k]["ir"] > st(v, k)["ir"] for k in ("Momentum", "Value", "Skewness")) and sx["Carry"]["ir"] < car["ir"] and sx["CarryMom"]["ir"] < cm["ir"] and sx["Skewness"]["ir"] - sk["ir"] > 0.15, "energy ex-NatGas: Momentum, Value, Skewness improve (Skewness most), Carry and Carry-Momentum fall")
     chk(ewx["ir"] > ew["ir"] and ivx["ir"] > iv["ir"], "energy ex-NatGas portfolios improve")
     # product decomposition
     mp = {p: pst(a, p, "Momentum")["ir"] for p in pr}; cmp_ = {p: pst(a, p, "CarryMom")["ir"] for p in pr}
     four = [p for p in pr if p != "NatGas"]
     lo = min(min(mp[p], cmp_[p]) for p in four); hi = max(max(mp[p], cmp_[p]) for p in four)
-    chk(abs(mp["NatGas"]) < 0.05 and abs(cmp_["NatGas"]) < 0.05, "energy NatGas no edge in Momentum/CarryMom")
+    ngcm = pper(a, "NatGas", "CarryMom")
+    chk(abs(mp["NatGas"]) < 0.05 and 0.2 < cmp_["NatGas"] < 0.4 and ngcm[2] > 0.8 and ngcm[0] < 0.1 and ngcm[1] < 0.1, "energy NatGas: Momentum no edge, Carry-Momentum modest and all in P3")
     vp = {p: pst(a, p, "Value")["ir"] for p in pr}
     chk(sum(1 for p in pr if vp[p] < 0) == 4 and abs(vp["Brent"]) < 0.05, "energy Value negative in four of five, flat Brent")
     neg = [vp[p] for p in pr if vp[p] < 0]
@@ -56,7 +57,28 @@ def energy():
     chk(wti_flip == _dt.date(2020, 3, 11) and wti_crash < -0.4 and wti_after > 1.0, "energy Skewness 2020 episode")
     wti_flip = _dt.datetime(2020, 3, 11)
     chk(all(x > 0 for x in ewD + ivD), "energy portfolios positive in every period")
-    B = []
+    ew4D = [stats(PORT4[v][0], w)["ir"] for w in ("p1", "p2", "p3")]
+    chk(ewD[1] > ew4D[1] and ewD[2] > ew4D[2] and ewD[0] < ew4D[0], "energy Skewness lifts EW IR in P2 and P3, lowers it in P1")
+    # checks added in the final verification pass
+    _e = importlib.import_module("energy")
+    _f1 = {p_: _e.load_curve(p_)["F1"] for p_ in ("WTI", "Brent")}
+    chk(round(_f1["WTI"].loc["2014-06-20"]) == 107 and round(_f1["WTI"].loc["2016-02-11"]) == 26 and _f1["WTI"].loc["2014":"2016"].idxmax() == pd.Timestamp("2014-06-20") and _f1["WTI"].loc["2014":"2016"].idxmin() == pd.Timestamp("2016-02-11"), "energy WTI 2014-2016 levels in the F1 series")
+    chk(round(_f1["WTI"].loc["2022-03"].max()) == 124 and _f1["WTI"].loc["2022-03"].idxmax().day == 8, "energy WTI March 2022 high")
+    chk(round(_f1["Brent"].loc["2026-02-27"]) == 72 and round(_f1["Brent"].loc["2026-03-31"]) == 118 and _f1["Brent"].loc["2026"].idxmax() == pd.Timestamp("2026-03-31"), "energy Brent 2026 levels")
+    wti_apr20 = float(_f1["WTI"].loc["2020-04-20"])
+    chk(wti_apr20 > 0, "energy WTI 20 April 2020 imputed in our series")
+    sl_wti = slope_stats(a, "WTI", "F1", "F3"); sl_ng = slope_stats(a, "NatGas", "F1", "F3")
+    chk(round(sl_wti["p3"][1]) == 87 and round(sl_wti["p1"][1]) == 24 and round(sl_wti["p2"][1]) == 46, "energy WTI F1-F3 backwardation shares")
+    chk(all(sl_wti["p3"][0] > max(sl_p[q][0] for q in ("p1", "p2")) for sl_p in [slope_stats(a, p_, "F1", "F3") for p_ in four]), "energy oil products most backwardated in P3 (average F1-F3 slope)")
+    chk([round(100 - sl_ng[w][1]) for w in ("p1", "p2", "p3")] == [87, 75, 74], "energy NatGas contango shares")
+    ewIV4D = [stats(PORT4[v][1], w)["ir"] for w in ("p1", "p2", "p3")]
+    chk(ivD[1] > ewIV4D[1] and ivD[2] > ewIV4D[2] and ivD[0] < ewIV4D[0], "energy Skewness lifts Inverse Vol IR in P2 and P3, lowers it in P1")
+    chk(ew4["ir"] < ew["ir"] and iv4["ir"] < iv["ir"] and ew4["vol"] > ew["vol"] and iv4["vol"] > iv["vol"], "energy Skewness lifts the IR and lowers volatility")
+    _swap = CS[v].copy(); _swap["Skewness"] = CS[vx]["Skewness"]
+    chk(stats(_swap.mean(axis=1, skipna=False))["ir"] > ew["ir"] + 0.08, "energy ex-NatGas Skewness alone lifts the Equal Weight IR (mainly because of Skewness)")
+    _mw, _me = st("metals", "EW PORT"), st("metals", "Inverse Vol")
+    chk(_me["ir"] - _mw["ir"] > 0.1 and abs(iv["ir"] - ew["ir"]) < 0.05, "Inverse Vol lifts Metals but makes no material difference in Energy")
+    chk(all(vp[p_] > -0.25 for p_ in pr), "energy Value product IRs all small")
     blocks = [("h2", "Energy")]; B = blocks.append
     B(("b", f"Carry-Momentum ({line(cm)}) is the strongest individual strategy in the Energy basket and, like Momentum and Carry, is positive in every period (Carry-Momentum P1 {I(pcm[0])}, P2 {I(pcm[1])}, P3 {I(pcm[2])}), "
             f"the clearest evidence in Energy that term-structure changes carry genuine, repeatable information."))
@@ -66,22 +88,22 @@ def energy():
             f"The war between the United States, Israel and Iran that began on 28 February 2026 then disrupted Gulf supply on a scale the IEA calls the largest in the history of the oil market, and Brent futures went from $72 on 27 February to $118 on 31 March; "
             f"the first nine months of 2026 alone are {share26:.0f}% of the sleeve's cumulative log return."))
     B(("b", f"Carry ({line(car)}) is positive in every period (P1 {I(pc[0])}, P2 {I(pc[1])}, P3 {I(pc[2])}) and weakest in P3 (IR {I(pc[2])}), where crude oil is the problem (WTI {I(cpp['WTI'])}, Brent {I(cpp['Brent'])}, against Heating Oil {I(cpp['HeatingOil'])}) "
-            f"although the curves were the most backwardated of the sample (WTI F1-F3 backwardated on 87% of days in P3 against 24% in P1 and 46% in P2). The V2 signal is measured against each curve's own trailing 252-day slope, so a high level of backwardation does not by itself produce Carry returns."))
+            f"although the curves were the most backwardated of the sample (WTI F1-F3 backwardated on {sl_wti['p3'][1]:.0f}% of days in P3 against {sl_wti['p1'][1]:.0f}% in P1 and {sl_wti['p2'][1]:.0f}% in P2). Carry compares each pair's slope with its own trailing 252-day history, so a high level of backwardation does not by itself produce Carry returns."))
     B(("b", f"Value ({line(val)}) is the one consistent drag among the four core strategies on a full-sample basis, negative in P1 (IR {I(pv[0])}) and P3 ({I(pv[2])}) and marginally positive in P2 ({I(pv[1])}). "
             f"The 2014-2016 price collapse (WTI from $107 to $26), triggered by US shale supply growth and OPEC's decision to hold output, behaves as a persistent trend rather than a mean-reverting cycle, exactly the environment a reversion strategy is built to lose in. "
-            f"It correlates at {N(cw.loc['Value', 'Momentum'])} with Momentum and {N(cw.loc['Value', 'Carry'])} with Carry, the same diversification relationship seen in Metals (-0.50 with Momentum)."))
+            f"It correlates at {N(cw.loc['Value', 'Momentum'])} with Momentum and {N(cw.loc['Value', 'Carry'])} with Carry, the same diversification relationship seen in Metals ({N(corr_within('metals').loc['Value', 'Momentum'])} with Momentum)."))
     B(("b", f"Skewness ({line(sk)}): negative in P1 (IR {I(ps[0])}) and positive in P2 ({I(ps[1])}) and P3 ({I(ps[2])}); excluding Natural Gas it is {I(sx['Skewness']['ir'])} (Return {R(sx['Skewness']['ret'])}). It works in the four oil products (WTI {I(skp['WTI'])}, Brent {I(skp['Brent'])}, RBOB {I(skp['RBOB'])}, Heating Oil {I(skp['HeatingOil'])}) and fails in Natural Gas ({I(skp['NatGas'])}). "
-            f"Its P2 and P3 results are largely one long position. The signal turned long on {wti_flip.day} {wti_flip.strftime('%B %Y')} in the middle of the 2020 collapse (WTI settled at -$37.63 on 20 April): the sleeve lost {abs(wti_crash):.2f} in log return in WTI over March and April, then earned {N(wti_after)} from May 2020 to December 2021 as prices recovered. "
+            f"Its P2 and P3 results are largely one long position. The signal turned long on {wti_flip.day} {wti_flip.strftime('%B %Y')} in the middle of the 2020 collapse (the May contract settled at -$37.63 on 20 April, a value our series replaces with an imputed ${wti_apr20:.2f}): the sleeve lost {abs(wti_crash):.2f} in log return in WTI over March and April, then earned {N(wti_after)} from May 2020 to December 2021 as prices recovered. "
             f"The trailing-year skewness of oil returns then stayed negative for years, so the sleeve was long on {U(lpct3['WTI'],0)}% of P3 days in WTI, {U(lpct3['Brent'],0)}% in Brent and {U(lpct3['RBOB'],0)}% in RBOB, and earned the 2022 spike and the 2026 war rally (P3 IR {I(wti_p3)} in WTI, {I(rb_p3)} in RBOB). "
             f"In P1 it was long on {U(lpct3['WTI'] * 0 + lg['WTI']['p1']['long_pct'],0)}% of WTI days and lost on those days ({N(lg['WTI']['p1']['long_pnl'])} in log return) as oil fell. For the ex-NatGas sleeve, calendar years 2020, 2021, 2022 and 2026 add {yrs.sum():.2f} of log return against a full-sample total of {totx:.2f}, so the other eleven years net {totx - yrs.sum():.2f}. "
             f"In Natural Gas the long leg loses {abs(lg['NatGas']['full']['long_pnl']):.2f} in log return over the sample and the sleeve ends {abs(natgas_path):.0f}% below its start. It correlates at {N(cw.loc['Skewness', 'Momentum'])} with Momentum, {N(cw.loc['Skewness', 'Carry'])} with Carry, {N(cw.loc['Skewness', 'CarryMom'])} with Carry-Momentum and {N(cw.loc['Skewness', 'Value'])} with Value."))
     B(("b", f"Portfolio construction: Equal Weight ({line(ew)}) and Inverse Vol ({line(iv)}) are almost identical and both positive in every period (Equal Weight P1 {I(ewD[0])}, P2 {I(ewD[1])}, P3 {I(ewD[2])}; Inverse Vol P1 {I(ivD[0])}, P2 {I(ivD[1])}, P3 {I(ivD[2])}). "
             f"Unlike Metals, where Inverse Vol lifts the portfolio, the choice of weighting makes no material difference in Energy. Adding Skewness as a fifth sleeve lifts the IR (Equal Weight {I(ew4['ir'])} to {I(ew['ir'])}, Inverse Vol {I(iv4['ir'])} to {I(iv['ir'])}) and lowers volatility (Equal Weight {V(ew4['vol'])} to {V(ew['vol'])}, Inverse Vol {V(iv4['vol'])} to {V(iv['vol'])}), mostly through P2 and P3."))
-    B(("b", f"Excluding Natural Gas (Energy ex-NatGas) improves every sleeve: Momentum {I(mom['ir'])} to {I(sx['Momentum']['ir'])}, Carry {I(car['ir'])} to {I(sx['Carry']['ir'])}, Carry-Momentum {I(cm['ir'])} to {I(sx['CarryMom']['ir'])}, Value {I(val['ir'])} to {I(sx['Value']['ir'])}, Skewness {I(sk['ir'])} to {I(sx['Skewness']['ir'])} (IR). "
-            f"Equal Weight ({line(ewx)}) and Inverse Vol ({line(ivx)}) rise accordingly (from IR {I(ew['ir'])} and {I(iv['ir'])} with Natural Gas)."))
-    B(("b", f"Individual-product decomposition: Momentum and Carry-Momentum work across WTI, Brent, RBOB, and Heating Oil (IR {I(lo)} to {I(hi)}) but carry no edge in Natural Gas (IR {I(mp['NatGas'])} and {I(cmp_['NatGas'])}), consistent with gas's weather- and basis-driven price action decoupling from the broader term-structure logic: "
-            f"the Natural Gas curve was in contango on 87%, 75% and 74% of days in the three periods, and Henry Hub averaged $2.77 in 2012, the lowest since 1999, on a mild winter, record storage and rising shale output (EIA). "
-            f"Value is negative in four of the five products (IR {I(min(neg))} to {I(max(neg))}) and flat in Brent ({I(vp['Brent'])}), a broad, structural failure, not a concentration issue the way Momentum's weakness in Metals was."))
+    B(("b", f"Excluding Natural Gas (Energy ex-NatGas) improves Momentum, Value and above all Skewness but lowers Carry and Carry-Momentum: Momentum {I(mom['ir'])} to {I(sx['Momentum']['ir'])}, Carry {I(car['ir'])} to {I(sx['Carry']['ir'])}, Carry-Momentum {I(cm['ir'])} to {I(sx['CarryMom']['ir'])}, Value {I(val['ir'])} to {I(sx['Value']['ir'])}, Skewness {I(sk['ir'])} to {I(sx['Skewness']['ir'])} (IR). "
+            f"Equal Weight ({line(ewx)}) and Inverse Vol ({line(ivx)}) are higher (from IR {I(ew['ir'])} and {I(iv['ir'])} with Natural Gas), mainly because of Skewness."))
+    B(("b", f"Individual-product decomposition: Momentum and Carry-Momentum work across WTI, Brent, RBOB, and Heating Oil (IR {I(lo)} to {I(hi)}). Natural Gas is the outlier: Momentum has no edge ({I(mp['NatGas'])}) and Carry-Momentum earns {I(cmp_['NatGas'])}, almost all of it in P3 (P1 {I(ngcm[0])}, P2 {I(ngcm[1])}, P3 {I(ngcm[2])}), consistent with gas's weather- and basis-driven price action decoupling from the broader term-structure logic: "
+            f"the Natural Gas F1-F3 curve was in contango on {100 - sl_ng['p1'][1]:.0f}%, {100 - sl_ng['p2'][1]:.0f}% and {100 - sl_ng['p3'][1]:.0f}% of days in the three periods, and Henry Hub averaged $2.77 in 2012, the lowest since 1999, on a mild winter, high storage and rising shale output (EIA). "
+            f"Value is negative in four of the five products (IR {I(min(neg))} to {I(max(neg))}) and flat in Brent ({I(vp['Brent'])}), a broad failure across products rather than one product's loss."))
     B(("b", "Physical storage bottlenecks, pipeline capacity limits, and producers' structural need to hedge downside force the market to pay a continuous insurance premium to whoever takes the other side of that risk, "
             "the same economic logic that shows up as Carry-Momentum's clean, all-period positive record above. This is an interpretation consistent with the results, not a test of the hedging pressure hypothesis."))
     B(("fig", "fig_energy_combined.png", "Figure 2. Energy: Combined Strategy Performance (Cumulative Return, 2012-2026)"))

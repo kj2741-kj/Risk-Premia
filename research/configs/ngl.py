@@ -54,6 +54,7 @@ import sys
 import numpy as np
 import pandas as pd
 
+from imputed_tenors import apply_imputed   # research/imputed_tenors.py (same folder tree as engine.py on sys.path)
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _RESEARCH_DIR = os.path.dirname(_THIS_DIR)
 _REPO_ROOT = os.path.dirname(_RESEARCH_DIR)
@@ -132,7 +133,10 @@ def load_curve(product: str) -> pd.DataFrame:
     cols = {f"F{t + 1}": pd.to_numeric(raw[t + 1], errors="coerce").values for t in range(n_tenors)}
     curve = pd.DataFrame(cols, index=dates.values)
     curve = curve[curve.index.notna()].sort_index()
-    return curve.loc[ANALYSIS_START:]
+    curve = curve.loc[ANALYSIS_START:]
+    if product == "Isobutane":
+        curve = apply_imputed(curve, "ISOBUTANE")   # F14 missing 2013-03-01..20, F14 = F13, see imputed_tenors.py
+    return curve
 
 
 def load_f1_series(product: str) -> pd.DataFrame:

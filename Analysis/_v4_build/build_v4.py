@@ -10,7 +10,7 @@ from text_agri import agri
 from text_corr import correlation, crosscommodity
 from text_appendix import appendix, verification
 
-OUT = r"C:\Users\Kartavya\Desktop\NYU\Summer\Risk Premia\Analysis\Risk Premia Analysis v4_2012.docx"
+OUT = r"C:\Users\Kartavya\Desktop\NYU\Summer\Risk Premia\Analysis\Risk Premia Analysis v5_2012.docx"
 if os.path.exists(OUT):
     sys.exit("refusing to overwrite " + OUT)
 blocks = []

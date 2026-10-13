@@ -11,14 +11,14 @@ def agri():
     ewD, ivD = per(v, "EW PORT"), per(v, "Inverse Vol")
     ew4D, iv4D = [st4(v, "EW PORT", w)["ir"] for w in ("p1", "p2", "p3")], [st4(v, "Inverse Vol", w)["ir"] for w in ("p1", "p2", "p3")]
     cw = corr_within(v)
-    chk(all(st(v, k)["ir"] < 0 for k in CORE) and sk["ir"] > 0.2, "agri: every core strategy negative, Skewness positive")
+    chk(all(st(v, k)["ir"] < 0 for k in ("Momentum", "CarryMom", "Value")) and abs(car["ir"]) < 0.05 and sk["ir"] > 0.2, "agri: Momentum, Carry-Momentum and Value negative, Carry flat, Skewness the only worthwhile positive")
     chk(ew["ir"] < 0 and iv["ir"] < 0, "agri portfolios negative")
     mp = {p: pst(a, p, "Momentum")["ir"] for p in pr}
     chk(all(mp[p] < 0 for p in ("Corn", "Wheat", "Soybean", "Sugar")) and mp["SoybeanOil"] > 0 and mp["Coffee"] > 0, "agri Momentum by product")
     chk(pm[0] < 0 and pm[2] < 0 and pm[1] > 0, "agri Momentum periods")
-    chk(pc[0] > 0 and pcm[0] > 0 and pc[1] > 0 and pcm[1] > 0 and pc[2] < -0.5 and pcm[2] < -0.5, "agri Carry/CarryMom periods")
+    chk(pc[0] < 0 and pcm[0] < 0 and pc[1] > 0 and pcm[1] > 0 and pc[2] < -0.3 and pcm[2] < -0.5, "agri Carry/CarryMom: negative P1, positive P2, worst in P3")
     cof_cm = pper(a, "Coffee", "CarryMom"); cof_c = pper(a, "Coffee", "Carry")
-    chk(round(cof_cm[1], 2) == 1.31 and round(cof_cm[2], 2) == -0.89 and round(cof_c[2], 2) == -0.72, "agri Coffee swing")
+    chk(round(cof_cm[1], 2) == 0.88 and round(cof_cm[2], 2) == -0.64 and round(cof_c[2], 2) == -0.61, "agri Coffee swing")
     tt = tenor_table(v)
     chk(round(tt["Carry"]["prev"], 2) == -0.23 and round(tt["Carry"]["long"], 2) == 0.14, "agri tenor table")
     chk(all(x <= 0.0 for x in (pv[1], pv[2])) and abs(pv[0]) < 0.05, "agri Value periods")
@@ -35,34 +35,48 @@ def agri():
     soy_y = yearly_log(nets()[(a, "Soybean")]["Skewness"]); soyoil_y = yearly_log(nets()[(a, "SoybeanOil")]["Skewness"])
     chk(round(sy.loc[2022], 2) == 0.27 and cy.loc[2022] > 0.4 and soyoil_y.loc[2022] > 0.4 and soy_y.loc[2022] > 0.3 and wy.loc[2023] > 0.3, "agri Skewness 2022-2023")
     chk(ps[0] > 0 and ps[1] < 0 and ps[2] > 0.5, "agri Skewness periods")
-    chk(ewD[2] < -0.3 and ivD[2] < -0.3 and ew4D[2] < ewD[2] and iv4D[2] < ivD[2], "agri P3 losses and Skewness trims them")
+    chk(ewD[2] < -0.3 and ivD[2] < -0.25 and ew4D[2] < ewD[2] and iv4D[2] < ivD[2] and ewD[0] < 0 and ivD[0] < 0 and ewD[1] > 0 and ivD[1] > 0, "agri portfolios: P1 negative, P2 positive, P3 clearly negative; Skewness trims P3")
     core = {(p, k): pst(a, p, k)["ir"] for p in pr for k in CORE}
     best = max(core, key=core.get); worst3 = sorted(core, key=core.get)[:3]
-    chk(best == ("Coffee", "CarryMom") and round(core[best], 2) == 0.14, "agri best core product-sleeve")
+    chk(best == ("SoybeanOil", "Carry") and round(core[best], 2) == 0.22, "agri best core product-sleeve")
     chk(set(worst3) == {("Wheat", "CarryMom"), ("Corn", "Value"), ("Corn", "Momentum")}, f"agri weakest core product-sleeves {worst3}")
     allres = {(p, k): pst(a, p, k)["ir"] for p in pr for k in SLEEVES}
     chk(max(allres, key=allres.get) == ("SoybeanOil", "Skewness"), "agri best product-sleeve overall is SoybeanOil Skewness")
     names = {"CarryMom": "Carry-Momentum", "Momentum": "Momentum", "Value": "Value", "Carry": "Carry", "Skewness": "Skewness"}
+    skpn = lambda p: {"SoybeanOil": "Soybean Oil"}.get(p, p)
+    # checks added in the final verification pass
+    _a = importlib.import_module("agri")
+    _c = {p_: _a.load_curve(p_)["F1"] for p_ in ("Coffee", "Wheat", "Corn", "SoybeanOil")}
+    chk(abs(_c["Coffee"].loc["2021-07-26"] / _c["Coffee"].loc["2021-07-19"] - 1 - 0.34) < 0.005 and _c["Coffee"].loc["2021-07":"2021-08"].idxmax() == pd.Timestamp("2021-07-26"), "agri arabica +34% 19 to 26 July 2021")
+    chk(round(_c["Coffee"].loc["2025-02-13"] / 100, 2) == 4.39 and _c["Coffee"].idxmax() == pd.Timestamp("2025-02-13") and round(_c["Coffee"].loc["2026-09-23"] / 100, 2) == 2.76, "agri Coffee $4.39 high and $2.76 end")
+    chk(round(_c["Wheat"].loc["2022-03-07"] / 100, 2) == 14.25 and _c["Wheat"].loc["2022"].idxmax() == pd.Timestamp("2022-03-07") and abs(_c["Wheat"].loc["2026-09-23"] / 100 - 7.085) < 1e-6, "agri Wheat levels")
+    chk(round(_c["Corn"].loc["2022-04-29"] / 100, 2) == 8.18 and round(_c["Corn"].loc["2026-09-23"] / 100, 2) == 5.29 and round(_c["SoybeanOil"].loc["2022-04-28"], 1) == 90.6 and round(_c["SoybeanOil"].loc["2026-09-23"], 1) in (67.2, 67.3), "agri Corn and Soybean Oil levels")
+    ex_cof = [p_ for p_ in pr if p_ != "Coffee"]
+    _xc = {k_: ew_intersection([nets()[(a, p_)][k_] for p_ in ex_cof]) for k_ in ("Carry", "CarryMom")}
+    chk(stats(_xc["CarryMom"], "p2")["ir"] < 0 < pcm[1] and stats(_xc["Carry"], "p3")["ir"] > pc[2] + 0.3, "agri Coffee is the swing: without it Carry-Momentum is negative in P2 and Carry is not negative in P3")
+    cvv = {p_: pper(a, p_, "Value") for p_ in pr}
+    chk(min(cvv, key=lambda q: cvv[q][0]) == "Corn" and cvv["Coffee"][0] > 0.5, "agri Corn Value is the weakest product in P1; Coffee offsets with a positive P1")
+    chk(stats(PORT[v][0], "p3")["ret"] * 4.73 < stats(PORT[v][0], "p1")["ret"] * 5 and stats(PORT[v][1], "p1")["ret"] < 0, "agri Equal Weight P3 loss larger than P1; Inverse Vol loses in P1 too")
     blocks = [("h2", "Agriculture")]
     B = blocks.append
-    B(("b", f"Agriculture (six products: Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar) has no edge in any of the four core sleeves: all four are net negative full-sample, and Equal Weight ({line(ew)}) and Inverse Vol ({line(iv)}) follow. "
-            f"Skewness ({line(sk)}) is the only sleeve with a positive full-sample IR. Together with Precious Metals it is one of the two asset classes where neither portfolio construction earns a positive IR."))
-    B(("b", f"Momentum ({line(mom)}) is negative in P1 (IR {I(pm[0])}) and P3 ({I(pm[2])}) and marginally positive in P2 ({I(pm[1])}). By product it fails in Corn ({I(mp['Corn'])}), Wheat ({I(mp['Wheat'])}), Soybean ({I(mp['Soybean'])}) and Sugar ({I(mp['Sugar'])}) and works only modestly in Soybean Oil ({I(mp['SoybeanOil'])}) and Coffee ({I(mp['Coffee'])})."))
-    B(("b", f"Carry ({line(car)}) and Carry-Momentum ({line(cm)}) earn a positive IR in P1 (Carry {I(pc[0])}, Carry-Momentum {I(pcm[0])}) and P2 ({I(pc[1])} / {I(pcm[1])}) and are at their worst in P3 ({I(pc[2])} / {I(pcm[2])}). "
+    B(("b", f"Agriculture (six products: Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar) has no edge in any of the four core sleeves: Momentum ({I(mom['ir'])}), Carry-Momentum ({I(cm['ir'])}) and Value ({I(val['ir'])}) are net negative full-sample and Carry is flat ({I(car['ir'])}), and Equal Weight ({line(ew)}) and Inverse Vol ({line(iv)}) follow. "
+            f"Skewness ({line(sk)}) is the only sleeve with a worthwhile positive full-sample IR. Together with Precious Metals it is one of the two asset classes where neither portfolio construction earns a positive IR."))
+    B(("b", f"Momentum ({line(mom)}) is negative in P1 (IR {I(pm[0])}) and P3 ({I(pm[2])}) and marginally positive in P2 ({I(pm[1])}). By product it is negative in Corn ({I(mp['Corn'])}), Wheat ({I(mp['Wheat'])}), Soybean ({I(mp['Soybean'])}) and Sugar ({I(mp['Sugar'])}) and only modestly positive in Soybean Oil ({I(mp['SoybeanOil'])}) and Coffee ({I(mp['Coffee'])})."))
+    B(("b", f"Carry ({line(car)}) and Carry-Momentum ({line(cm)}) are negative in P1 (Carry {I(pc[0])}, Carry-Momentum {I(pcm[0])}), positive in P2 ({I(pc[1])} / {I(pcm[1])}) and at their worst in P3 ({I(pc[2])} / {I(pcm[2])}). "
             f"Coffee is the swing: Carry-Momentum in Coffee returns IR {I(cof_cm[1])} in P2, when the July 2021 Brazilian frosts lifted arabica by 34% in a week in our series (19 to 26 July) to its highest front-month price since October 2014 (Reuters, Bloomberg), and {I(cof_cm[2])} in P3 (Carry {I(cof_c[2])}), "
-            f"after the price reached its high of $4.39/lb in our series on 13 February 2025 (market sources put the record for the most active contract at about $4.30 that month and the later all-time high at $4.38 on 23 October 2025) and fell back to $2.76/lb by 23 September 2026 in our series."))
-    B(("b", f"The long tenor pair matters little for the result. Carry IR: previous single pair (F1-F2) {I(tt['Carry']['prev'])}, long pair alone {I(tt['Carry']['long'])}, two-pair blend {I(tt['Carry']['two'])}. Carry-Momentum IR: previous single pair {I(tt['CarryMom']['prev'])}, long pair alone {I(tt['CarryMom']['long'])}, two-pair blend {I(tt['CarryMom']['two'])}."))
-    B(("b", f"Value ({line(val)}) is flat to negative: flat in P1 (IR {I(pv[0])}), negative in P2 ({I(pv[1])}) and P3 ({I(pv[2])}). Corn explains much of the P1 weakness in the individual products: Corn Value has an IR of {I(cvp1)} in P1 and loses in every year from 2012 to 2016 (log returns of {', '.join(N(cv.loc[y]) for y in range(2012, 2017))}), "
+            f"after the price reached its high of $4.39/lb in our series on 13 February 2025 (our series is the front-month, March, contract; the most active contract set its record at about $4.30 that month) and fell back to $2.76/lb by 23 September 2026 in our series."))
+    B(("b", f"The long tenor pair matters differently for the two sleeves. Carry IR: short pair alone (F1-F2) {I(tt['Carry']['prev'])}, long pair alone {I(tt['Carry']['long'])}, two-pair sum {I(tt['Carry']['two'])}. Carry-Momentum IR: short pair alone {I(tt['CarryMom']['prev'])}, long pair alone {I(tt['CarryMom']['long'])}, two-pair sum {I(tt['CarryMom']['two'])}. The sum improves on the short pair for Carry but not for Carry-Momentum, and neither sum beats the better single pair."))
+    B(("b", f"Value ({line(val)}) is flat to negative: flat in P1 (IR {I(pv[0])}), negative in P2 ({I(pv[1])}) and slightly negative in P3 ({I(pv[2])}). Corn is the weakest product in P1, where the class is flat only because Coffee offsets it (Coffee Value IR {I(cvv['Coffee'][0])}): Corn Value has an IR of {I(cvp1)} in P1 and loses in every year from 2012 to 2016 (log returns of {', '.join(N(cv.loc[y]) for y in range(2012, 2017))}), "
             f"starting with the 2012 US drought that pushed corn to a record, with USDA projecting record season-average prices of $7.50 to $8.90 per bushel in August 2012. Value shorts a market that trades more than 10% above its five-year average."))
-    B(("b", f"Skewness ({line(sk)}) is the one positive sleeve: IR {I(ps[0])} in P1, {I(ps[1])} in P2 and {I(ps[2])} in P3. It works in four of the six products (Soybean Oil {I(skp['SoybeanOil'])}, Soybean {I(skp['Soybean'])}, Corn {I(skp['Corn'])}, Wheat {I(skp['Wheat'])}) and fails in Coffee ({I(skp['Coffee'])}) and Sugar ({I(skp['Sugar'])}). "
+    B(("b", f"Skewness ({line(sk)}) is the one clearly positive sleeve: IR {I(ps[0])} in P1, {I(ps[1])} in P2 and {I(ps[2])} in P3. It works in four of the six products (Soybean Oil {I(skp['SoybeanOil'])}, Soybean {I(skp['Soybean'])}, Corn {I(skp['Corn'])}, Wheat {I(skp['Wheat'])}) and is negative in Coffee ({I(skp['Coffee'])}) and Sugar ({I(skp['Sugar'])}). "
             f"The clearest case is Wheat: its returns are spike-prone (the 2012 drought, the 2022 invasion of Ukraine), so its trailing-year skewness is positive most of the time and the sleeve is short on {100 - lg['Wheat']['full']['long_pct']:.0f}% of days; that short leg earns {N(lg['Wheat']['full']['short_pnl'])} in log return over the sample, "
-            f"including {N(lg['Wheat']['p3']['short_pnl'])} in P3 as Wheat fell from $14.25 on 7 March 2022 to $7.09. In 2022 Corn, Soybean Oil and Soybean add {N(cy.loc[2022])}, {N(soyoil_y.loc[2022])} and {N(soy_y.loc[2022])} in log return, and Wheat adds {N(wy.loc[2023])} in 2023 as it fell. In Coffee, where the 2021 frost and the 2025 record were followed by sharp reversals, the signal loses on both legs (long leg {N(lg['Coffee']['full']['long_pnl'])}, short leg {N(lg['Coffee']['full']['short_pnl'])}). "
+            f"including {N(lg['Wheat']['p3']['short_pnl'])} in P3 as Wheat fell from ${_c['Wheat'].loc['2022-03-07'] / 100:.2f} on 7 March 2022 to $7.09. In 2022 Corn, Soybean Oil and Soybean add {N(cy.loc[2022])}, {N(soyoil_y.loc[2022])} and {N(soy_y.loc[2022])} in log return, and Wheat adds {N(wy.loc[2023])} in 2023 as it fell. In Coffee, where the 2021 frost and the 2025 record were followed by sharp reversals, the signal loses on both legs (long leg {N(lg['Coffee']['full']['long_pnl'])}, short leg {N(lg['Coffee']['full']['short_pnl'])}). "
             f"It correlates at {N(cw.loc['Skewness', 'Momentum'])} with Momentum, {N(cw.loc['Skewness', 'Carry'])} with Carry, {N(cw.loc['Skewness', 'CarryMom'])} with Carry-Momentum and {N(cw.loc['Skewness', 'Value'])} with Value."))
-    B(("b", f"Portfolio construction: Equal Weight is positive in P1 ({I(ewD[0])}) and P2 ({I(ewD[1])}) and Inverse Vol in P1 ({I(ivD[0])}) and P2 ({I(ivD[1])}); both are clearly negative in P3 ({I(ewD[2])} / {I(ivD[2])}), and the P3 losses drive the negative full-sample result. "
+    B(("b", f"Portfolio construction: Equal Weight is slightly negative in P1 ({I(ewD[0])}) and positive in P2 ({I(ewD[1])}), and Inverse Vol is negative in P1 ({I(ivD[0])}) and marginally positive in P2 ({I(ivD[1])}); both are clearly negative in P3 ({I(ewD[2])} / {I(ivD[2])}), and the P3 losses are the main drag on the full-sample result (Inverse Vol also loses in P1). "
             f"Skewness trims them (P3 Equal Weight {I(ew4D[2])} to {I(ewD[2])}, Inverse Vol {I(iv4D[2])} to {I(ivD[2])}; full-sample Equal Weight {I(ew4['ir'])} to {I(ew['ir'])}, Inverse Vol {I(iv4['ir'])} to {I(iv['ir'])}). "
             f"P3 opens with the Russia-Ukraine price spike and its reversal: Wheat peaked at $14.25/bu on 7 March 2022 and was $7.09 by 23 September 2026, Corn went from $8.18 on 29 April 2022 to $5.29 and Soybean Oil from 90.6 cents/lb on 28 April 2022 to 67.3, "
             f"while the FAO food price index peaked in March 2022 (159.3 points, the highest since 1990) and its 2023 average was 13.7% below 2022. Sharp spikes followed by reversals, in grains in 2022 and in coffee in 2024-2025, are the pattern signals built on trend and curve slope handle worst."))
-    B(("b", f"Individual-product decomposition: no core sleeve works across the six products. The best single core product-sleeve result is Coffee Carry-Momentum (IR {I(core[best])}) and the three weakest are Wheat Carry-Momentum ({I(core[('Wheat', 'CarryMom')])}), Corn Value ({I(core[('Corn', 'Value')])}) and Corn Momentum ({I(core[('Corn', 'Momentum')])}); "
+    B(("b", f"Individual-product decomposition: no core sleeve works across the six products. The best single core product-sleeve result is {skpn(best[0])} {names[best[1]]} (IR {I(core[best])}) and the three weakest are Wheat Carry-Momentum ({I(core[('Wheat', 'CarryMom')])}), Corn Value ({I(core[('Corn', 'Value')])}) and Corn Momentum ({I(core[('Corn', 'Momentum')])}); "
             f"no core product-sleeve result is above {I(core[best])}. The best results overall are Skewness in Soybean Oil ({I(skp['SoybeanOil'])}) and Soybean ({I(skp['Soybean'])})."))
     B(("fig", "fig_agri_combined.png", "Figure 5. Agriculture: Combined Strategy Performance (Cumulative Return, 2012-2026)"))
     return blocks

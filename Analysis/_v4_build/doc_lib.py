@@ -4,7 +4,7 @@ from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 V3 = r"C:\Users\Kartavya\Desktop\NYU\Summer\Risk Premia\Analysis\Risk Premia Analysis v3_2012.docx"
-IMG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v4img")
+IMG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "v5img")
 
 
 def new_doc():

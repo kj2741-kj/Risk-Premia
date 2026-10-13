@@ -46,3 +46,7 @@ See `ENGINE_CHANGELOG.md` (dated, file-by-file) before changing data paths, roll
 ## Streamlit Cloud and shared modules (2026-10-12)
 
 A running Streamlit Cloud app keeps imported modules across a git pull and reloads only files inside the app's own folder, so a push that changes `common_engine.py`, `research/*` or `scripts/*` can leave a live app with the old module and a new `app.py` (ImportError / AttributeError at the import lines). Every `app.py` therefore calls `_refresh_repo_modules()` after the `sys.path` setup, which drops stale repo modules. Keep that call above the first repo import in any new app. If an app still shows the old error, reboot it once from Manage app.
+
+## Imputed prices (2026-10-13)
+
+Heating Oil F13 (2012-04-02 to 27) and Isobutane F14 (2013-03-01 to 20) are missing in the provider files and are filled in the loaders (`research/imputed_tenors.py`, data in `data/Imputed_Tenors/`, same-grade rule, missing cells only). Any new loader that reads the curve files directly must call `apply_imputed` / `apply_imputed_for_sheet`, or Carry on those two products will differ between apps.

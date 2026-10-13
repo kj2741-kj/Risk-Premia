@@ -32,3 +32,17 @@ if "tenor_table" not in globals():
             "Carry": {"prev": stats(cls("carry_single_prev"))["ir"], "short": stats(cls("carry_short"))["ir"], "long": stats(cls("carry_long"))["ir"], "two": st(v, "Carry")["ir"]},
             "CarryMom": {"prev": stats(cls("cm_single_prev"))["ir"], "short": stats(cls("cm_short"))["ir"], "long": stats(cls("cm_long"))["ir"], "two": st(v, "CarryMom")["ir"]},
         }
+
+def slope_stats(a, p, near="F1", far="F13"):
+    """Average carry slope (near - far) / near and the share of days with a positive slope (backwardation), by period, on the product's own price dates."""
+    import importlib
+    for q in ("research", os.path.join("research", "configs")):
+        pth = os.path.join(REPO, q)
+        if pth not in sys.path: sys.path.insert(0, pth)
+    from engine import _carry_base
+    s = _carry_base(importlib.import_module(a).load_curve(p), near, far)
+    out = {}
+    for w in ("p1", "p2", "p3"):
+        x = s.loc[WINDOWS[w][0]:WINDOWS[w][1]] if WINDOWS[w][1] else s.loc[WINDOWS[w][0]:]
+        out[w] = (100 * x.mean(), 100 * (x > 0).mean())
+    return out

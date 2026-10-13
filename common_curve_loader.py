@@ -120,4 +120,9 @@ def load_curve_simple(filepath: str, sheet_name: str) -> pd.DataFrame:
     df = df.dropna(subset=["Date"]).set_index("Date").sort_index()
     for c in df.columns:
         df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df
+    import os, sys
+    _r = os.path.join(os.path.dirname(os.path.abspath(__file__)), "research")
+    if _r not in sys.path:
+        sys.path.insert(0, _r)
+    from imputed_tenors import apply_imputed_for_sheet   # fills Heating Oil F13 / Isobutane F14 gaps, missing cells only (research/imputed_tenors.py)
+    return apply_imputed_for_sheet(df, filepath, sheet_name)

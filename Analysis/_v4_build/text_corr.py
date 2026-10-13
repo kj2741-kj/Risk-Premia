@@ -1,5 +1,23 @@
 from facts3 import *
 
+def low_ew_name_ok(ps):
+    return min(ps, key=lambda d: d["ew"]["ir"])["name"] == min(ps, key=lambda d: d["iv"]["ir"])["name"]
+
+
+def value_skew_positions():
+    """Daily position correlation of Value and Skewness per Precious Metals product, and the share of Value-short days on which Skewness is long."""
+    cfg = importlib.import_module("precious")
+    from engine import value_v1_position
+    pc, share = {}, []
+    for p in PRODUCTS["precious"]:
+        curve = cfg.load_curve(p); lp = cfg.load_f1_series_logret(p)["log_price"]
+        vp = value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS, cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N).reindex(lp.index).fillna(0)
+        sp = exec_shift(raw_signal_skewness(lp, 252), 1).fillna(0)
+        df = pd.concat([vp, sp], axis=1, keys=["v", "s"]).loc["2012-01-01":]
+        pc[p] = float(df.corr().iloc[0, 1]); share.append(100 * float((df.s[df.v == -1] > 0).mean()))
+    return pc, min(share), max(share)
+
+
 CLS5 = ["metals", "energy", "ngl", "precious", "agri"]
 
 
@@ -26,13 +44,15 @@ def correlation():
     chk(sv["precious"] == min(sv.values()) and sv["ngl"] > 0 and all(sv[v] < 0 for v in ("metals", "energy", "precious", "agri")), "Skewness-Value pattern")
     smom = {v: cw[v].loc["Skewness", "Momentum"] for v in CLS5}; scar = {v: cw[v].loc["Skewness", "Carry"] for v in CLS5}
     chk(smom["ngl"] == min(smom.values()) and scar["ngl"] == min(scar.values()), "Skewness most negative with Momentum and Carry in NGL")
+    pc, vs_lo, vs_hi = value_skew_positions()
+    chk(pc["Palladium"] < pc["Gold"] < -0.3 and vs_lo > 65, "Value and Skewness hold opposite positions in Precious Metals")
     L = lambda d: f"{N(d['metals'])} in Metals, {N(d['energy'])} in Energy, {N(d['ngl'])} in NGL, {N(d['precious'])} in Precious Metals and {N(d['agri'])} in Agriculture"
-    B(("b", f"Value is the least correlated sleeve with its own EW PORT in every asset class, correlating at {L(vew)}. Skewness is the second least correlated in every class ({L(sew)}), so the two sleeves with the weakest links to the portfolio are the two that are not driven by trend or curve slope. "
+    B(("b", f"Value is the least correlated sleeve with its own EW PORT in every asset class, correlating at {L(vew)}. Skewness is the second least correlated in every class ({L(sew)}), so the two sleeves with the weakest links to the portfolio are the two that are not built on trend or curve slope, which is consistent with, not a test of, their acting as diversifiers. "
             f"In NGL and Agriculture, where Value is positively correlated with the portfolio, it is still the lowest of the five."))
-    B(("b", f"Momentum and Carry are the most correlated pair of base strategies in Energy ({N(cw['energy'].loc['Momentum', 'Carry'])}), NGL ({N(cw['ngl'].loc['Momentum', 'Carry'])}) and Agriculture ({N(cw['agri'].loc['Momentum', 'Carry'])}), both moving with the same underlying trend signal. "
+    B(("b", f"Momentum and Carry are the most correlated pair of base strategies in Energy ({N(cw['energy'].loc['Momentum', 'Carry'])}), NGL ({N(cw['ngl'].loc['Momentum', 'Carry'])}) and Agriculture ({N(cw['agri'].loc['Momentum', 'Carry'])}), consistent with a common driver behind the two signals (not tested here). "
             f"Metals and Precious Metals each break this pattern: in both, Carry and Carry-Momentum are the closest pair ({N(cw['metals'].loc['Carry', 'CarryMom'])} in Metals, {N(cw['precious'].loc['Carry', 'CarryMom'])} in Precious Metals). "
             f"Value is negatively correlated with Momentum in all five asset classes ({L(vm).replace('in Metals', 'Metals').replace('in Energy', 'Energy').replace('in NGL', 'NGL').replace('in Precious Metals', 'Precious Metals').replace('in Agriculture', 'Agriculture')})."))
-    B(("b", f"Skewness pairs differently by asset class. With Value it is negative in four classes and strongest in Precious Metals ({L(sv)}); in Precious Metals this is because Value shorts the metals that have rallied while Skewness stays long them. "
+    B(("b", f"Skewness pairs differently by asset class. With Value it is negative in four classes and strongest in Precious Metals ({L(sv)}); in Precious Metals the two sleeves tend to hold opposite positions (daily position correlation {N(pc['Palladium'])} in Palladium and {N(pc['Gold'])} in Gold): Value is short when a metal trades well above its long-run average, and Skewness is then long on {U(vs_lo, 0)}% to {U(vs_hi, 0)}% of those days across the four metals, consistent with Value shorting rallies that Skewness stays long. "
             f"With Momentum and Carry it is mostly near zero or mildly negative, and most negative in NGL ({N(smom['ngl'])} and {N(scar['ngl'])}); in Precious Metals it is positive with Carry ({N(scar['precious'])})."))
     B(("b", f"Inverse Vol tracks its own EW PORT closely everywhere, correlating between {U(min(ivew))} and {U(max(ivew))} across all five asset classes, expected since both portfolios are built from the same five sleeves and differ only in how they are weighted."))
     B(("h3", "Cross-Commodity Correlation"))
@@ -48,11 +68,11 @@ def correlation():
     mxcm = max(abs(cc["CarryMom"].loc[a, b]) for a, b in combinations(CLS5, 2))
     others = sorted(v for k, v in avgabs.items() if k not in ("CarryMom", "Carry"))
     B(("b", f"Energy and NGL are the most correlated cross-commodity pair for all seven series types tracked: Momentum ({U(g('Momentum', 'energy', 'ngl'))}), Carry ({U(g('Carry', 'energy', 'ngl'))}), Carry-Momentum ({U(g('CarryMom', 'energy', 'ngl'))}), Value ({U(g('Value', 'energy', 'ngl'))}), Skewness ({U(g('Skewness', 'energy', 'ngl'))}), "
-            f"EW PORT ({U(g('EW PORT', 'energy', 'ngl'))}) and Inverse Vol ({U(g('Inverse Vol', 'energy', 'ngl'))}), both trading the same underlying hydrocarbon complex."))
+            f"EW PORT ({U(g('EW PORT', 'energy', 'ngl'))}) and Inverse Vol ({U(g('Inverse Vol', 'energy', 'ngl'))}), consistent with both trading the same hydrocarbon complex."))
     B(("b", f"Metals-Precious Metals is the second most correlated pair for Momentum ({U(g('Momentum', 'metals', 'precious'))}), Value ({U(g('Value', 'metals', 'precious'))}), Skewness ({U(g('Skewness', 'metals', 'precious'))}), EW PORT ({U(g('EW PORT', 'metals', 'precious'))}) and Inverse Vol ({U(g('Inverse Vol', 'metals', 'precious'))}), "
-            f"despite the two asset classes having different fundamental drivers. For the other two series the pairs behind Energy-NGL are weaker still (second place is Metals-NGL for Carry at {U(g('Carry', 'metals', 'ngl'))} and Energy-Agriculture for Carry-Momentum at {U(g('CarryMom', 'energy', 'agri'))}), "
+            f"a link between the two metal groups that is not explained here. For the other two series the second-place pairs are weaker still (second place is Metals-NGL for Carry at {U(g('Carry', 'metals', 'ngl'))} and Energy-Agriculture for Carry-Momentum at {U(g('CarryMom', 'energy', 'agri'))}), "
             f"and Metals-Precious Metals is essentially uncorrelated for Carry-Momentum ({N(g('CarryMom', 'metals', 'precious'))})."))
-    B(("b", f"Carry-Momentum is the most genuinely diversifying strategy across commodities: its correlations to the same strategy in other asset classes average just {U(avgabs['CarryMom'])} in magnitude, the lowest of the seven series (Carry {U(avgabs['Carry'])}; the other five range {U(others[0])} to {U(others[-1])}), and none of its ten pairwise readings exceeds {U(mxcm)}."))
+    B(("b", f"Carry-Momentum has the lowest cross-commodity correlations of the seven series: its correlations to the same strategy in other asset classes average just {U(avgabs['CarryMom'])} in magnitude (Carry {U(avgabs['Carry'])}; the other five range {U(others[0])} to {U(others[-1])}), and none of its ten pairwise readings exceeds {U(mxcm)}."))
     B(("h3", "Portfolio Construction Implication"))
     ps = pair_stats(False)
     ps_sorted = sorted(ps, key=lambda d: -d["ew"]["ir"])
@@ -60,6 +80,7 @@ def correlation():
     chk(max(ps, key=lambda d: d["corr"])["name"] == "Energy-NGL" and sorted(ps, key=lambda d: -d["corr"])[1]["name"] == "Metals-Precious Metals", "most correlated pairs by EW PORT")
     sc = sorted(ps, key=lambda d: -d["corr"])
     others_corr = [d["corr"] for d in sc[2:]]
+    chk(low_ew_name_ok(ps), "same lowest pair under both constructions")
     chk(ps_sorted[0]["name"] == "Energy-NGL" and max(ps, key=lambda d: d["iv"]["ir"])["name"] == "Energy-NGL", "Energy-NGL best pair under both constructions")
     low_ew = min(ps, key=lambda d: d["ew"]["ir"]); low_iv = min(ps, key=lambda d: d["iv"]["ir"])
     B(("b", f"The Cross-Pair tab shows all ten asset-class pairs. Under the EW PORT measure, Energy-NGL ({U(sc[0]['corr'])}) and Metals-Precious Metals ({U(sc[1]['corr'])}) are the two most correlated pairs; every other pair is at or below {U(max(others_corr))}. "
@@ -67,7 +88,7 @@ def correlation():
     tbl_rows = [[d["name"], U(d["corr"]), I(d["ew"]["ir"]), I(d["iv"]["ir"])] for d in ps_sorted]
     B(("tbl", ["Pair", "EW PORT correlation", "Equal Weight IR", "Inverse Vol IR"], tbl_rows))
     B(("b", f"Correlation and standalone performance are separate questions. Held on its own, Energy-NGL, the most correlated pair, produces the highest full-sample IR of the ten pairs under both constructions (Equal Weight {I(byname['Energy-NGL']['ew']['ir'])}, Inverse Vol {I(byname['Energy-NGL']['iv']['ir'])}), "
-            f"while {low_iv['name']} produces the lowest under Inverse Vol ({I(low_iv['iv']['ir'])}) and {low_ew['name']} is joint lowest under Equal Weight ({I(low_ew['ew']['ir'])}). Two individually strong books can still make a poor diversification pairing simply because they move together."))
+            f"while {low_iv['name']} produces the lowest under both constructions (Equal Weight {I(low_ew['ew']['ir'])}, Inverse Vol {I(low_iv['iv']['ir'])}). Two individually strong books can still make a poor diversification pairing simply because they move together."))
     return blocks
 
 
@@ -87,7 +108,7 @@ def crosscommodity():
     chk(set(only) == {"energy", "ngl"}, f"only Energy and NGL positive in every period {only}")
     chk(st("energy", "EW PORT")["vol"] > 2 * ew["vol"] and st("ngl", "EW PORT")["vol"] > 2 * ew["vol"], "single-class vol more than twice")
     p3 = {k: S_(bs, k, "p3")["ir"] for k in SLEEVES}
-    chk(max(p3, key=p3.get) == "Skewness" and p3["Momentum"] < 0 and 0 < p3["Carry"] < 0.1, "P3 strategy ordering")
+    chk(max(p3, key=p3.get) == "Skewness" and sorted(p3, key=p3.get, reverse=True) == ["Skewness", "Value", "Carry", "CarryMom", "Momentum"] and p3["Momentum"] < 0 and 0 < p3["CarryMom"] < p3["Carry"] < 0.3, "P3 strategy ordering")
     books = combined_book(False); booksx = combined_book(True)
     chk(round(stats(books[("EW", "EW")])["ir"], 2) == round(ew["ir"], 2), "opposite order equals By Style EW")
     oth = [stats(books[k])["ir"] for k in (("EW", "IV"), ("IV", "EW"), ("IV", "IV"))]
@@ -95,11 +116,11 @@ def crosscommodity():
     byname = {d["name"]: d for d in ps}
     neg = [d for d in ps if d["ew"]["ir"] < 0 or d["iv"]["ir"] < 0]
     chk({d["name"] for d in neg} == {"Metals-Precious Metals", "Metals-Agriculture", "Precious Metals-Agriculture"}, "negative pairs")
-    chk(all(d["ewp"][1] < 0 and d["ewp"][2] < 0 for d in neg), "negative pairs negative in P2 and P3 under EW")
+    chk(all(d["ewp"][2] < 0 and d["ivp"][2] < 0 for d in neg), "negative pairs negative in P3 under both constructions")
     gap = sorted(ps, key=lambda d: abs(d["ew"]["ir"] - d["iv"]["ir"]))
     chk(gap[0]["name"] == "Energy-NGL", "Energy-NGL most construction robust")
     drop = max(ps, key=lambda d: d["ew"]["ir"] - d["iv"]["ir"])
-    chk(drop["name"] == "Precious Metals-NGL", "Inverse Vol pulls Precious-NGL down most")
+    chk(drop["name"] == "NGL-Agriculture", "Inverse Vol pulls NGL-Agriculture down most")
     lift = []
     for d in ps:
         if "energy" in (d["a"], d["b"]):
@@ -121,22 +142,22 @@ def crosscommodity():
     B(("b", f"At the top level, combining those five cross-commodity strategies gives Equal Weight ({line(ew)}) and Inverse Vol ({line(iv)}). Inverse Vol is the stronger construction, with the higher return and IR and the shallower drawdown at nearly the same volatility."))
     B(("b", f"The cross-commodity book is positive in every one of the three periods under both constructions (Equal Weight P1 {I(S_(bs, 'EW PORT', 'p1')['ir'])}, P2 {I(S_(bs, 'EW PORT', 'p2')['ir'])}, P3 {I(S_(bs, 'EW PORT', 'p3')['ir'])}; Inverse Vol P1 {I(S_(bs, 'Inverse Vol', 'p1')['ir'])}, P2 {I(S_(bs, 'Inverse Vol', 'p2')['ir'])}, P3 {I(S_(bs, 'Inverse Vol', 'p3')['ir'])}). "
             f"Among the single asset classes only Energy and NGL do the same, and both do so at more than twice the cross-commodity volatility (Equal Weight {V(st('energy', 'EW PORT')['vol'])} and {V(st('ngl', 'EW PORT')['vol'])} against {V(ew['vol'])})."))
-    B(("b", f"The weakest period for the cross-commodity book is P3 (Equal Weight IR {I(S_(bs, 'EW PORT', 'p3')['ir'])}, Inverse Vol {I(S_(bs, 'Inverse Vol', 'p3')['ir'])}), still positive but a fraction of the strength shown in P2. Within the strategies, P3 is the period in which Momentum turns negative ({I(p3['Momentum'])}) while Carry ({I(p3['Carry'])}) and Carry-Momentum ({I(p3['CarryMom'])}) are barely positive; "
+    B(("b", f"The weakest period for the cross-commodity book is P3 (Equal Weight IR {I(S_(bs, 'EW PORT', 'p3')['ir'])}, Inverse Vol {I(S_(bs, 'Inverse Vol', 'p3')['ir'])}), still positive but a fraction of the strength shown in P2. Within the strategies, P3 is the period in which Momentum turns negative ({I(p3['Momentum'])}) while Carry ({I(p3['Carry'])}) and Carry-Momentum ({I(p3['CarryMom'])}) are only modestly positive; "
             f"Skewness ({I(p3['Skewness'])}) and Value ({I(p3['Value'])}) are the best sleeves, and Skewness is also the weakest in P1 ({I(S_(bs, 'Skewness', 'p1')['ir'])})."))
     B(("b", f"Skewness changes the book in three ways. It lifts the full-sample IR (Equal Weight {I(ew4['ir'])} to {I(ew['ir'])}, Inverse Vol {I(iv4['ir'])} to {I(iv['ir'])}) and cuts volatility (Equal Weight {V(ew4['vol'])} to {V(ew['vol'])}) and maximum drawdown ({M(ew4['mdd'])} to {M(ew['mdd'])}); it moves the IR from P1 to P3 "
             f"(Equal Weight P1 {I(S_(b4, 'EW PORT', 'p1')['ir'])} to {I(S_(bs, 'EW PORT', 'p1')['ir'])}, P3 {I(S_(b4, 'EW PORT', 'p3')['ir'])} to {I(S_(bs, 'EW PORT', 'p3')['ir'])}); and it adds commodity beta (see the benchmark correlations below)."))
     B(("b", f"Excluding Natural Gas from Energy lifts the book to Equal Weight ({line(ewx)}) and Inverse Vol ({line(ivx)}). Combining in the opposite order, each asset class's five sleeves first and then the five asset-class portfolios, gives the identical Equal Weight result (IR {I(stats(books[('EW', 'EW')])['ir'])}); "
             f"the three other weighting combinations give IRs of {I(oth[0])}, {I(oth[1])} and {I(oth[2])} (sleeves Equal Weight / across Inverse Vol; sleeves Inverse Vol / across Equal Weight; Inverse Vol at both stages)."))
     en = byname["Energy-NGL"]; enx = next(d for d in psx if d["a"] == "energy_exng" and d["b"] == "ngl")
-    B(("b", f"Across all ten asset-class pairings, Energy-NGL is the best-performing combination under both constructions (Equal Weight {I(en['ew']['ir'])}, Inverse Vol {I(en['iv']['ir'])}; {I(enx['ew']['ir'])} and {I(enx['iv']['ir'])} without Natural Gas) even though it is the most correlated pair, and it beats the five-class book (Equal Weight {I(ew['ir'])}, Inverse Vol {I(iv['ir'])}) at {V(en['ew']['vol'])} volatility against {V(ew['vol'])}. "
+    B(("b", f"Across all ten asset-class pairings, Energy-NGL is the best-performing combination under both constructions (Equal Weight {I(en['ew']['ir'])}, Inverse Vol {I(en['iv']['ir'])}; {I(enx['ew']['ir'])} and {I(enx['iv']['ir'])} without Natural Gas) even though it is the most correlated pair, and it beats the five-class book on IR (Equal Weight {I(ew['ir'])}, Inverse Vol {I(iv['ir'])}) at {V(en['ew']['vol'])} volatility against {V(ew['vol'])}. "
             f"The only pairs with a negative full-sample IR under either construction are the three built from Metals, Precious Metals and Agriculture alone: Metals-Precious Metals ({I(byname['Metals-Precious Metals']['ew']['ir'])} / {I(byname['Metals-Precious Metals']['iv']['ir'])}), Metals-Agriculture ({I(byname['Metals-Agriculture']['ew']['ir'])} / {I(byname['Metals-Agriculture']['iv']['ir'])}) and Precious Metals-Agriculture ({I(byname['Precious Metals-Agriculture']['ew']['ir'])} / {I(byname['Precious Metals-Agriculture']['iv']['ir'])}), "
-            f"and each is negative in both P2 and P3 under Equal Weight, consistent with those three asset classes' own EW PORT IRs of {I(st('metals', 'EW PORT')['ir'])}, {I(st('precious', 'EW PORT')['ir'])} and {I(st('agri', 'EW PORT')['ir'])}. "
-            f"Energy-NGL is the most construction-robust pair (Equal Weight {I(en['ew']['ir'])}, Inverse Vol {I(en['iv']['ir'])}), while Inverse Vol's effect is otherwise uneven: it pulls down Precious Metals-NGL most ({I(drop['ew']['ir'])} to {I(drop['iv']['ir'])}), consistent with inverse-vol weighting dialing down NGL's higher-volatility portfolio ({V(st('ngl', 'EW PORT')['vol'])} against {V(st('precious', 'EW PORT')['vol'])} for Precious Metals). "
+            f"and each is clearly negative in P3 under both constructions (Equal Weight {', '.join(I(d['ewp'][2]) for d in neg)}; Inverse Vol {', '.join(I(d['ivp'][2]) for d in neg)}), consistent with those three asset classes' own EW PORT IRs of {I(st('metals', 'EW PORT')['ir'])}, {I(st('precious', 'EW PORT')['ir'])} and {I(st('agri', 'EW PORT')['ir'])}. "
+            f"Energy-NGL is the most construction-robust pair (Equal Weight {I(en['ew']['ir'])}, Inverse Vol {I(en['iv']['ir'])}), while Inverse Vol's effect is otherwise uneven: it pulls down NGL-Agriculture most ({I(drop['ew']['ir'])} to {I(drop['iv']['ir'])}), consistent with inverse-vol weighting reducing the weight on NGL's higher-volatility portfolio ({V(st('ngl', 'EW PORT')['vol'])} against {V(st('agri', 'EW PORT')['vol'])} for Agriculture). "
             f"Replacing Energy with Energy ex-NatGas lifts all four Energy pairs under Equal Weight."))
     c5e, c5i = corr5["EW PORT"], corr5["Inverse Vol"]; c4e, c4i = corr4["EW PORT"], corr4["Inverse Vol"]
     B(("b", f"Benchmarked against traditional assets, the five-sleeve cross-commodity book still diversifies equity and bonds but is no longer free of commodity beta: it correlates negatively with Equity (Equal Weight {N(c5e['Equity'])}, Inverse Vol {N(c5i['Equity'])}) and with a traditional 60/40 portfolio ({N(c5e['60/40 Portfolio'])}, {N(c5i['60/40 Portfolio'])}), "
             f"stays close to zero against Fixed Income ({N(c5e['Fixed Income'])}, {N(c5i['Fixed Income'])}) and Gold ({N(c5e['Gold'])}, {N(c5i['Gold'])}), but is positively correlated with a passive Commodity Index ({N(c5e['Commodity Index'])}, {N(c5i['Commodity Index'])}; {N(c4e['Commodity Index'])} and {N(c4i['Commodity Index'])} without Skewness). "
-            f"The change comes from Skewness, which correlates {N(corr5['Skewness']['Commodity Index'])} with the Commodity Index, {N(corr5['Skewness']['Equity'])} with Equity and {N(corr5['Skewness']['Gold'])} with Gold because it is long-biased after crashes (the four oil products were long on {oil_lo:.0f}% to {oil_hi:.0f}% of P3 days and the four NGL products on {ngl_lo:.0f}% to {ngl_hi:.0f}%). "
+            f"The change comes from Skewness, which correlates {N(corr5['Skewness']['Commodity Index'])} with the Commodity Index, {N(corr5['Skewness']['Equity'])} with Equity and {N(corr5['Skewness']['Gold'])} with Gold, consistent with the sleeve being long-biased after price falls (the four oil products were long on {oil_lo:.0f}% to {oil_hi:.0f}% of P3 days and the four NGL products on {ngl_lo:.0f}% to {ngl_hi:.0f}%). "
             f"Momentum, Carry and Carry-Momentum remain negatively correlated with Equity and essentially uncorrelated with Gold ({N(corr5['Momentum']['Gold'])}, {N(corr5['Carry']['Gold'])}, {N(corr5['CarryMom']['Gold'])}); Value ({N(corr5['Value']['Equity'])}) and Skewness are the two strategies positively correlated with Equity. "
             f"The correlations use daily returns of the SPY, AGG, DBC and GLD ETFs (adjusted prices from Yahoo Finance, downloaded 12 October 2026) on the days they share with the strategy series, from 2012 to 23 September 2026. Full detail in the Appendix."))
     B(("fig", "fig_cross_combined.png", "Figure 6. Cross-Commodity Portfolio: Combined Strategy Performance (Cumulative Return, 2012-2026)"))

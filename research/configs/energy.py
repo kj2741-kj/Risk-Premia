@@ -51,6 +51,7 @@ import sys
 import numpy as np
 import pandas as pd
 
+from imputed_tenors import apply_imputed   # research/imputed_tenors.py (same folder tree as engine.py on sys.path)
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _RESEARCH_DIR = os.path.dirname(_THIS_DIR)
 _REPO_ROOT = os.path.dirname(_RESEARCH_DIR)
@@ -172,6 +173,8 @@ def load_curve(product: str) -> pd.DataFrame:
             avg_spread = (spread_17 + spread_21) / 2
             curve.loc[anomaly, "F1"] = brent.loc[anomaly, "F1"] - avg_spread
     curve = apply_data_fixes(curve, SHEET_NAMES[product], "F1")   # source-data fixes, see rolling_continuous.DATA_FIXES
+    if product == "HeatingOil":
+        curve = apply_imputed(curve, "HEATING_OIL")   # F13 missing 2012-04-02..27 (first ULSD-grade month not yet listed), same-grade fill, see imputed_tenors.py
     return curve
 
 

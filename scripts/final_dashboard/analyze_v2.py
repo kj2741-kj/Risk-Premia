@@ -75,6 +75,10 @@ for key, asset, prods in VARIANTS:
         d = {}
         for k, s in nets[(asset, p)].items():
             d[k] = {w: f3(_metrics(s.loc[st:e] if e else s.loc[st:])) for w, st, e in WINDOWS}
+        # commodity-level Equal Weight portfolio of the five sleeves (2026-10-14) and the commodity's cumulative-return curves
+        ew_p = combine_returns([nets[(asset, p)][s] for s in STYLES], "equal_weight")
+        d["EW PORT"] = {w: f3(_metrics(ew_p.loc[st:e] if e else ew_p.loc[st:])) for w, st, e in WINDOWS}
+        res["equity"][f"prod|{asset}|{p}"] = equity({**{s: nets[(asset, p)][s] for s in STYLES}, "EW PORT": ew_p})
         res["products"][f"{asset}|{p}"] = d
 
 # combined books

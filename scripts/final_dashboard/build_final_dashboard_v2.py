@@ -1,4 +1,4 @@
-"""Builds Analysis/Final_Research_Dashboard.html (rebuilt: 5 asset classes, EW + Inverse Vol, two-pair Carry for Precious and Agriculture,
+"""Builds Analysis/Final_Research_Dashboard.html (rebuilt: 5 asset classes, EW + Inverse Vol, per-product pairs for Precious and Agriculture,
 new roll rule, data through 2026-09-23, cross-pair, correlations, equity curves). Inputs: final_v2.json, twopair_v2.json. Run from repo root."""
 import json
 import re
@@ -21,12 +21,18 @@ res = json.load(open(R / "outputs/final_dashboard/final_v2.json"))
 two = json.load(open(R / "outputs/final_dashboard/twopair_v2.json"))
 COLS = [("full", "Full", "2011-2026"), ("r1", "R1", "2011-2016"), ("r2", "R2", "2017-2021"),
         ("r3", "R3", "2022-2026"), ("y26", "2026", "YTD")]
-data = dict(res, twopair=two, cols=[dict(key=k, label=l, years=y) for k, l, y in COLS])
+data = dict(res, cols=[dict(key=k, label=l, years=y) for k, l, y in COLS])
 
 BODY = r"""
 <div class="wrap">
 <h1>Risk Premia: Final Research Dashboard</h1>
 <div class="subtitle">Five commodity asset classes, five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2011-01-01. All price data through 2026-09-23. Generated 2026-10-12.</div>
+<div class="howto"><b>How to use this dashboard</b><ul>
+<li><b>Tabs</b> across the top: one per asset class, the combined books (All 5), By Style, Cross-Pair, Correlations and Notes (methods and data).</li>
+<li><b>Blue filter bars</b> mark every control you can change: period, commodity, metric, Energy with or without NatGas.</li>
+<li><b>Tables</b> show IR for every period; click a period heading (or use the filter) to see that period's return, volatility and maximum drawdown.</li>
+<li><b>Charts</b>: tick or untick strategies above the chart, change the start period, and hover over the lines for values.</li>
+<li><b>Each asset-class tab</b> also has a by-product table (with each commodity's Equal Weight portfolio) and a cumulative-return chart for any single commodity.</li></ul></div>
 <div class="tabs" id="tabbar"></div>
 <div id="panels"></div>
 <div class="tab-panel" id="panel-notes"><div class="card"><h2>Method, data and what changed</h2>
@@ -86,6 +92,14 @@ const horizonOpts=D.cols.map(c=>`<option value="${c.key}">${c.label} (${c.years}
 function fullTable(rows,lab){return "<thead><tr><th>"+(lab||"Strategy")+"</th><th>Return (annualized)</th><th>Vol (annualized)</th><th>Max Drawdown</th><th>IR</th></tr></thead><tbody>"+rows.map(r=>`<tr style="${BOLD(r.name)?"font-weight:700":""}"><td>${r.name}</td><td>${f(r.ret,2,"%")}</td><td>${f(r.vol,2,"%")}</td><td>${f(r.mdd,2,"%")}</td><td>${ir(r.ir)}</td></tr>`).join("")+"</tbody>";}
 function irTable(W,lab){const names=W.full.map(r=>r.name);return "<thead><tr><th>"+(lab||"Strategy")+"</th>"+D.cols.map(c=>`<th>${c.label}<br><span style="font-weight:400;color:var(--text-muted);font-size:10.5px">${c.years}</span></th>`).join("")+"</tr></thead><tbody>"+names.map((n,i)=>`<tr style="${BOLD(n)?"font-weight:700":""}"><td>${n}</td>`+D.cols.map(c=>`<td>${ir(W[c.key][i].ir)}</td>`).join("")+"</tr>").join("")+"</tbody>";}
 function wireTable(p,selId,tblId,getRows){const sel=p.querySelector(selId),tb=p.querySelector(tblId);const draw=()=>tb.innerHTML=fullTable(getRows(sel.value));sel.addEventListener("change",draw);draw();}
+function mergedTable(W,per,lab){
+  const names=W.full.map(r=>r.name),pc=D.cols.find(c=>c.key===per)||D.cols[0];
+  const head="<thead><tr><th rowspan='2'>"+(lab||"Strategy")+"</th><th colspan='"+D.cols.length+"' class='grp'>IR by period <span class='hint'>(click a period heading to see its details)</span></th><th colspan='3' class='grp sel'>Details for "+pc.label+" ("+pc.years+")</th></tr><tr>"+
+    D.cols.map(c=>`<th class="per-h${c.key===per?" on":""}" data-per="${c.key}" title="Click to show Return, Vol and Max drawdown for this period">${c.label}<br><span style="font-weight:400;color:var(--text-muted);font-size:10.5px">${c.years}</span></th>`).join("")+"<th class='sel'>Return (annualized)</th><th class='sel'>Vol (annualized)</th><th class='sel'>Max drawdown</th></tr></thead>";
+  const body="<tbody>"+names.map((n,i)=>{const r=W[per][i];return `<tr style="${BOLD(n)?"font-weight:700":""}"><td>${n}</td>`+D.cols.map(c=>`<td${c.key===per?' class="on"':""}>${ir(W[c.key][i].ir)}</td>`).join("")+`<td class="sel">${f(r.ret,2,"%")}</td><td class="sel">${f(r.vol,2,"%")}</td><td class="sel">${f(r.mdd,2,"%")}</td></tr>`;}).join("")+"</tbody>";
+  return head+body;}
+function wireHeads(tb,sel){tb.querySelectorAll("th[data-per]").forEach(th=>th.addEventListener("click",()=>{sel.value=th.dataset.per;sel.dispatchEvent(new Event("change"));}));}
+function wireMerged(p,getW,lab){const sel=p.querySelector("[data-hs]"),tb=p.querySelector("[data-full]");const draw=()=>{tb.innerHTML=mergedTable(getW(),sel.value,lab);wireHeads(tb,sel);};sel.addEventListener("change",draw);draw();}
 
 /* ---------- equity (cumulative return) chart ---------- */
 const PALETTE=["#3987e5","#e34948","#0ca30c","#a06c00","#7a4fd1","#0e8c8c","#c2185b","#6b6b6b","#d97706"];
@@ -127,53 +141,45 @@ function renderEquity(host,key){
 /* ---------- asset-class tabs ---------- */
 function productSection(p,key){
   const asset=ASSET[key],t=D.tabs[key];
-  const sleeves=["Momentum","Carry","CarryMom","Value","Skewness"];
+  const sleeves=["Momentum","Carry","CarryMom","Value","Skewness","EW PORT"];
   p.querySelector("[data-prod]").innerHTML=`<div class="window-row"><h3>By product</h3><label>Horizon: <select class="window-select" data-ph>${horizonOpts}</select> Metric: <select class="window-select" data-pm><option value="ir">IR</option><option value="ret">Return (%)</option><option value="vol">Vol (%)</option><option value="mdd">Max drawdown (%)</option></select></label></div><div class="table-scroll"><table data-pt></table></div>`;
   const ph=p.querySelector("[data-ph]"),pm=p.querySelector("[data-pm]"),pt=p.querySelector("[data-pt]");
-  const draw=()=>{const m=pm.value;pt.innerHTML="<thead><tr><th>Product</th>"+sleeves.map(s=>`<th>${s==="Carry"?"Carry (V2)":s==="CarryMom"?"CarryMom (V3)":s}</th>`).join("")+"<th>Tenor pairs</th><th>Roll events</th></tr></thead><tbody>"+t.products.map(pr=>{const d=D.products[asset+"|"+pr];return `<tr><td>${pr}</td>`+sleeves.map(s=>{const v=d[s][ph.value][m];return m==="ir"?`<td>${ir(v)}</td>`:`<td>${f(v,2)}</td>`;}).join("")+`<td style="text-align:left">${D.meta.pairs[asset+"|"+pr].join(", ")}</td><td>${D.meta.rolls[asset+"|"+pr]}</td></tr>`;}).join("")+"</tbody>";};
+  const draw=()=>{const m=pm.value;pt.innerHTML="<thead><tr><th>Product</th>"+sleeves.map(s=>`<th>${s==="Carry"?"Carry (V2)":s==="CarryMom"?"CarryMom (V3)":s}</th>`).join("")+"<th>Tenor pairs</th><th>Roll events</th></tr></thead><tbody>"+t.products.map(pr=>{const d=D.products[asset+"|"+pr];return `<tr><td>${pr}</td>`+sleeves.map(s=>{const v=d[s][ph.value][m];const b=s==="EW PORT"?' style="font-weight:700"':"";return m==="ir"?`<td${b}>${ir(v)}</td>`:`<td${b}>${f(v,2)}</td>`;}).join("")+`<td style="text-align:left">${D.meta.pairs[asset+"|"+pr].join(", ")}</td><td>${D.meta.rolls[asset+"|"+pr]}</td></tr>`;}).join("")+"</tbody>";};
   ph.addEventListener("change",draw);pm.addEventListener("change",draw);draw();
 }
-function twoPairSection(p,key){
-  const T=D.twopair[key],card=p.querySelector("[data-two]");
-  card.innerHTML=`<div class="window-row"><h3>Single pair (previous setup) vs two pairs</h3><label>Horizon: <select class="window-select" data-th>${horizonOpts}</select></label></div>
-  <p class="note">Previous setup: ${key==="precious"?"F1-F3":"F1-F2"} single pair. Two pairs: short F1-F2 plus the long pair per product, blended by the sign-vote rule. Same data, roll rule and costs in both. IR shown (return / vol in the table below).</p>
-  <div class="table-scroll"><table data-t1></table></div><h3>Per product, full sample IR</h3><div class="table-scroll"><table data-t2></table></div>`;
-  const th=card.querySelector("[data-th]"),t1=card.querySelector("[data-t1]"),t2=card.querySelector("[data-t2]");
-  const draw=()=>{const W=T[th.value];const rowS=(lab,a,b,c,d)=>`<tr><td>${lab}</td><td>${ir(W[a].ir)}</td><td>${ir(W[b].ir)}</td><td>${ir(W[c].ir)}</td><td>${ir(W[d].ir)}</td><td>${f(W[d].ret,2,"%")} / ${f(W[d].vol,1,"%")}</td></tr>`;
-    t1.innerHTML="<thead><tr><th>Sleeve</th><th>Previous single pair</th><th>Short F1-F2 only</th><th>Long pair only</th><th>Two pairs (sign-vote)</th><th>Two pairs: return / vol</th></tr></thead><tbody>"+
-      rowS("Carry (V2)","Carry single (previous)","Carry short F1-F2","Carry long","Carry two-pair")+rowS("CarryMom (V3)","CarryMom single (previous)","CarryMom short F1-F2","CarryMom long","CarryMom two-pair")+
-      `<tr style="font-weight:700"><td>EW PORT</td><td>${ir(W["EW PORT single"].ir)}</td><td></td><td></td><td>${ir(W["EW PORT two"].ir)}</td><td>${f(W["EW PORT two"].ret,2,"%")} / ${f(W["EW PORT two"].vol,1,"%")}</td></tr><tr style="font-weight:700"><td>Inverse Vol</td><td>${ir(W["Inverse Vol single"].ir)}</td><td></td><td></td><td>${ir(W["Inverse Vol two"].ir)}</td><td>${f(W["Inverse Vol two"].ret,2,"%")} / ${f(W["Inverse Vol two"].vol,1,"%")}</td></tr></tbody>`;};
-  th.addEventListener("change",draw);draw();
-  t2.innerHTML="<thead><tr><th>Product</th><th>Long pair</th><th>Carry: previous</th><th>short</th><th>long</th><th>two-pair</th><th>CarryMom: previous</th><th>short</th><th>long</th><th>two-pair</th></tr></thead><tbody>"+D.tabs[key].products.map(pr=>{const d=D.products[key+"|"+pr],g=k=>ir(d[k].full.ir);return `<tr><td>${pr}</td><td>${D.meta.pairs[key+"|"+pr][1]}</td><td>${g("carry_single_prev")}</td><td>${g("carry_short")}</td><td>${g("carry_long")}</td><td>${g("Carry")}</td><td>${g("cm_single_prev")}</td><td>${g("cm_short")}</td><td>${g("cm_long")}</td><td>${g("CarryMom")}</td></tr>`;}).join("")+"</tbody>";
+function productEquity(p,key){
+  const asset=ASSET[key],t=D.tabs[key],host=p.querySelector("[data-peq]");
+  host.innerHTML=`<div class="window-row"><h3>Cumulative return by commodity</h3><label>Commodity: <select class="window-select" data-pc>${t.products.map(x=>`<option>${x}</option>`).join("")}</select></label></div><div data-pe></div>`;
+  const sel=host.querySelector("[data-pc]"),inner=host.querySelector("[data-pe]");
+  const draw=()=>renderEquity(inner,"prod|"+asset+"|"+sel.value);sel.addEventListener("change",draw);draw();
 }
 Object.keys(D.tabs).forEach((key,i)=>{const t=D.tabs[key];
   const p=addPanel(key,`<div class="card"><h2>${LABEL[key]}</h2><p class="note"><b>Products:</b> ${t.products.join(", ")}. <b>Data:</b> ${t.data_first} to ${t.data_last}.</p><p class="note">${CAL[key]}</p>
-  <div class="window-row"><h3>Performance by horizon</h3><label>Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div>
-  <h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div><h3>Cumulative return</h3><div data-eq></div><div data-prod></div>${(key==="precious"||key==="agri")?'<div data-two></div>':""}</div>`,i===0);
-  wireTable(p,"[data-hs]","[data-full]",w=>t.windows[w]);p.querySelector("[data-ir]").innerHTML=irTable(t.windows);
-  renderEquity(p.querySelector("[data-eq]"),key);productSection(p,key);if(key==="precious"||key==="agri")twoPairSection(p,key);
+  <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div><div data-prod></div><div data-peq></div></div>`,i===0);
+  wireMerged(p,()=>t.windows);
+  renderEquity(p.querySelector("[data-eq]"),key);productSection(p,key);productEquity(p,key);
 });
 
 /* ---------- combined books ---------- */
 [["all5","All 5 asset classes (Energy with NatGas)"],["all5_exng","All 5 asset classes (Energy ex-NatGas)"]].forEach(([key,label])=>{const c=D.combined[key];
   const p=addPanel(key,`<div class="card"><h2>${label}</h2><p class="note">Two-stage book: five sleeves into an asset-class portfolio, then the five asset-class portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across asset classes). Common window: ${c.common_first} to ${c.common_last}. "Reference" rows are each asset class's own EW PORT on that window.</p>
-  <div class="window-row"><h3>Performance by horizon</h3><label>Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
-  wireTable(p,"[data-hs]","[data-full]",w=>c.windows[w]);p.querySelector("[data-ir]").innerHTML=irTable(c.windows);renderEquity(p.querySelector("[data-eq]"),key);});
+  <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
+  wireMerged(p,()=>c.windows);renderEquity(p.querySelector("[data-eq]"),key);});
 
 /* ---------- by style ---------- */
 (function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value, Skewness) is first equal-weighted across the five asset classes' own sleeves on their common dates, giving one cross-asset-class series per style. The five style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day). This is the reverse order to the "All 5" tabs, which combine sleeves within each asset class first.</p>
   <div class="window-row"><label>Energy: <select class="window-select" data-bv><option value="with NatGas">with NatGas</option><option value="ex-NatGas">ex-NatGas</option></select></label><span class="note" style="margin:0" data-bn></span></div>
-  <div class="window-row"><h3>Performance by horizon</h3><label>Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
+  <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
   const bv=p.querySelector("[data-bv]"),hs=p.querySelector("[data-hs]"),tb=p.querySelector("[data-full]");
-  const draw=()=>{const c=D.bystyle[bv.value];p.querySelector("[data-bn]").textContent="Common window: "+c.common_first+" to "+c.common_last+".";tb.innerHTML=fullTable(c.windows[hs.value]);p.querySelector("[data-ir]").innerHTML=irTable(c.windows);renderEquity(p.querySelector("[data-eq]"),"bystyle "+bv.value);};
+  const draw=()=>{const c=D.bystyle[bv.value];p.querySelector("[data-bn]").textContent="Common window: "+c.common_first+" to "+c.common_last+".";tb.innerHTML=mergedTable(c.windows,hs.value);wireHeads(tb,hs);renderEquity(p.querySelector("[data-eq]"),"bystyle "+bv.value);};
   bv.addEventListener("change",draw);hs.addEventListener("change",draw);draw();})();
 
 /* ---------- cross-pair ---------- */
 (function(){const p=addPanel("crosspair",`<div class="card"><h2>Cross-Pair Portfolios</h2><p class="note">Each row blends two asset classes' own portfolios, 50/50 (Equal Weight) or by trailing 63-day inverse volatility (Inverse Vol); each asset-class portfolio is built with the same method. Series are aligned on the pair's common dates. Pairs involving Energy are shown with NatGas and ex-NatGas.</p>
-  <div class="window-row"><h3>Performance by horizon</h3><label>Energy: <select class="window-select" data-cv><option value="with NatGas">with NatGas</option><option value="ex-NatGas">ex-NatGas</option></select> Construction: <select class="window-select" data-cc><option value="EW">Equal Weight</option><option value="Inverse Vol">Inverse Vol</option></select> Horizon: <select class="window-select" data-hs>${horizonOpts}</select></label></div>
-  <div class="table-scroll"><table data-full></table></div><h3>IR by horizon</h3><div class="table-scroll"><table data-ir></table></div></div>`,false);
-  const cv=p.querySelector("[data-cv]"),cc=p.querySelector("[data-cc]"),hs=p.querySelector("[data-hs]"),tf=p.querySelector("[data-full]"),ti=p.querySelector("[data-ir]");
-  const draw=()=>{const W=D.crosspair[cv.value][cc.value];tf.innerHTML=fullTable(W[hs.value],"Pair");ti.innerHTML=irTable(W,"Pair");};
+  <div class="window-row"><h3>Performance by period</h3><label>Energy: <select class="window-select" data-cv><option value="with NatGas">with NatGas</option><option value="ex-NatGas">ex-NatGas</option></select> Construction: <select class="window-select" data-cc><option value="EW">Equal Weight</option><option value="Inverse Vol">Inverse Vol</option></select> Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div>
+  <div class="table-scroll"><table data-full></table></div></div>`,false);
+  const cv=p.querySelector("[data-cv]"),cc=p.querySelector("[data-cc]"),hs=p.querySelector("[data-hs]"),tf=p.querySelector("[data-full]");
+  const draw=()=>{const W=D.crosspair[cv.value][cc.value];tf.innerHTML=mergedTable(W,hs.value,"Pair");wireHeads(tf,hs);};
   [cv,cc,hs].forEach(e=>e.addEventListener("change",draw));draw();})();
 
 /* ---------- correlations ---------- */
@@ -199,7 +205,14 @@ document.querySelectorAll(".tab-btn").forEach(btn=>btn.addEventListener("click",
 """
 
 EXTRA = (" ul.steps li{margin:4px 0;font-size:13px} .legend-row label{display:inline-flex;align-items:center;gap:4px;font-size:12px}"
-         " .rc-tooltip{white-space:pre}")
+         " .rc-tooltip{white-space:pre}"
+         " .window-row,.rc-window-row{background:rgba(47,111,181,.08);border:1px solid rgba(47,111,181,.35);border-left:4px solid #2f6fb5;border-radius:8px;padding:8px 12px;margin:10px 0 8px}"
+         " select.window-select{border:2px solid #2f6fb5;font-weight:600;cursor:pointer;background:rgba(47,111,181,.12);border-radius:6px;padding:2px 6px}"
+         " .window-row label::before,.rc-window-row label::before{content:'FILTER  ';font-size:10px;font-weight:700;letter-spacing:.08em;color:#2f6fb5;margin-right:4px}"
+         " .legend-row::before{content:'Show / hide strategies:  ';font-size:11px;font-weight:700;color:#2f6fb5;margin-right:8px}"
+         " th.per-h{cursor:pointer} th.per-h:hover{text-decoration:underline} th.per-h.on,td.on{background:rgba(47,111,181,.16)} th.sel,td.sel{background:rgba(224,140,40,.10)}"
+         " th.grp{text-align:center;font-size:11px;letter-spacing:.03em} .hint{font-weight:400;font-size:10.5px;color:var(--text-muted)}"
+         " .howto{background:rgba(47,111,181,.07);border:1px solid rgba(47,111,181,.30);border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px} .howto b{color:#2f6fb5} .howto ul{margin:6px 0 0 18px;padding:0}")
 html = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Risk Premia: Final Research Dashboard</title>'
         '<meta name="viewport" content="width=device-width, initial-scale=1"><style>' + css + EXTRA + "</style></head><body>" + BODY +
         "<script>\nconst D=" + json.dumps(data) + ";\n" + color_js + roll_js + SCRIPT + "</script></body></html>")

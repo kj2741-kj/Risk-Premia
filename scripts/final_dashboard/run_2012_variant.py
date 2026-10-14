@@ -16,8 +16,13 @@ ZDIFF = _MODE == "5"   # "5": Carry-Momentum = sum over pairs of (z-score today 
 #   # "3": Carry-Momentum on the per-month price spread (research/contract_months.py)
 SFX = "_zdiff" if ZDIFF else "_rawcarry" if RAWC else ("_zsum_pm" if PM else "_zsum_std")
 # research variant: Carry and Carry-Momentum sum the pairs' z-scores / slope changes before the sign (research/carry_zsum.py)
+VTHR = float(os.environ["VALUE_THR"]) if os.environ.get("VALUE_THR") else None   # sandbox: Value band (e.g. 0.01 for +/-1%) instead of the config's 0.10
 OUT = "outputs/final_dashboard_2012" + SFX if ZSUM else "outputs/final_dashboard_2012"
+if VTHR is not None:
+    OUT = "outputs/final_dashboard_2012_valthr%g" % (VTHR * 100)
 HTML = f"Analysis/Final_Research_Dashboard_2012{SFX}.html" if ZSUM else "Analysis/Final_Research_Dashboard_2012.html"
+if VTHR is not None:
+    HTML = "Analysis/Final_Research_Dashboard_2012_valthr%g.html" % (VTHR * 100)
 Path(OUT).mkdir(parents=True, exist_ok=True)
 
 
@@ -35,7 +40,7 @@ nets, meta = pickle.load(open("outputs/final_dashboard/products_v2_nets.pkl", "r
 for (a, p) in list(nets):
     cfg = importlib.import_module(a)
     raw = cfg.load_f1_series_logret(p)
-    pos = value_v1_position(cfg.load_curve(p), cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS, cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N, min_periods=VALUE_MIN)
+    pos = value_v1_position(cfg.load_curve(p), cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS, cfg.VALUE_THRESHOLD if VTHR is None else VTHR, shift_n=cfg.VALUE_SHIFT_N, min_periods=VALUE_MIN)
     new = log_return_daily(pos, raw["log_price"], 5, raw["Phase"])[1]
     d = (new - nets[(a, p)]["Value"]).abs().loc["2012-01-01":].max()
     print(f"Value min {VALUE_MIN}: {a} {p} max change since 2012 = {0 if pd.isna(d) else round(float(d), 4)}", flush=True)
@@ -66,30 +71,29 @@ def transform(name, pairs):
 REG = ('REPORT_START = "2012-01-01"\nREGIMES = [("P1_2012_2016", "2012-01-01", "2016-12-31"), ("P2_2017_2021", "2017-01-01", "2021-12-31"), '
        '("P3_2022_onwards", "2022-01-01", "2026-12-31")]')
 common = [("from regimes import REGIMES, REPORT_START", REG),
-          ('OUT = Path("outputs/final_dashboard")', f'OUT = Path("{OUT}"); IN = Path("outputs/final_dashboard")'),
-          (' + [("y26", "2026-01-01", None)]', "")]
+          ('OUT = Path("outputs/final_dashboard")', f'OUT = Path("{OUT}"); IN = Path("outputs/final_dashboard")')]   # the 2026 year-to-date window of the main pipeline is kept (P4, 2026 only)
 srcs = {
     "analyze_v2.py": transform("analyze_v2.py", common + [('open(OUT / "products_v2_nets.pkl", "rb")', 'open(OUT / "products_2012_nets.pkl", "rb")')]),
     "analyze_twopair.py": transform("analyze_twopair.py", [
         ("from regimes import REGIMES, REPORT_START", REG),
         ('OUT=Path("outputs/final_dashboard")', f'OUT=Path("{OUT}"); IN=Path("outputs/final_dashboard")'),
-        ('open(OUT/"products_v2_nets.pkl","rb")', 'open(OUT/"products_2012_nets.pkl","rb")'),
-        ('+[("y26","2026-01-01",None)]', "")]),
+        ('open(OUT/"products_v2_nets.pkl","rb")', 'open(OUT/"products_2012_nets.pkl","rb")')]),
     "build_final_dashboard_v2.py": transform("build_final_dashboard_v2.py", [
         ('res = json.load(open(R / "outputs/final_dashboard/final_v2.json"))', f'res = json.load(open(R / "{OUT}/final_v2.json"))'),
         ('two = json.load(open(R / "outputs/final_dashboard/twopair_v2.json"))', f'two = json.load(open(R / "{OUT}/twopair_v2.json"))'),
         ('COLS = [("full", "Full", "2011-2026"), ("r1", "R1", "2011-2016"), ("r2", "R2", "2017-2021"),\n        ("r3", "R3", "2022-2026"), ("y26", "2026", "YTD")]',
-         'COLS = [("full", "Full", "2012-2026"), ("p1", "P1", "2012-2016"), ("p2", "P2", "2017-2021"), ("p3", "P3", "2022-2026")]'),
+         'COLS = [("full", "Full", "2012-2026"), ("p1", "P1", "2012-2016"), ("p2", "P2", "2017-2021"), ("p3", "P3", "2022-2026"), ("y26", "2026", "YTD")]'),
         ('const EQ_STARTS=[["2011-01-01","From 2011"],["2016-01-01","From 2016"],["2020-01-01","From 2020"],["2022-01-01","From 2022"],["2026-01-01","From 2026"]];',
-         'const EQ_STARTS=[["2012-01-01","From 2012"],["2017-01-01","From 2017"],["2022-01-01","From 2022"]];'),
-        ("reporting from 2011-01-01. All price data", "reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards). All price data"),
+         'const EQ_STARTS=[["2012-01-01","From 2012"],["2017-01-01","From 2017"],["2022-01-01","From 2022"],["2026-01-01","From 2026"]];'),
+        ("reporting from 2011-01-01. All price data", "reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data"),
         ("Reporting still starts 2011-01-01, so 2026 year-to-date now covers nearly nine months.", "This variant reports from 2012-01-01; signals, rolls and costs are identical to the main dashboard except that Value needs 504 F3 observations (two years) instead of 630 before it starts, so NGL Value and NGL Inverse Vol are defined from before 2012."),
         ("Three regimes (set 2026-10-12, replacing the earlier four): <b>R1</b> 1 Jan 2011 to 31 Dec 2016, <b>R2</b> 1 Jan 2017 to 31 Dec 2021, <b>R3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap. The 2026 column (year to date) lies inside R3.",
-         "Three periods in this variant: <b>P1</b> 1 Jan 2012 to 31 Dec 2016, <b>P2</b> 1 Jan 2017 to 31 Dec 2021, <b>P3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap."),
+         "Three periods in this variant: <b>P1</b> 1 Jan 2012 to 31 Dec 2016, <b>P2</b> 1 Jan 2017 to 31 Dec 2021, <b>P3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap. The 2026 column (year to date) lies inside P3."),
         ("), 2011-2026. Within-asset-class", "), 2012-2026. Within-asset-class"),
         ("2011 onward. Blue is positive", "2012 onward. Blue is positive"),
         ('out = R / "Analysis/Final_Research_Dashboard.html"', f'out = R / "{HTML}"'),
-        ("Risk Premia: Final Research Dashboard", "Risk Premia: Final Research Dashboard (2012 start, three periods" + (", Carry: summed raw slopes (no z-score)" if RAWC else ", Carry-Momentum standardised" if STD else ", Carry-Momentum per-month spread" if PM else ", Carry-Momentum z-score difference" if ZDIFF else "") + ")")]
+        ("Risk Premia: Final Research Dashboard", "Risk Premia: Final Research Dashboard (2012 start, three periods" + (", Value band +/-%g%%" % (VTHR * 100) if VTHR is not None else "") + (", Carry: summed raw slopes (no z-score)" if RAWC else ", Carry-Momentum standardised" if STD else ", Carry-Momentum per-month spread" if PM else ", Carry-Momentum z-score difference" if ZDIFF else "") + ")")]
+        + ([("F3 price against its own 1,260-day average, long below -10%, short above +10%.", "F3 price against its own 1,260-day average, long below -%g%%, short above +%g%%." % (VTHR * 100, VTHR * 100))] if VTHR is not None else [])
         + ([("z-score of the carry slope, (near - far) / near, against its own trailing 252 days. With two tenor pairs, the z-scores of the pairs are summed",
              "raw carry slope, (near - far) / near, with no z-score. With two tenor pairs, the raw slopes of the pairs are summed")] if RAWC else [])
         + ([("change of the carry slope over 20 observations, summed across the tenor pairs (raw changes, not standardised) and signed",

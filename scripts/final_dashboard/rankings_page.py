@@ -21,7 +21,7 @@ ZSUM = _MODE in ("2", "3", "4", "5")   # sandbox alternatives; the default (no Z
 SFX = "_zdiff" if _MODE == "5" else "_rawcarry" if _MODE == "4" else "_zsum_pm" if _MODE == "3" else "_zsum_std"
 BASES = [("2012 start", "outputs/final_dashboard_2012" + SFX if ZSUM else "outputs/final_dashboard_2012", "products_2012_nets.pkl",
           [("full", "Full 2012-2026", "2012-01-01", None), ("p1", "P1 2012-2016", "2012-01-01", "2016-12-31"), ("p2", "P2 2017-2021", "2017-01-01", "2021-12-31"),
-           ("p3", "P3 2022-2026", "2022-01-01", None)])]
+           ("p3", "P3 2022-2026", "2022-01-01", None), ("y26", "2026 YTD", "2026-01-01", None)])]
 pack = lambda m: [None if pd.isna(m[k]) else round(float(m[k]), 3) for k in ("ir", "ret", "vol", "mdd")]
 DATA = {}
 for name, d, pkl, wins in BASES:

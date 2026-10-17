@@ -36,37 +36,29 @@ BODY = r"""
 <div class="tabs" id="tabbar"></div>
 <div id="panels"></div>
 <div class="tab-panel" id="panel-notes"><div class="card"><h2>Method, data and what changed</h2>
+<h3>Timing convention (all five sleeves)</h3><ul class="steps"><li><b>1-day lag:</b> every signal is generated from closing prices on day <i>t</i>. The position is taken at the close of day <i>t</i>+1 and earns the return from that close onward, so a signal never trades on the price it was computed from. Formally, the position held over day <i>t</i> is <i>w<sub>t</sub></i> = <i>s<sub>t&minus;2</sub></i>, where <i>s</i> is the sleeve's signal, and it earns that day's log return, ln(<i>P<sub>t</sub></i>/<i>P<sub>t&minus;1</sub></i>). Transaction costs are charged when the position changes.</li></ul>
 <h3>Sleeves (per product)</h3><ul class="steps">
-<li><b>Momentum:</b> average of the signs of three moving-average crossovers, (1,20), (5,60), (20,250), on the raw front-month price; 1-day lag.</li>
-<li><b>Carry (V2):</b> z-score of the carry slope, (near - far) / near, against its own trailing 252 days. With two tenor pairs, the z-scores of the pairs are summed and the sign of the sum is the signal, so a day is flat only if the sum is exactly zero (until 2026-10-13 the signs were averaged instead, a sign-vote that was flat whenever the pairs disagreed); if a z-score is missing the last signal is kept. The lag is applied once to the combined signal.</li>
-<li><b>Carry-Momentum (V3):</b> change of the carry slope over 20 observations, summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.</li>
-<li><b>Value:</b> F3 price against its own 1,260-day average, long below -10%, short above +10%.</li>
-<li><b>Skewness:</b> minus the skewness of the product's daily log returns (roll-adjusted series) over the past 252 observations; long when negative, short when positive; 2-day lag (after Fernandez-Perez, Fuertes and Miffre 2021, time-series version).</li></ul>
-<h3>Tenor pairs</h3><ul class="steps">
+<li><b>Momentum:</b> average of the signs of three moving-average crossovers, (1,20), (5,60), (20,250), on the raw front-month price.<div class="formula">$$s_t=\tfrac13\sum_{(a,b)}\operatorname{sign}\!\big(\mathrm{MA}_a(P)_t-\mathrm{MA}_b(P)_t\big),\quad (a,b)\in\{(1,20),(5,60),(20,250)\}$$</div></li>
+<li><b>Carry (V2):</b> For each tenor pair, the carry slope (near - far) / near is standardised against its own trailing 252-day mean and standard deviation. The two z-scores are summed and the sign of the sum is the signal. The position is flat only when the sum is exactly zero. If a z-score is missing, the previous signal is carried forward.<div class="formula">$$c^{(k)}_t=\frac{P^{\mathrm{near},k}_t-P^{\mathrm{far},k}_t}{P^{\mathrm{near},k}_t},\qquad z^{(k)}_t=\frac{c^{(k)}_t-\mu^{252}_t\!\big(c^{(k)}\big)}{\sigma^{252}_t\!\big(c^{(k)}\big)}$$$$s_t=\operatorname{sign}\!\Big(\sum_k z^{(k)}_t\Big)$$</div></li>
+<li><b>Carry-Momentum (V3):</b> change of the carry slope over 20 observations, summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.<div class="formula">$$s_t=\operatorname{sign}\!\Big(\sum_k\big(c^{(k)}_t-c^{(k)}_{t-20}\big)\Big)$$</div></li>
+<li><b>Value:</b> F3 price against its own 1,260-day average, long below -10%, short above +10%.<div class="formula">$$d_t=\frac{P^{F3}_t}{\frac1{1260}\sum_{i=0}^{1259}P^{F3}_{t-i}}-1,\qquad s_t=+1\;\text{if }d_t<-10\%,\;\;-1\;\text{if }d_t>+10\%,\;\;0\;\text{otherwise}$$</div></li>
+<li><b>Skewness:</b> minus the skewness of the product's daily log returns (roll-adjusted series) over the past 252 observations; long when negative, short when positive (after Fernandez-Perez, Fuertes and Miffre 2021, time-series version).<div class="formula">$$\hat\gamma_t=\frac{\frac1{252}\sum_{i=0}^{251}(r_{t-i}-\bar r)^3}{\Big(\frac1{252}\sum_{i=0}^{251}(r_{t-i}-\bar r)^2\Big)^{3/2}},\qquad s_t=-\operatorname{sign}(\hat\gamma_t)$$</div></li></ul>
+<h3>Tenor pairs (Carry and Carry-Momentum)</h3><ul class="steps">
 <li>Metals and Energy: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14.</li>
 <li>Precious: F1-F2 plus a long pair about 12 months out: Gold F1-F7, Silver F1-F6, Platinum F1-F5, Palladium F1-F5.</li>
 <li>Agriculture: F1-F2 plus a long pair about 12 months out: Corn F1-F6, Wheat F1-F6, Soybean F1-F8, Soybean Oil F1-F8 (10 to 11 months, the deepest column in the file), Coffee F1-F6, Sugar F1-F5.</li></ul>
 <h3>Rolling</h3><ul class="steps">
-<li><b>New rule:</b> each contract is rolled on the 5th trading day of the month in which its last trade date falls (previously: 5 trading days before the last trade date). The bridge on the day after the last trade date, when the data's F1 switches contract, is unchanged. In practice this rolls about 14 to 16 trading days before expiry for Energy, NGL, Precious and Sugar, about 6 for Metals, and about 5 for Corn, Wheat and Soybeans. On every contract the roll falls before the last trade date, apart from one NGL contract (Isobutane, expiring Nov 2009) that gets no roll because the series has only one price date that month; it is at the start of the history, before the 2011 reporting window.</li>
-<li>Contracts whose last trade date is after the last price date no longer produce a spurious roll in the final week (the previous rule snapped them to the last price date).</li></ul>
+<li>Each contract is rolled on the 5th trading day of the month in which its last trade date falls. The series is bridged on the day after the last trade date, when the data's F1 switches contract. This rolls roughly 14 to 16 trading days before expiry for Energy, NGL, Precious and Sugar, about 6 for Metals and about 5 for Corn, Wheat and Soybeans.</li>
+</ul>
 <h3>How things are combined</h3><ul class="steps">
 <li>Products inside a sleeve are equally weighted on common dates (a dropped date's move is carried into the next shared date).</li>
 <li>Each asset-class portfolio combines its five sleeves by <b>EW PORT</b> (equal weight) or <b>Inverse Vol</b> (weights from each sleeve's trailing 63-day volatility, recomputed daily).</li>
 <li><b>Combined books</b> are two-stage: sleeves into an asset-class portfolio, then the five asset-class portfolios into one book; all four EW / Inverse Vol pairs are shown, with and without NatGas. <b>Cross-pair portfolios</b> blend two asset classes' portfolios the same way. Series are aligned on common dates before weighting.</li></ul>
 <h3>Data and calendars</h3><ul class="steps">
-<li>Prices: <code>data/Prices_0924</code>, all five asset classes through 2026-09-23 (previously June 30 for four of them). Reporting still starts 2011-01-01, so 2026 year-to-date now covers nearly nine months.</li>
-<li><b>NGL labels (verified):</b> the 24-Sep NGL file relabels its Argus sheets, and those sheet names are wrong; the underlying series are identical to the July file, whose labels are right. Checked against EIA's Mont Belvieu propane spot price (daily, via FRED series DPROPANEMBTX): the BAP series is propane (median price ratio 1.00, level correlation 0.995, 5-day change correlation 0.90), while the file calls it "Butane". CAP is ethane, not "Propane Far East": its 2012 average was 47% below 2011 (EIA reported ethane down 48%, propane 32%; BAP is down 31%), 24 cents per gallon on 19 Dec 2012 (reported 25 cents) and 13 cents on 16 Mar 2020 (reported 12.9 cents). DAE is normal butane (about 1.2 times propane; 2012 average down 10% against EIA's 5% for normal butane, allowing for swap versus spot) and IBD is isobutane (about 1.3 times propane). Products are mapped by ticker root: Ethane CAP, Propane BAP, Butane DAE, Isobutane IBD.</li>
-<li>Gold and Silver deep columns (Gold F14 to F20, Silver F12 to F16) were revised in the new file from mid 2025; no pair used here goes that deep.</li>
-<li>Roll calendars: Precious aligned to Bloomberg's contract months, Agriculture Bloomberg-matched, Metals, Energy and NGL on <code>expiry_calendars_20260701.xlsx</code> (it agrees with the 24-Sep consolidated calendar on every shared contract; those three were not Bloomberg-matched because no monthly files exist for them).</li></ul>
+<li>Prices run through 2026-09-23 for all five asset classes. Reporting starts 2011-01-01; the 2026 year-to-date column covers 1 January to 23 September.</li>
+<li>Roll calendars: Expiry dates for Precious and Agriculture are taken from Bloomberg and follow its contract-month chain. Metals, Energy and NGL use expiry dates published by the exchange.</li></ul>
 <h3>Regimes</h3><ul class="steps">
-<li>Three regimes (set 2026-10-12, replacing the earlier four): <b>R1</b> 1 Jan 2011 to 31 Dec 2016, <b>R2</b> 1 Jan 2017 to 31 Dec 2021, <b>R3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap. The 2026 column (year to date) lies inside R3. Every horizon figure is computed on its own window: return and volatility annualised over that window, drawdown measured from the window's start.</li></ul>
-<h3>Checks</h3><ul class="steps">
-<li>With the old roll rule, the new price files reproduce the old continuous series exactly through May 2026 (Gold, Platinum, WTI, Copper, Corn, Ethane, Propane, Butane).</li>
-<li>Earlier versions of this analysis reproduced the August dashboard's Momentum and Value rows to three decimals for Metals, Energy and NGL.</li></ul>
-<h3>Cautions</h3><ul class="steps">
-<li>NGL tenors are provisional (F2 reintroduces heating-season seasonality). Platinum and Palladium F5 and Gold F7 sit beyond the range the liquidity study found fully liquid; Agriculture has had no liquidity study.</li>
-<li>Platinum and Palladium F5 has data only from February 2010 (the monthly files have no earlier prices either), so their long-pair signals warm up during 2010.</li>
-<li>All results are in-sample and not tested for statistical significance; the roll-rule change alters every asset class's numbers.</li></ul>
+<li><b>Reporting periods:</b> R1 covers 1 January 2011 to 31 December 2016, R2 covers 1 January 2017 to 31 December 2021, and R3 covers 1 January 2022 to 23 September 2026 (the last price date). The periods are consecutive and do not overlap. The 2026 year-to-date column falls within R3. Each period's statistics are computed on that period alone: return and volatility are annualised over the period, and maximum drawdown is measured from the period's start.</li></ul>
 </div></div>
 </div>
 """
@@ -80,7 +72,7 @@ const ASSET={metals:"metals",energy:"energy",energy_exng:"energy",ngl:"ngl",prec
 const CAL={metals:"LME futures. Roll calendar: expiry_calendars_20260701.xlsx (not Bloomberg-matched).",
  energy:"NYMEX/ICE futures. Roll calendar: expiry_calendars_20260701.xlsx (not Bloomberg-matched).",
  energy_exng:"Energy with Natural Gas removed. Roll calendar: expiry_calendars_20260701.xlsx (not Bloomberg-matched).",
- ngl:"Mont Belvieu swaps/futures, mapped by ticker root; labels verified against EIA propane spot (see Notes). Roll calendar: expiry_calendars_20260701.xlsx (not Bloomberg-matched).",
+ ngl:"Mont Belvieu swaps/futures, Roll calendar: expiry_calendars_20260701.xlsx (not Bloomberg-matched).",
  precious:"COMEX/NYMEX futures. Roll calendar: expiry_calendars_20260701_aligned.xlsx (Bloomberg-matched months).",
  agri:"CBOT/ICE futures. Roll calendar: Agri_Rolling_Calendar_bloomberg_matched.xlsx (Bloomberg-matched months)."};
 const ORDER=[["metals","Metals"],["energy","Energy"],["energy_exng","Energy ex-NatGas"],["ngl","NGL"],["precious","Precious"],["agri","Agriculture"],
@@ -214,7 +206,7 @@ EXTRA = (" ul.steps li{margin:4px 0;font-size:13px} .legend-row label{display:in
          " th.grp{text-align:center;font-size:11px;letter-spacing:.03em} .hint{font-weight:400;font-size:10.5px;color:var(--text-muted)}"
          " .howto{background:rgba(47,111,181,.07);border:1px solid rgba(47,111,181,.30);border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px} .howto b{color:#2f6fb5} .howto ul{margin:6px 0 0 18px;padding:0}")
 html = ('<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Risk Premia: Final Research Dashboard</title>'
-        '<meta name="viewport" content="width=device-width, initial-scale=1"><style>' + css + EXTRA + "</style></head><body>" + BODY +
+        '<meta name="viewport" content="width=device-width, initial-scale=1"><style>' + css + EXTRA + "</style><style>.formula{overflow-x:auto;margin:2px 0 8px;font-size:13px}.formula .katex-display{margin:.4em 0}</style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css"><script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script><script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true}],throwOnError:false})"></script></head><body>" + BODY +
         "<script>\nconst D=" + json.dumps(data) + ";\n" + color_js + roll_js + SCRIPT + "</script></body></html>")
 out = R / "Analysis/Final_Research_Dashboard.html"
 out.write_text(html, encoding="utf8")

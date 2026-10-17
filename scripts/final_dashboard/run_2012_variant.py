@@ -86,16 +86,16 @@ srcs = {
         ('const EQ_STARTS=[["2011-01-01","From 2011"],["2016-01-01","From 2016"],["2020-01-01","From 2020"],["2022-01-01","From 2022"],["2026-01-01","From 2026"]];',
          'const EQ_STARTS=[["2012-01-01","From 2012"],["2017-01-01","From 2017"],["2022-01-01","From 2022"],["2026-01-01","From 2026"]];'),
         ("reporting from 2011-01-01. All price data", "reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data"),
-        ("Reporting still starts 2011-01-01, so 2026 year-to-date now covers nearly nine months.", "This variant reports from 2012-01-01; signals, rolls and costs are identical to the main dashboard except that Value needs 504 F3 observations (two years) instead of 630 before it starts, so NGL Value and NGL Inverse Vol are defined from before 2012."),
-        ("Three regimes (set 2026-10-12, replacing the earlier four): <b>R1</b> 1 Jan 2011 to 31 Dec 2016, <b>R2</b> 1 Jan 2017 to 31 Dec 2021, <b>R3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap. The 2026 column (year to date) lies inside R3.",
-         "Three periods in this variant: <b>P1</b> 1 Jan 2012 to 31 Dec 2016, <b>P2</b> 1 Jan 2017 to 31 Dec 2021, <b>P3</b> 1 Jan 2022 to the last price date, 23 Sep 2026. The windows do not overlap. The 2026 column (year to date) lies inside P3."),
+        ("Reporting starts 2011-01-01; the 2026 year-to-date column covers 1 January to 23 September.", "Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to 23 September. Value requires two years of F3 price history before its first signal."),
+        ("<b>Reporting periods:</b> R1 covers 1 January 2011 to 31 December 2016, R2 covers 1 January 2017 to 31 December 2021, and R3 covers 1 January 2022 to 23 September 2026 (the last price date). The periods are consecutive and do not overlap. The 2026 year-to-date column falls within R3.",
+         "<b>Reporting periods:</b> P1 covers 1 January 2012 to 31 December 2016, P2 covers 1 January 2017 to 31 December 2021, and P3 covers 1 January 2022 to 23 September 2026 (the last price date). The periods are consecutive and do not overlap. The 2026 year-to-date column falls within P3."),
         ("), 2011-2026. Within-asset-class", "), 2012-2026. Within-asset-class"),
         ("2011 onward. Blue is positive", "2012 onward. Blue is positive"),
         ('out = R / "Analysis/Final_Research_Dashboard.html"', f'out = R / "{HTML}"'),
         ("Risk Premia: Final Research Dashboard", "Risk Premia: Final Research Dashboard (2012 start, three periods" + (", Value band +/-%g%%" % (VTHR * 100) if VTHR is not None else "") + (", Carry: summed raw slopes (no z-score)" if RAWC else ", Carry-Momentum standardised" if STD else ", Carry-Momentum per-month spread" if PM else ", Carry-Momentum z-score difference" if ZDIFF else "") + ")")]
         + ([("F3 price against its own 1,260-day average, long below -10%, short above +10%.", "F3 price against its own 1,260-day average, long below -%g%%, short above +%g%%." % (VTHR * 100, VTHR * 100))] if VTHR is not None else [])
-        + ([("z-score of the carry slope, (near - far) / near, against its own trailing 252 days. With two tenor pairs, the z-scores of the pairs are summed",
-             "raw carry slope, (near - far) / near, with no z-score. With two tenor pairs, the raw slopes of the pairs are summed")] if RAWC else [])
+        + ([("For each tenor pair, the carry slope (near - far) / near is standardised against its own trailing 252-day mean and standard deviation. The two z-scores are summed",
+             "For each tenor pair, the raw carry slope (near - far) / near is used with no z-score. The two raw slopes are summed")] if RAWC else [])
         + ([("change of the carry slope over 20 observations, summed across the tenor pairs (raw changes, not standardised) and signed",
              "the 20-day change of each pair's Carry z-score (z-score today minus the z-score 20 observations ago), summed across the pairs and signed" if ZDIFF else
              "the 20-day change of each pair's per-month spread, (near price - far price) divided by the exact months between the two legs on that date, summed across the pairs and signed" if PM else

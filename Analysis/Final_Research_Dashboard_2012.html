@@ -149,9 +149,9 @@
  ul.steps li{margin:4px 0;font-size:13px} .legend-row label{display:inline-flex;align-items:center;gap:4px;font-size:12px} .rc-tooltip{white-space:pre} .window-row,.rc-window-row{background:rgba(47,111,181,.08);border:1px solid rgba(47,111,181,.35);border-left:4px solid #2f6fb5;border-radius:8px;padding:8px 12px;margin:10px 0 8px} select.window-select{border:2px solid #2f6fb5;font-weight:600;cursor:pointer;background:rgba(47,111,181,.12);border-radius:6px;padding:2px 6px} .window-row label::before,.rc-window-row label::before{content:'FILTER  ';font-size:10px;font-weight:700;letter-spacing:.08em;color:#2f6fb5;margin-right:4px} .legend-row::before{content:'Show / hide strategies:  ';font-size:11px;font-weight:700;color:#2f6fb5;margin-right:8px} th.per-h{cursor:pointer} th.per-h:hover{text-decoration:underline} th.per-h.on,td.on{background:rgba(47,111,181,.16)} th.sel,td.sel{background:rgba(224,140,40,.10)} th.grp{text-align:center;font-size:11px;letter-spacing:.03em} .hint{font-weight:400;font-size:10.5px;color:var(--text-muted)} .howto{background:rgba(47,111,181,.07);border:1px solid rgba(47,111,181,.30);border-radius:10px;padding:10px 14px;margin:10px 0;font-size:13px} .howto b{color:#2f6fb5} .howto ul{margin:6px 0 0 18px;padding:0}</style><style>.formula{overflow-x:auto;margin:2px 0 8px;font-size:13px}.formula .katex-display{margin:.4em 0}</style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css"><script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script><script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true}],throwOnError:false})"></script></head><body>
 <div class="wrap">
 <h1>Risk Premia: Final Research Dashboard (2012 start, three periods)</h1>
-<div class="subtitle">Five commodity asset classes, five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through 2026-09-23. Generated 2026-10-12.</div>
+<div class="subtitle">Five commodity asset classes, five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through 2026-09-23.</div>
 <div class="howto"><b>How to use this dashboard</b><ul>
-<li><b>Tabs</b> across the top: one per asset class, the combined books (All 5), By Style, Cross-Pair, Correlations and Notes (methods and data).</li>
+<li><b>Tabs</b> across the top: one per asset class, plus By Style, Cross-Pair, Correlations and Notes (methods and data).</li>
 <li><b>Blue filter bars</b> mark every control you can change: period, commodity, metric, Energy with or without NatGas.</li>
 <li><b>Tables</b> show IR for every period; click a period heading (or use the filter) to see that period's return, volatility and maximum drawdown.</li>
 <li><b>Charts</b>: tick or untick strategies above the chart, change the start period, and hover over the lines for values.</li>
@@ -364,7 +364,7 @@ const CAL={metals:"LME futures. Roll calendar: expiry_calendars_20260701.xlsx (n
 const ORDER=[["metals","Metals"],["energy","Energy"],["energy_exng","Energy ex-NatGas"],["ngl","NGL"],["precious","Precious"],["agri","Agriculture"],
  ["all5","All 5: with NatGas"],["all5_exng","All 5: ex-NatGas"],["bystyle","By Style"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]];
 const bar=document.getElementById("tabbar"),panels=document.getElementById("panels");
-const HIDDEN_TABS=["crosspair","corr"];
+const HIDDEN_TABS=["all5","all5_exng"];
 ORDER.filter(([k])=>!HIDDEN_TABS.includes(k)).forEach(([k,l],i)=>{const b=document.createElement("button");b.className="tab-btn";b.setAttribute("role","tab");b.setAttribute("aria-selected",i==0?"true":"false");b.dataset.tab=k;b.textContent=l;bar.appendChild(b);});
 function addPanel(key,html,first){const p=document.createElement("div");p.className="tab-panel"+(first?" active":"");p.id="panel-"+key;p.innerHTML=html;panels.appendChild(p);return p;}
 const horizonOpts=D.cols.map(c=>`<option value="${c.key}">${c.label} (${c.years})</option>`).join("");
@@ -433,7 +433,7 @@ function productEquity(p,key){
   const draw=()=>renderEquity(inner,"prod|"+asset+"|"+sel.value);sel.addEventListener("change",draw);draw();
 }
 Object.keys(D.tabs).forEach((key,i)=>{const t=D.tabs[key];
-  const p=addPanel(key,`<div class="card"><h2>${LABEL[key]}</h2><p class="note"><b>Products:</b> ${t.products.join(", ")}. <b>Data:</b> ${t.data_first} to ${t.data_last}.</p><p class="note">${CAL[key]}</p>
+  const p=addPanel(key,`<div class="card"><h2>${LABEL[key]}</h2><p class="note"><b>Products:</b> ${t.products.join(", ")}. <b>Data:</b> ${t.data_first} to ${t.data_last}.</p>
   <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div><div data-prod></div><div data-peq></div></div>`,i===0);
   wireMerged(p,()=>t.windows);
   renderEquity(p.querySelector("[data-eq]"),key);productSection(p,key);productEquity(p,key);
@@ -446,7 +446,7 @@ Object.keys(D.tabs).forEach((key,i)=>{const t=D.tabs[key];
   wireMerged(p,()=>c.windows);renderEquity(p.querySelector("[data-eq]"),key);});
 
 /* ---------- by style ---------- */
-(function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value, Skewness) is first equal-weighted across the five asset classes' own sleeves on their common dates, giving one cross-asset-class series per style. The five style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day). This is the reverse order to the "All 5" tabs, which combine sleeves within each asset class first.</p>
+(function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value, Skewness) is first equal-weighted across the five asset classes' own sleeves on their common dates, giving one cross-asset-class series per style. The five style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day).</p>
   <div class="window-row"><label>Energy: <select class="window-select" data-bv><option value="with NatGas">with NatGas</option><option value="ex-NatGas">ex-NatGas</option></select></label><span class="note" style="margin:0" data-bn></span></div>
   <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
   const bv=p.querySelector("[data-bv]"),hs=p.querySelector("[data-hs]"),tb=p.querySelector("[data-full]");

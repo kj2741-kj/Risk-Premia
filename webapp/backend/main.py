@@ -38,7 +38,8 @@ except ImportError as exc:
         "research/ living alongside it)."
     ) from exc
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, HTTPException  # noqa: E402
+from fastapi.responses import FileResponse  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from api import router as api_router  # noqa: E402
@@ -65,3 +66,20 @@ app.include_router(api_router)
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+# Standalone research pages (self-contained HTML, no engine dependency).
+# Whitelist of slugs, so the route can never be steered to arbitrary files.
+_REPORTS_DIR = os.path.join(_BACKEND_DIR, "reports")
+_REPORTS = {
+    "final-research-dashboard-2012": "Final_Research_Dashboard_2012.html",
+    "commodity-rankings": "Commodity_Rankings.html",
+}
+
+
+@app.get("/api/reports/{slug}")
+def report(slug: str):
+    fname = _REPORTS.get(slug)
+    if fname is None:
+        raise HTTPException(status_code=404, detail="Unknown report")
+    return FileResponse(os.path.join(_REPORTS_DIR, fname), media_type="text/html")

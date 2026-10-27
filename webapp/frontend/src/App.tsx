@@ -4,6 +4,7 @@ import HomePage from "./pages/HomePage";
 import AssetClassPage from "./pages/AssetClassPage";
 import FundamentalAnalysisPage from "./pages/FundamentalAnalysisPage";
 import CrossAssetPage from "./pages/CrossAssetPage";
+import ResearchPage from "./pages/ResearchPage";
 import { warmBackend } from "./lib/api";
 
 const NAV = [
@@ -15,6 +16,7 @@ const NAV = [
   { to: "/agri", label: "Agriculture" },
   { to: "/fundamental-analysis", label: "Fundamental Analysis" },
   { to: "/cross-asset", label: "Cross-Asset Portfolio" },
+  { to: "/research", label: "Research" },
 ];
 
 export default function App() {
@@ -60,6 +62,7 @@ export default function App() {
           } />
           <Route path="/fundamental-analysis" element={<FundamentalAnalysisPage />} />
           <Route path="/cross-asset" element={<CrossAssetPage />} />
+          <Route path="/research" element={<ResearchPage />} />
         </Routes>
       </main>
     </div>

@@ -1,6 +1,6 @@
-"""Analysis stage of the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_0930/final_v3.json
+"""Analysis stage of the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_<tag>/final_v3.json (tag from env FD_TAG, default 0930; see fd_config.py)
 Input: products_nets.pkl (compute_products_v3.py). Reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column.
-Data through 2026-09-30. Methods: EW and Inverse Vol (63d trailing vol) only, as before.
+Data through the tag's cutoff (0930: 2026-09-30, 1029: 2026-10-29). Methods: EW and Inverse Vol (63d trailing vol) only, as before.
 Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Power / Emissions / Nat Gas (NatGas, TTF, EUA), NGL, Precious, Agriculture.
 The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all six buckets.
 Run from the repo root after compute_products_v3.py."""
@@ -17,22 +17,16 @@ from engine import combine_returns
 from cross_asset_engine import combine_cross_asset
 from run_regime_table import _metrics
 
-OUT = Path("outputs/final_dashboard_0930")
+sys.path.insert(0, "scripts/final_dashboard")
+from fd_config import TAGS, BUCKETS, STYLES, current_tag, out_dir, check_run
+TAG = current_tag()
+check_run(TAG)
+OUT = out_dir(TAG)
 REPORT_START = "2012-01-01"
 REGIMES = [("P1_2012_2016", "2012-01-01", "2016-12-31"), ("P2_2017_2021", "2017-01-01", "2021-12-31"), ("P3_2022_onwards", "2022-01-01", "2026-12-31")]
-CUTOFF = "2026-09-30"
+CUTOFF = TAGS[TAG]["cutoff"]
 nets, meta = pickle.load(open(OUT / "products_nets.pkl", "rb"))
-STYLES = ("Momentum", "Carry", "CarryMom", "Value", "Skewness")
 
-# bucket key -> (label, [(asset-class module, product), ...]); the module is where the product's config and series live
-BUCKETS = {
-    "metals": ("Metals", [("metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]]),
-    "petroleum": ("Petroleum", [("energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]]),
-    "pen": ("Power, Emissions and Nat Gas", [("energy", "NatGas"), ("emissions", "TTF"), ("emissions", "EUA")]),
-    "ngl": ("NGL", [("ngl", p) for p in ["Ethane", "Propane", "Butane", "Isobutane"]]),
-    "precious": ("Precious", [("precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]]),
-    "agri": ("Agriculture", [("agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]]),
-}
 KEYS = list(BUCKETS)
 WINDOWS = [("full", REPORT_START, None)] + [(n.split("_")[0].lower(), s, e) for n, s, e in REGIMES] + [("y26", "2026-01-01", None)]
 f3 = lambda d: {k: (None if pd.isna(v) else round(float(v), 3)) for k, v in d.items()}

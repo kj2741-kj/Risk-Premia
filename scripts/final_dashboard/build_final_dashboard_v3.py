@@ -1,17 +1,26 @@
-"""Builds Analysis/Final_Research_Dashboard_2012_0930.html (2026-10-31): the 2012-start, three-period research dashboard with the new buckets
-(Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture), data through 2026-09-30. Input: outputs/final_dashboard_0930/final_v3.json (analyze_v3.py).
+"""Builds Analysis/Final_Research_Dashboard_2012_<tag>.html (2026-10-31): the 2012-start, three-period research dashboard with the new buckets
+(Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture). Tag 0930 = data cut at 2026-09-30, tag 1029 = latest data (to 2026-10-29), chosen with the env
+var FD_TAG (default 0930; see fd_config.py). Input: outputs/final_dashboard_<tag>/final_v3.json (analyze_v3.py).
 
 TEMPLATE: the committed Analysis/Final_Research_Dashboard_2012.html (the page as last published, 2026-10-18). That page was edited by hand after build_final_dashboard_v2.py
 produced it (heading, hidden "All 5" tabs, no roll-calendar notes), and build_final_dashboard_v2.py no longer compiles, so the layout, CSS, KaTeX and JavaScript are taken from the
 published page and only the pieces that depend on the buckets, the dates or the data are replaced here (every replacement is asserted to match exactly once).
-Run from the repo root:  python scripts/final_dashboard/build_final_dashboard_v3.py"""
+Run from the repo root:  FD_TAG=1029 python scripts/final_dashboard/build_final_dashboard_v3.py"""
 import json
 import re
+import sys
 from pathlib import Path
 
+sys.path.insert(0, "scripts/final_dashboard")
+from fd_config import TAGS, current_tag, out_dir, check_run
+
+TAG = current_tag()
+check_run(TAG)
+CFG = TAGS[TAG]
+BR = chr(10)     # newline between two <li> items (cosmetic, as in the template)
 R = Path(".")
 TEMPLATE = R / "Analysis/Final_Research_Dashboard_2012.html"
-res = json.load(open(R / "outputs/final_dashboard_0930/final_v3.json"))
+res = json.load(open(R / out_dir(TAG) / "final_v3.json"))
 COLS = [("full", "Full", "2012-2026"), ("p1", "P1", "2012-2016"), ("p2", "P2", "2017-2021"), ("p3", "P3", "2022-2026"), ("y26", "2026", "YTD")]
 data = dict(res, cols=[dict(key=k, label=l, years=y) for k, l, y in COLS])
 
@@ -28,10 +37,10 @@ def rep(s, old, new):
 
 # ---------------- head and body (heading, how-to, Notes tab) ----------------
 b = head_body
-b = rep(b, "<title>Risk Premia: Final Research Dashboard (2012 start, three periods)</title>", "<title>Risk Premia: Final Research Dashboard (2012 start, three periods, data to 2026-09-30)</title>")
+b = rep(b, "<title>Risk Premia: Final Research Dashboard (2012 start, three periods)</title>", "<title>Risk Premia: Final Research Dashboard (2012 start, three periods, data to " + CFG["cutoff"] + ")</title>")
 b = rep(b, "<h1>Risk Premia Analysis Dashbaord</h1>", "<h1>Risk Premia Analysis Dashboard</h1>")
 b = rep(b, "Five commodity asset classes, five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through 2026-09-23.",
-        "Six commodity buckets (Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture), five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through 2026-09-30.")
+        "Six commodity buckets (Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture), five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through " + CFG["cutoff"] + ".")
 b = rep(b, "one per asset class, plus By Style, Cross-Pair, Correlations and Notes (methods and data).", "one per bucket, plus By Style, Cross-Pair, Correlations and Notes (methods and data).")
 b = rep(b, "every control you can change: period, commodity, metric, Energy with or without NatGas.", "every control you can change: period, commodity, metric.")
 b = rep(b, "<b>Each asset-class tab</b>", "<b>Each bucket tab</b>")
@@ -45,17 +54,17 @@ b = rep(b, "<li>Each asset-class portfolio combines its five sleeves", "<li>Each
 b = rep(b, "sleeves into an asset-class portfolio, then the five asset-class portfolios into one book; all four EW / Inverse Vol pairs are shown, with and without NatGas. <b>Cross-pair portfolios</b> blend two asset classes' portfolios",
         "sleeves into a bucket portfolio, then the six bucket portfolios into one book; all four EW / Inverse Vol pairs are shown. <b>Cross-pair portfolios</b> blend two buckets' portfolios")
 b = rep(b, "<li>Prices run through 2026-09-23 for all five asset classes. Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to 23 September. Value requires two years of F3 price history before its first signal.</li>",
-        "<li>Prices run through 2026-09-30 for all six buckets (the 29-Oct Bloomberg pull extends the 24-Sep file; every sheet is cut at 30 September). Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to 30 September. Value requires two years of F3 price history before its first signal.</li>\n<li>EUA (provisional): the series starts on 2008-04-01, the first Phase II day. The earlier generic series is Phase I contracts trading at 0.01-0.07 EUR and is not used. EUA data quality is still being reviewed. TTF starts in 2006.</li>")
+        "<li>" + CFG["data_line"] + " Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to " + CFG["short"] + ". Value requires two years of F3 price history before its first signal.</li>" + BR + "<li>EUA: the series starts on 2008-04-01, the first Phase II day. The earlier generic series is Phase I contracts trading at 0.01-0.07 EUR and is not used. TTF starts in 2006. EUA data review (2026-10-31): no data error was found and nothing was changed. Checks passed: trading calendar and holidays, no stale runs, a normal and never-inverted curve, price levels against dated published anchors (for example the December 2013 contract closing 2012 at 6.67, matched exactly), and every daily move above 10% (40 days) moves the whole curve together, on 36 of the 40 days with at least the median trading volume. Caveats: tenors F2 to F4 repeat the same price on many days in 2008 to 2010 and in 2016 to 2018, when the curve was flat, and a few 2013 and 2014 daily moves could not be matched to a news source.</li>")
 b = rep(b, "Metals, Energy and NGL use expiry dates published by the exchange.</li>",
         "Metals, Energy (including Henry Hub) and NGL use expiry dates published by the exchange. EUA and TTF use ICE Endex last trade dates from Bloomberg's expiry history (EUA: third Monday of the delivery month; TTF: two business days before the delivery month).</li>")
-b = rep(b, "and P3 covers 1 January 2022 to 23 September 2026 (the last price date).", "and P3 covers 1 January 2022 to 30 September 2026 (the last price date).")
+b = rep(b, "and P3 covers 1 January 2022 to 23 September 2026 (the last price date).", "and P3 covers 1 January 2022 to " + CFG["last_txt"] + ".")
 # Notes tab: what changed, carry wording for one-pair products, costs
 b = rep(b, "<h3>Timing convention (all five sleeves)</h3>",
         "<h3>What changed in this version (2026-10-31)</h3><ul class=\"steps\">"
         "<li><b>Buckets:</b> Energy is now <b>Petroleum</b> (WTI, Brent, RBOB, Heating Oil). Henry Hub moved into the new <b>Power, Emissions and Nat Gas</b> bucket together with <b>TTF</b> (European natural gas, ICE Endex) and <b>EUA</b> carbon allowances (ICE Endex). The Energy ex-NatGas tab and every with/without-NatGas switch are gone. By Style, Cross-Pair (15 pairs) and Correlations cover the six buckets. Metals, NGL, Precious and Agriculture are unchanged.</li>"
-        "<li><b>Data:</b> the 29-Oct Bloomberg pull is merged into the 24-Sep history (overlap identical) and cut at 30 September 2026, seven trading days later than the previous version (23 September). P1 and P2 results of the unchanged buckets are identical to the previous version; Full and P3 differ only by those seven days.</li>"
+        "<li>" + CFG["change_line"] + "</li>"
         "<li><b>New products:</b> TTF starts in 2006 and EUA on 2008-04-01 (first Phase II day). For both, Carry and Carry-Momentum use the single pair F1-F3. All other settings are those of every other product: same five sleeves, 5 bps costs, 5th-trading-day roll, 252-day skewness window.</li>"
-        "<li><b>Provisional:</b> EUA data quality (including the Phase I to Phase II break in April 2008) is still under review.</li></ul>"
+        "<li><b>EUA data</b> was reviewed in depth on 2026-10-31 (details under Data and calendars): no error was found and nothing was changed.</li></ul>"
         "<h3>Timing convention (all five sleeves)</h3>")
 b = rep(b, "Transaction costs are charged when the position changes.</li></ul>", "Transaction costs of 5 bps per unit of turnover are charged when the position changes, and on every roll day.</li></ul>")
 b = rep(b, "The two z-scores are summed and the sign of the sum is the signal.", "The z-scores of a product's tenor pairs are summed (two pairs for most products, the single pair F1-F3 for TTF and EUA) and the sign of the sum is the signal.")
@@ -107,6 +116,6 @@ t = rep(t, "Select asset class</h3><label>Asset class: <select", "Select bucket<
 t = rep(t, "Section 2: Cross-Asset-Class Correlation", "Section 2: Cross-Bucket Correlation")
 t = rep(t, "Trailing correlation between two asset classes' own portfolios, 2012 onward.", "Trailing correlation between two buckets' own portfolios, 2012 onward.")
 
-out = R / "Analysis/Final_Research_Dashboard_2012_0930.html"
+out = R / f"Analysis/Final_Research_Dashboard_2012_{TAG}.html"
 out.write_text(b + "<script>\nconst D=" + json.dumps(data) + ";\n" + t, encoding="utf8")
 print("written", out, out.stat().st_size // 1024, "KB")

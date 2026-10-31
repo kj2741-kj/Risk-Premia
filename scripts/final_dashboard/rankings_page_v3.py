@@ -1,9 +1,14 @@
-"""Commodity and bucket rankings by Sharpe ratio (return / volatility, no risk-free rate) -> Analysis/Commodity_Rankings_0930.html (2026-10-31; new buckets, data to 2026-09-30)
-Derived from rankings_page.py: reads outputs/final_dashboard_0930/final_v3.json and products_nets.pkl (analyze_v3.py, compute_products_v3.py); sectors = the six buckets.
+"""Commodity and bucket rankings by Sharpe ratio (return / volatility, no risk-free rate) -> Analysis/Commodity_Rankings_<tag>.html (2026-10-31; new buckets)
+Derived from rankings_page.py: reads outputs/final_dashboard_<tag>/final_v3.json and products_nets.pkl (tag 0930 or 1029, env FD_TAG) (analyze_v3.py, compute_products_v3.py); sectors = the six buckets.
 Per commodity: each risk-premium sleeve (Momentum, Carry V2, Carry-Momentum V3, Value, Skewness) and two mini-portfolios of the five sleeves (Equal Weight, Inverse Vol 63d, lagged).
 Per asset class: the same sleeves plus EW PORT and Inverse Vol, from the dashboards' own series. Coloured by sector (= asset class). Basis: the 2012-start variant (P1-P3). Reads outputs/final_dashboard*/final_v2.json and the products pickles. Run from the repo root."""
 import sys, json, pickle
 from pathlib import Path
+
+sys.path.insert(0, "scripts/final_dashboard")
+from fd_config import TAGS, current_tag, out_dir, check_run
+TAG = current_tag()
+check_run(TAG)
 
 sys.path.insert(0, "research"); sys.path.insert(0, "research/configs"); sys.path.insert(0, "scripts")
 import pandas as pd
@@ -17,7 +22,7 @@ PRODUCTS = [("metals", "metals", p) for p in ["Copper", "Aluminium", "Lead", "Zi
     + [("precious", "precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]] + [("agri", "agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]]
 CLASSES = list(BUCKETS.items())
 import os
-BASES = [("2012 start, data to 2026-09-30", "outputs/final_dashboard_0930", "products_nets.pkl",
+BASES = [(f"2012 start, data to {TAGS[TAG]['cutoff']}", str(out_dir(TAG)), "products_nets.pkl",
           [("full", "Full 2012-2026", "2012-01-01", None), ("p1", "P1 2012-2016", "2012-01-01", "2016-12-31"), ("p2", "P2 2017-2021", "2017-01-01", "2021-12-31"),
            ("p3", "P3 2022-2026", "2022-01-01", None), ("y26", "2026 YTD", "2026-01-01", None)])]
 pack = lambda m: [None if pd.isna(m[k]) else round(float(m[k]), 3) for k in ("ir", "ret", "vol", "mdd")]
@@ -40,7 +45,7 @@ for name, d, pkl, wins in BASES:
         classes.append(dict(name=label, vals=vals))
     DATA[name] = dict(windows=[dict(key=w, label=l) for w, l, *_ in wins], products=prods, classes=classes)
 
-PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Commodity Rankings (2012 start, data to 2026-09-30)</title>
+PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Commodity Rankings (2012 start)</title>
 <style>
 :root{--bg:#fff;--fg:#1f2d3d;--muted:#667;--line:#d5dbe2;--card:#f6f8fa;--c0:#2f6fb5;--c1:#d9792b;--c2:#c9a227;--c3:#8a5fb0;--c4:#3f9b5a;--c5:#c2185b}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12171d;--fg:#dfe5ec;--muted:#98a4b3;--line:#333d49;--card:#1b222b;--c0:#5b97dd;--c1:#f0954a;--c2:#e0bd4a;--c3:#b48cd8;--c4:#5cbf7b;--c5:#e0608f}}
@@ -52,7 +57,7 @@ h1{font-size:23px;margin:0 0 4px}h2{font-size:17px;margin:26px 0 6px}.note{color
 th{background:var(--card)}th.srt{cursor:pointer;user-select:none}th.srt:hover{text-decoration:underline}td:first-child,th:first-child{text-align:left}td.nm i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
 svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}.axis{stroke:var(--line)}
 </style></head><body><div class="wrap"><h1>Commodity and asset-class rankings by Sharpe ratio</h1>
-<p class="note">Sharpe ratio here is annualised return divided by annualised volatility (no risk-free rate), net of costs, as in the dashboards. Colour = sector (bucket: Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture). Basis: the 2012-start dashboard, data to 2026-09-30. Ranks are 1 = best. Mini-portfolios blend a commodity's five sleeves by Equal Weight (EW-5) or Inverse Vol (IV-5, 63-day, lagged one day).</p>
+<p class="note">Sharpe ratio here is annualised return divided by annualised volatility (no risk-free rate), net of costs, as in the dashboards. Colour = sector (bucket: Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture). Basis: the 2012-start dashboard (see its Notes tab for the data end date). Ranks are 1 = best. Mini-portfolios blend a commodity's five sleeves by Equal Weight (EW-5) or Inverse Vol (IV-5, 63-day, lagged one day).</p>
 <div class="ctl"><label>Period <select id="period"></select></label></div>
 <div class="leg" id="leg"></div>
 <h2>1. Buckets (sector portfolios)</h2><p class="note">Equal-weighted across each bucket's commodities, from the dashboard tabs. Click any column heading to sort (click again to reverse); the table starts sorted by the EW PORT. The small number is the rank among the six rows for that column.</p><div class="ts" id="cheat"></div>
@@ -105,6 +110,6 @@ function render(){
 $("period").onchange=render;$("prem").onchange=render;
 setPeriods();render();
 </script></body></html>"""
-_out = "Analysis/Commodity_Rankings_0930.html"
+_out = f"Analysis/Commodity_Rankings_{TAG}.html"
 Path(_out).write_text(PAGE.replace("__DATA__", json.dumps(DATA)), encoding="utf8")
 print("written", _out)

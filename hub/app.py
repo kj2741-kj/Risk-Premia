@@ -87,8 +87,8 @@ DASHBOARD_LINKS = {
     # 2026-10-31: "Energy" became Petroleum (WTI, Brent, RBOB, Heating Oil); same deployment and URL. Henry Hub moved to the new Power, Emissions and Nat Gas bucket.
     "Petroleum":      {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
                         "desc": "WTI, Brent, RBOB, Heating Oil. Momentum, Carry, Value, Skewness."},
-    # Set "ready" to True and fill in the url once the new Streamlit Cloud app (main file pen_dashboard/app.py) exists.
-    "Power, Emissions & Nat Gas": {"url": None, "ready": False,
+    # New Streamlit Cloud app, main file pen_dashboard/app.py (URL added 2026-10-31).
+    "Power, Emissions & Nat Gas": {"url": "https://penriskpremia.streamlit.app/", "ready": True,
                         "desc": "Henry Hub, TTF, EUA carbon. Momentum, Carry, Value, Skewness."},
     "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
                         "desc": "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value."},

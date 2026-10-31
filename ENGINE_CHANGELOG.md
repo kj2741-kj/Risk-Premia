@@ -6,6 +6,15 @@ that led to it.
 
 ---
 
+## 2026-10-31 (night): EUA data review, research dashboard on the latest data, Skewness and VTI pages rebuilt
+
+- **EUA data review** (`Analysis/EUA_Data_Review_2026-10-31.md`): no data error found, nothing changed. Calendar, stale-price, curve-shape and total-volume tests pass; price levels match dated published anchors (Dec-2013 contract closing 2012 at 6.67 matched exactly); all 40 daily moves above 10% move the whole curve together. Caveats: F2-F4 repeat the same price on many days in 2008-2010 and 2016-2018 (flat curve; F1-F3 slope exactly zero on 38% of days in 2017); a list of 2013-2014 daily moves could not be matched to news (needs the ICE settlement file). The "EUA Active" series in the file is a far-dated contract, not a front-month check.
+- **Pipeline parametrised by TAG** (`scripts/final_dashboard/fd_config.py`): tag `0930` = `data/Prices_0930` (cut at 2026-09-30), tag `1029` = `data/Prices_1029_merged` (latest data, nothing cut). `compute_products_v3.py` takes the tag from `RP_PRICES_DIR`; the later scripts from `FD_TAG` (default 0930) and check `outputs/final_dashboard_<tag>/run_info.json`. Outputs: `Analysis/Final_Research_Dashboard_2012_<tag>.html`, `Commodity_Rankings_<tag>.html`, `Skewness_Research_<tag>.html`, `VTI_Research_<tag>.html`.
+- **Skewness and VTI pages rebuilt** (`skewness_research_v3.py`, `vti_research_v3.py`) on the six buckets; they read the Skewness sleeve already in `products_nets.pkl`. The old `Skewness_Research.html` / `VTI_Research.html` (old buckets, data to 23 Sep) are left as they were.
+- **Checks.** 1029 vs 0930: all 125 product x sleeve series equal (max abs difference 0.0) through 2026-09-10. Browser load of every page: no errors.
+
+---
+
 ## 2026-10-31 (later): Streamlit apps and hub realigned to the six buckets
 
 - **Apps.** `energy_dashboard/` is now the **Petroleum** dashboard (WTI, Brent, RBOB, Heating Oil; folder name kept so the Streamlit Cloud URL does not change). New **`pen_dashboard/`** (Power, Emissions and Nat Gas: Henry Hub, TTF, EUA; each product keeps its own data file, calendar and start date; EUA from 2008-04-01; the new Streamlit Cloud app is created by the user, main file `pen_dashboard/app.py`). Metals, NGL, Precious and Agriculture apps only gain the data setting below.

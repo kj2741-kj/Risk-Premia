@@ -1,16 +1,19 @@
 """Per-product sleeve net returns for the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_0930/products_nets.pkl
-Data: data/Prices_0930 (merged 29-Oct pull, every sheet cut at 2026-09-30; set RP_PRICES_DIR=Prices_0930, this script refuses to run otherwise).
+Data: data/Prices_0930 (merged 29-Oct pull, every sheet cut at 2026-09-30) or data/Prices_1029_merged (nothing cut, latest data); set RP_PRICES_DIR to one of them, this script refuses to run otherwise.
 Same sleeves, signals, roll rule (5th trading day of the last-trade-date month), tenor-pair rule and 5 bps costs (roll days charged) as compute_products.py, plus:
   * the Emissions class (EUA from the first Phase II day 2008-04-01, TTF from 2006; research/configs/emissions.py; Carry F1-F3 only for both; own calendars in Emissions_Expiry_Calendars.xlsx);
   * Value needs 504 observations of F3 (not 630), as in the 2012 variant, so that every product's Value is defined before the 2012 reporting start.
 Tenor pairs: Metals / Energy: F1-F3 + F1-F13;  NGL: F2-F4 + F2-F14;  Emissions (EUA, TTF): F1-F3 only;  Precious / Agriculture: F1-F2 + long (as compute_products.py).
-Run from the repo root:  RP_PRICES_DIR=Prices_0930 python scripts/final_dashboard/compute_products_v3.py"""
+Run from the repo root:  RP_PRICES_DIR=Prices_0930 (or Prices_1029_merged) python scripts/final_dashboard/compute_products_v3.py   (tag 0930 / 1029, see fd_config.py)"""
 import os
 import sys
 import pickle
 from pathlib import Path
 
-assert os.environ.get("RP_PRICES_DIR") == "Prices_0930", "set RP_PRICES_DIR=Prices_0930 (scripts/rolling_continuous.py reads the data folder from it)"
+import json
+sys.path.insert(0, "scripts/final_dashboard")
+from fd_config import TAGS, tag_from_prices_dir, out_dir   # RP_PRICES_DIR must be Prices_0930 or Prices_1029_merged (scripts/rolling_continuous.py reads the data folder from it)
+TAG = tag_from_prices_dir()
 sys.path.insert(0, "research"); sys.path.insert(0, "research/configs"); sys.path.insert(0, "scripts")
 import importlib
 import numpy as np
@@ -18,8 +21,8 @@ import pandas as pd
 from engine import (raw_signal_carry_v2, raw_signal_carrymom, combine_positions, exec_shift, log_return_daily,
                     momentum_composite_position, value_v1_position)
 
-OUT = Path("outputs/final_dashboard_0930")
-CUTOFF = pd.Timestamp("2026-09-30")
+OUT = out_dir(TAG)
+CUTOFF = pd.Timestamp(TAGS[TAG]["cutoff"])
 TC = 5
 SKEW_WINDOW, SKEW_SHIFT_N = 252, 1
 VALUE_MIN = 504
@@ -67,4 +70,5 @@ for a, prods in PRODUCTS.items():
         print("done", a, p, meta[(a, p)], flush=True)
 print("roll fallbacks (roll day not before last trade date):", rc.ROLL_FALLBACK_COUNT["n"])
 pickle.dump((nets, meta), open(OUT / "products_nets.pkl", "wb"))
+json.dump(dict(tag=TAG, cutoff=TAGS[TAG]["cutoff"], prices_dir=TAGS[TAG]["prices_dir"], products=len(nets)), open(OUT / "run_info.json", "w"))
 print("saved", OUT / "products_nets.pkl")

@@ -32,6 +32,9 @@ sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
+# 2026-10-31: the Streamlit apps read the latest merged data (29-Oct pull on top of the 24-Sep history), not data/Prices_0924. scripts/rolling_continuous.py reads this env var;
+# the research scripts leave it unset and keep their own data folders.
+os.environ.setdefault("RP_PRICES_DIR", "Prices_1029_merged")
 
 def _refresh_repo_modules(root=_REPO_ROOT):
     """Streamlit Cloud keeps imported modules alive across a git pull and reloads only files inside the app's own folder, so a push that

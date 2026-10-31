@@ -103,9 +103,15 @@ from regimes import REGIMES, REPORT_START
 # ALL_ASSET_CLASSES is what the live hub offers, and every function below that takes an `asset_classes`
 # argument accepts "agri" alongside the original four.
 ASSET_CLASSES = ["metals", "energy", "precious", "ngl"]
-ALL_ASSET_CLASSES = ASSET_CLASSES + ["agri"]
-ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "precious": "Precious", "ngl": "NGL",
-                      "agri": "Agriculture"}
+# 2026-10-31: the live hub now offers the SIX buckets of the research dashboard: Energy is split into Petroleum (WTI, Brent, RBOB, Heating Oil;
+# research/configs/petroleum.py) and Power, Emissions and Nat Gas (Henry Hub, TTF, EUA; research/configs/pen.py). "energy" stays a valid key (its
+# config and the validated reference forms above still use it) but is no longer offered: ALL_ASSET_CLASSES is the live set, and the hub builds its
+# pickers from LIVE_ASSET_CLASS_LABELS.
+ALL_ASSET_CLASSES = ["metals", "petroleum", "pen", "precious", "ngl", "agri"]
+ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "petroleum": "Petroleum", "pen": "Power, Emissions and Nat Gas",
+                      "precious": "Precious", "ngl": "NGL", "agri": "Agriculture"}
+LIVE_ASSET_CLASS_LABELS = {k: ASSET_CLASS_LABELS[k] for k in ALL_ASSET_CLASSES}
+ASSET_CLASS_SHORT = {"pen": "PEN"}       # short names for pair labels, e.g. "Metals-PEN"
 # Dashboard-visible product lists (CLAUDE.md's documented exclusion: research configs' PRODUCTS
 # is NOT what the live dashboard, or the cross-asset numbers, are built on -- Energy excludes
 # Singapore Gasoil + Fuel Oil, NGL excludes Ethylene + Propylene, Precious excludes Copper
@@ -118,6 +124,8 @@ ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "precious": "Preci
 # industrial metal already covered by the Metals asset class (LME), not a precious metal.
 DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
+    "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
+    "pen": ["NatGas", "TTF", "EUA"],
     "ngl": ["Ethane", "Propane", "Butane", "Isobutane"],
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],
     # Agriculture: six products only (2026-10-11), matching research/configs/agri.py's PRODUCTS and the
@@ -135,6 +143,17 @@ CROSS_PAIR_LABELS = {
     ("metals", "precious"): "Metals-Precious", ("energy", "ngl"): "Energy-NGL",
 }
 TC_BPS = 5
+
+
+def cross_pairs(asset_classes=None) -> list[tuple[str, str]]:
+    """Every unordered pair of the given asset classes (default: the live set), in the order given. Dynamic: add a bucket to ALL_ASSET_CLASSES and its pairs appear
+    (6 buckets -> 15 pairs). Replaces the fixed CROSS_PAIRS list for the live hub; CROSS_PAIRS below stays as the validated four-class reference."""
+    from itertools import combinations
+    return list(combinations(list(asset_classes) if asset_classes is not None else ALL_ASSET_CLASSES, 2))
+
+
+def cross_pair_label(a: str, b: str) -> str:
+    return f"{ASSET_CLASS_SHORT.get(a, ASSET_CLASS_LABELS[a])}-{ASSET_CLASS_SHORT.get(b, ASSET_CLASS_LABELS[b])}"
 
 _CFG_CACHE: dict[str, object] = {}
 
@@ -655,6 +674,27 @@ def cross_pair_portfolios(tc_bps: int = TC_BPS) -> dict[str, pd.Series]:
         _, n_dict = cross_n_portfolio(tc_bps, (a, b))
         out[CROSS_PAIR_LABELS[(a, b)]] = n_dict["Portfolio"]
     return out
+
+
+def cross_pair_portfolios_dynamic(tc_bps: int = TC_BPS, asset_classes=None, per_product_fetcher=per_product_four_row,
+                                   styles: tuple[str, ...] | None = None) -> tuple[dict[str, pd.Series], dict[str, pd.Series]]:
+    """All pairwise 50/50 blends of the given asset classes' own Equal Weight portfolios (default: every pair of the live buckets, 15 for six), gross and net, keyed by
+    "A-B" labels. Same construction as cross_n_portfolio(tc, (a, b)) for each pair, but each asset class's own portfolio is built once and reused across its pairs.
+    `styles` as in cross_n_portfolio (None = every style the fetcher returns)."""
+    classes = list(asset_classes) if asset_classes is not None else list(ALL_ASSET_CLASSES)
+    unknown = [ac for ac in classes if ac not in ASSET_CLASS_LABELS]
+    if unknown:
+        raise ValueError(f"unknown asset class(es) {unknown}; valid: {list(ASSET_CLASS_LABELS)}")
+    own = {}
+    for ac in classes:
+        g4, n4 = asset_class_four_row(ac, tc_bps, styles, per_product_fetcher=per_product_fetcher)
+        own[ac] = asset_class_ew_portfolio(g4, n4)
+    gross, net = {}, {}
+    for a, b in cross_pairs(classes):
+        lab = cross_pair_label(a, b)
+        gross[lab] = combine_cross_asset([own[a][0], own[b][0]])
+        net[lab] = combine_cross_asset([own[a][1], own[b][1]])
+    return gross, net
 
 
 def windows_for(series: pd.Series) -> dict[str, dict]:

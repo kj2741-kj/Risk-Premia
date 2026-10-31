@@ -1,9 +1,8 @@
 """
-Energy Dashboard - Stage 2
+Petroleum Dashboard - Stage 2   (this folder keeps its old name, energy_dashboard/, so the Streamlit Cloud deployment and its URL do not change)
 ============================
-Standalone Streamlit app, its own separate deployment. WTI Crude, Brent
-Crude, RBOB Gasoline, Heating Oil ULSD, Nat Gas Henry Hub, Singapore
-Gasoil, Fuel Oil 3.5% Barges. Momentum / Carry / Value only, same
+Standalone Streamlit app, its own separate deployment. WTI Crude, Brent Crude, RBOB Gasoline, Heating Oil ULSD: the Petroleum bucket (2026-10-31). Henry Hub moved to the
+Power, Emissions and Nat Gas dashboard (pen_dashboard/); Singapore Gasoil and Fuel Oil stay out of every dashboard. Momentum / Carry / Value / Skewness, same
 format as the Metals Stage 2 rebuild -- reuses the identical shared
 engine (common_engine.py) so both dashboards behave identically.
 
@@ -25,6 +24,9 @@ sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
+# 2026-10-31: the Streamlit apps read the latest merged data (29-Oct pull on top of the 24-Sep history), not data/Prices_0924. scripts/rolling_continuous.py reads this env var;
+# the research scripts leave it unset and keep their own data folders.
+os.environ.setdefault("RP_PRICES_DIR", "Prices_1029_merged")
 
 def _refresh_repo_modules(root=_REPO_ROOT):
     """Streamlit Cloud keeps imported modules alive across a git pull and reloads only files inside the app's own folder, so a push that
@@ -59,10 +61,10 @@ from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
                                  ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 from dashboard_portfolio_tab import render_portfolio_tab
-import energy as energy_research_cfg
+import petroleum as energy_research_cfg     # Petroleum bucket (WTI, Brent, RBOB, Heating Oil); thin wrapper of configs/energy.py
 
 st.set_page_config(
-    page_title="Energy Risk Premia - Stage 2",
+    page_title="Petroleum Risk Premia - Stage 2",
     page_icon="🛢️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -77,13 +79,13 @@ inject_css()
 # configs/energy.py's own PRODUCTS list and the research pipeline; this is a
 # dashboard-display-only exclusion, not an engine change.
 PRODUCT_UNITS = {
-    "CL": "/bbl", "CO": "/bbl", "XB": "/gal", "HO": "/gal", "NG": "/MMBtu",
+    "CL": "/bbl", "CO": "/bbl", "XB": "/gal", "HO": "/gal",
 }
-PRODUCT_ORDER = ["CL", "CO", "XB", "HO", "NG"]
-ENERGY_PORTFOLIO_EXCLUDED = ("SingaporeGasoil", "FuelOil")
+PRODUCT_ORDER = ["CL", "CO", "XB", "HO"]       # Nat Gas (NG) moved to the Power, Emissions and Nat Gas dashboard on 2026-10-31
+ENERGY_PORTFOLIO_EXCLUDED = ()                  # petroleum.PRODUCTS already holds only these four
 
 with st.sidebar:
-    st.markdown('<p class="main-title">🛢️ Energy Dashboard</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">🛢️ Petroleum Dashboard</p>', unsafe_allow_html=True)
     st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value, Skewness</p>', unsafe_allow_html=True)
     st.divider()
     return_basis_selector()
@@ -100,11 +102,10 @@ with st.sidebar:
         index=1, key="energy_roll_method",   # default: Nth trading day of the expiry month (same roll as the research numbers), 2026-10-11
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="energy_roll_n")
-    st.caption("GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) are excluded, with no usable "
-               "expiry-calendar coverage to build a continuous series. Singapore Gasoil and Fuel Oil are "
-               "also excluded from this dashboard as of 2026-08-03; both remain in the underlying research "
-               "config and engine. Same Momentum/Carry/Value format as the Metals and Precious Metals "
-               "dashboards.")
+    st.caption("Petroleum bucket: WTI, Brent, RBOB Gasoline, Heating Oil. Henry Hub natural gas moved to the Power, Emissions and Nat Gas "
+               "dashboard on 2026-10-31. GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) have no usable expiry-calendar "
+               "coverage; Singapore Gasoil and Fuel Oil are excluded from every dashboard (both remain in the underlying research "
+               "config). Same Momentum/Carry/Value/Skewness format as the Metals and Precious Metals dashboards.")
 
 cfg = ENERGY_CONFIG[product_code]
 unit = PRODUCT_UNITS[product_code]
@@ -128,7 +129,7 @@ register_geo_inputs(f1_df)
 curve = load_curve_simple(ENERGY_FUTURES_FILE, cfg["price_sheet"])
 curve = curve[curve.index.year >= 2006]
 
-st.markdown(f'<p class="main-title">🛢️ Energy Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="main-title">🛢️ Petroleum Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
@@ -158,12 +159,10 @@ with tab_compare:
                                             "Value": value_positions, "Skewness": skew_positions})
 
 with tab_portfolio:
-    st.caption("Combines 5 Energy products (WTI, Brent, RBOB, Heating Oil, Nat Gas) into one "
-               "asset-class-level portfolio, independent of the sidebar's Product selection above, "
-               "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. Singapore Gasoil and Fuel "
-               "Oil are excluded here too (dashboard-only, see sidebar note); both still exist in "
-               "research/configs/energy.py's own PRODUCTS list for the research pipeline. Does not "
-               "include the StatArb sleeve (the 8-spread cross-asset book, shared with NGL); "
-               "this tab covers Momentum, Carry, Carry momentum, and Value only.")
+    st.caption("Combines the 4 Petroleum products (WTI, Brent, RBOB, Heating Oil) into one "
+               "bucket-level portfolio, independent of the sidebar's Product selection above, "
+               "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. Does not "
+               "include the StatArb sleeve (the 8-spread cross-asset book, shared with NGL, which still uses Henry Hub); "
+               "this tab covers Momentum, Carry, Carry momentum, Value and Skewness only.")
     render_portfolio_tab(energy_research_cfg, key_prefix="energy_portfolio",
                           excluded_products=ENERGY_PORTFOLIO_EXCLUDED)

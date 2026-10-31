@@ -31,6 +31,9 @@ sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
+# 2026-10-31: the Streamlit apps read the latest merged data (29-Oct pull on top of the 24-Sep history), not data/Prices_0924. scripts/rolling_continuous.py reads this env var;
+# the research scripts leave it unset and keep their own data folders.
+os.environ.setdefault("RP_PRICES_DIR", "Prices_1029_merged")
 
 def _refresh_repo_modules(root=_REPO_ROOT):
     """Streamlit Cloud keeps imported modules alive across a git pull and reloads only files inside the app's own folder, so a push that
@@ -81,8 +84,12 @@ DASHBOARD_LINKS = {
     "Metals":         {"url": "https://risk-premia-metals.streamlit.app/", "ready": True,
                         "desc": "LME Copper and Aluminium. Momentum, Carry, and Value strategies. A fuller "
                                 "10-tab research build is also available at metals-risk-premia-kj.streamlit.app."},
-    "Energy":         {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
-                        "desc": "WTI, Brent, RBOB, Heating Oil, Nat Gas, Singapore Gasoil, Fuel Oil. Momentum, Carry, Value."},
+    # 2026-10-31: "Energy" became Petroleum (WTI, Brent, RBOB, Heating Oil); same deployment and URL. Henry Hub moved to the new Power, Emissions and Nat Gas bucket.
+    "Petroleum":      {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
+                        "desc": "WTI, Brent, RBOB, Heating Oil. Momentum, Carry, Value, Skewness."},
+    # Set "ready" to True and fill in the url once the new Streamlit Cloud app (main file pen_dashboard/app.py) exists.
+    "Power, Emissions & Nat Gas": {"url": None, "ready": False,
+                        "desc": "Henry Hub, TTF, EUA carbon. Momentum, Carry, Value, Skewness."},
     "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
                         "desc": "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value."},
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
@@ -189,6 +196,14 @@ def _cached_cross_commodity_skew(tc_bps: int, specs_key=()):
     return {"Skewness": n["Skewness"], "EW PORT + Skewness": n["Portfolio"]}
 
 
+@st.cache_data(ttl=3600, show_spinner="Computing all cross-pair portfolios...")
+def _cached_cross_pairs(tc_bps: int, specs_key=(), with_skew: bool = False):
+    """Every pair of the live buckets (cae.cross_pairs, generated from cae.ALL_ASSET_CLASSES, so 15 pairs for six buckets and a new bucket adds its own),
+    gross and net, each pair 50/50 of the two buckets' own Equal Weight portfolios."""
+    return cae.cross_pair_portfolios_dynamic(tc_bps, tuple(cae.ALL_ASSET_CLASSES), per_product_fetcher=_carry_fetcher(specs_key),
+                                            styles=cae.ALL_STYLE_NAMES if with_skew else cae.STYLE_NAMES)
+
+
 @st.cache_data(ttl=3600, show_spinner="Loading traditional-asset benchmark data...")
 def _cached_benchmark_returns():
     return benchmarks.load_benchmark_returns()
@@ -197,7 +212,7 @@ def _cached_benchmark_returns():
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
            "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
 
-ASSET_LABEL_TO_KEY = {v: k for k, v in cae.ASSET_CLASS_LABELS.items()}
+ASSET_LABEL_TO_KEY = {v: k for k, v in cae.LIVE_ASSET_CLASS_LABELS.items()}      # the six live buckets (2026-10-31); 'Energy' is no longer offered
 STYLE_LABEL_TO_KEY = {"Momentum": "Momentum", "Carry": "Combined Carry",
                        "CarryMom": "Combined CarryMom", "Value": "Value", "Skewness": "Skewness"}
 
@@ -332,7 +347,7 @@ with tab_overview:
     st.markdown('<p class="main-title">⚙️ Risk Premia</p>', unsafe_allow_html=True)
     st.markdown(
         '<p class="main-subtitle">Systematic Momentum, Carry, and Value risk premia across LME metals, '
-        'energy, precious metals, and refined products, developed as supervised research with '
+        'petroleum, power, emissions and natural gas, precious metals, and refined products, developed as supervised research with '
         'Prof. Ilia Bouchoev.</p>',
         unsafe_allow_html=True,
     )
@@ -378,8 +393,8 @@ walk-forward out-of-sample testing yet), to oil and energy, precious metals, and
     )
 
     section_header("HEADLINE FINDINGS")
-    st.info("Coming soon. Consolidated headline findings across Metals, Energy, Precious Metals, "
-            "and NGL will be published here once results from all four asset classes are finalized.")
+    st.info("Coming soon. Consolidated headline findings across Metals, Petroleum, Power/Emissions/Nat Gas, Precious Metals, "
+            "and NGL will be published here once results from all asset classes are finalized.")
 
     section_header("CONCLUSION")
     st.markdown(
@@ -399,7 +414,7 @@ outside metals.
     st.caption("Each asset class below is its own independent dashboard. Open one to explore live "
                "signals, parameter controls, equity curves, rolling Sharpe, and performance metrics.")
 
-    nav_cols = st.columns(5)
+    nav_cols = st.columns(len(DASHBOARD_LINKS))
     for col, (name, info) in zip(nav_cols, DASHBOARD_LINKS.items()):
         with col:
             st.markdown(f"**{name}**")
@@ -524,7 +539,7 @@ with tab_fund:
             mime="text/csv",
         )
 
-# TAB 3: Cross-Asset Portfolio (Metals + Energy + Precious + NGL + Agriculture combined)
+# TAB 3: Cross-Asset Portfolio (Metals + Petroleum + Power/Emissions/Nat Gas + Precious + NGL + Agriculture combined)
 with tab_crossasset:
     st.markdown('<p class="main-title">🌐 Cross-Asset Portfolio</p>', unsafe_allow_html=True)
     st.caption(
@@ -551,7 +566,8 @@ with tab_crossasset:
                    "Tenor pairs apply to both Carry and Carry momentum. Momentum and Value are unaffected. "
                    "With the pairs left at their defaults, Precious and Agriculture also blend each product's own long "
                    "pair (Gold F1-F7, Silver F1-F6, Platinum/Palladium F1-F5; Corn/Wheat/Coffee F1-F6, Soybean/Soybean Oil "
-                   "F1-F8, Sugar F1-F5) with the F1-F2 shown, exactly as in the Final Research Dashboard. Editing any pair "
+                   "F1-F8, Sugar F1-F5) with the F1-F2 shown, exactly as in the Final Research Dashboard. Power, Emissions and Nat Gas uses "
+                   "F1-F3 for TTF and EUA and F1-F3 plus F1-F13 for Henry Hub. Editing any pair "
                    "below replaces that with one uniform pair list for the asset class.")
         k1, k2, k3 = st.columns([2, 1, 1])
         with k1:
@@ -643,8 +659,8 @@ with tab_crossasset:
     cc1, cc2, cc3 = st.columns(3)
     with cc1:
         cc_assets_labels = st.multiselect(
-            "Asset classes", list(cae.ASSET_CLASS_LABELS.values()),
-            default=list(cae.ASSET_CLASS_LABELS.values()), key="cc_assets")
+            "Asset classes", list(cae.LIVE_ASSET_CLASS_LABELS.values()),
+            default=list(cae.LIVE_ASSET_CLASS_LABELS.values()), key="cc_assets")
     with cc2:
         cc_styles_labels = st.multiselect(
             "Styles", ["Momentum", "Carry", "CarryMom", "Value", "Skewness"],
@@ -679,16 +695,16 @@ with tab_crossasset:
     st.divider()
 
     section_header("Cross-Asset-Class Portfolio")
-    st.caption("Combination of 1-5 asset classes' own Equal Weight portfolios (generalizes the "
-               "4 fixed Cross-Pairs shown on the static report to any 1-5 you pick). Pick just "
+    st.caption("Combination of 1-6 asset classes' own Equal Weight portfolios (generalizes the "
+               "fixed Cross-Pairs of the static report to any selection you pick). Pick just "
                "one to see that asset class's own EW Portfolio number on its own, matching its "
                "individual dashboard's Portfolio tab.")
 
     cn1, cn2, cn3 = st.columns([3, 1, 1.4])
     with cn1:
         cn_assets_labels = st.multiselect(
-            "Asset classes (choose 1-5)", list(cae.ASSET_CLASS_LABELS.values()),
-            default=["Metals", "Energy"], key="cn_assets")
+            f"Asset classes (choose 1-{len(cae.ALL_ASSET_CLASSES)})", list(cae.LIVE_ASSET_CLASS_LABELS.values()),
+            default=["Metals", "Petroleum"], key="cn_assets")
     with cn3:
         st.write("")
         cn_skew = st.checkbox("Add Skewness as a fifth style", value=False, key="cn_skew",
@@ -713,6 +729,28 @@ with tab_crossasset:
             combine_method=cn_combine_key,
             styles=cae.ALL_STYLE_NAMES if cn_skew else cae.STYLE_NAMES)
         _render_equity_and_metrics(cn_gross, cn_net, key_prefix="cn")
+
+    st.divider()
+
+    section_header("Cross-Pair Portfolios (all pairs)")
+    _n_pairs = len(cae.cross_pairs())
+    st.caption(f"Every pair of the {len(cae.ALL_ASSET_CLASSES)} buckets ({_n_pairs} pairs, generated from the bucket list): a 50/50 blend of the two buckets' own Equal Weight "
+               "portfolios on the pair's common dates. Uses the Carry settings and the Skewness choice of the section above.")
+    cp1, cp2 = st.columns([3, 1])
+    cp_gross, cp_net = _cached_cross_pairs(tc_bps, carry_specs_key, bool(st.session_state.get("cn_skew", False)))
+    _cp_min = min(int(s.index.min().year) for s in cp_net.values() if not s.empty)
+    _cp_max = max(int(s.index.max().year) for s in cp_net.values() if not s.empty)
+    with cp1:
+        cp_yr_start, cp_yr_end = st.slider("Year range", min_value=_cp_min, max_value=_cp_max,
+                                           value=(max(_cp_min, 2011), _cp_max), step=1, key="cp_years")
+    _cp_rows = []
+    for _lab in cp_net:
+        _m = _ca_window_metrics(cp_gross[_lab], cp_net[_lab], cp_yr_start, cp_yr_end)
+        _cp_rows.append({"Pair": _lab, "Gross Sharpe": _m["gross"], "Net Sharpe": _m["net"], "Ann Return (Net, %)": _m["ann"],
+                         "Ann Vol (%)": _m["vol"], "Max DD (Net, %)": _m["mdd"]})
+    st.dataframe(pd.DataFrame(_cp_rows).set_index("Pair").sort_values("Net Sharpe", ascending=False).style.format(
+        {"Gross Sharpe": "{:+.2f}", "Net Sharpe": "{:+.2f}", "Ann Return (Net, %)": "{:+.2f}", "Ann Vol (%)": "{:.2f}", "Max DD (Net, %)": "{:+.2f}"}),
+        use_container_width=True)
 
     st.divider()
 

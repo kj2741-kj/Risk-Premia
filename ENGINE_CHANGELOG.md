@@ -6,6 +6,16 @@ that led to it.
 
 ---
 
+## 2026-10-31 (later): Streamlit apps and hub realigned to the six buckets
+
+- **Apps.** `energy_dashboard/` is now the **Petroleum** dashboard (WTI, Brent, RBOB, Heating Oil; folder name kept so the Streamlit Cloud URL does not change). New **`pen_dashboard/`** (Power, Emissions and Nat Gas: Henry Hub, TTF, EUA; each product keeps its own data file, calendar and start date; EUA from 2008-04-01; the new Streamlit Cloud app is created by the user, main file `pen_dashboard/app.py`). Metals, NGL, Precious and Agriculture apps only gain the data setting below.
+- **Configs.** `research/configs/petroleum.py` (thin wrapper of `energy.py`, four products) and `research/configs/pen.py` (dispatches to `energy.py` and `emissions.py`; Carry F1-F3 for all, plus F1-F13 for Henry Hub via `CARRY_LONG_FAR_BY_PRODUCT`, the Precious/Agri mechanism). `energy.py` is unchanged (StatArb, earlier research).
+- **Data.** The Streamlit apps and the hub set `RP_PRICES_DIR=Prices_1029_merged` before importing (latest data in the files: prices to 2026-10-29, LME/NGL to 10-28). `scripts/make_prices_snapshot.py --emissions-only` added the uncut EUA/TTF workbook and calendars to that folder. Research scripts leave the variable unset (`Prices_0924`) or set `Prices_0930`, so no research number moves.
+- **Cross-asset engine / hub.** `ALL_ASSET_CLASSES` = metals, petroleum, pen, precious, ngl, agri; `energy` stays a valid key for the validated reference forms. `LIVE_ASSET_CLASS_LABELS` feeds the hub pickers. Cross-pairs are generated (`cross_pairs()`, `cross_pair_portfolios_dynamic()`: 15 pairs for six buckets, a new bucket adds its pairs) instead of the fixed six-pair list (`CROSS_PAIRS` kept only for the validated four-class reference). The hub gets a "Cross-Pair Portfolios (all pairs)" table and a Petroleum / Power, Emissions & Nat Gas pair of dashboard links (PEN shows "Coming Soon" until its URL is set in `DASHBOARD_LINKS`).
+- **Checks.** `per_product_four_row` for Petroleum and PEN on the new folder equals the research dashboard's series exactly (max abs difference 0.0, 7 products x 5 sleeves, 2012 to 2026-09-10); all apps and the hub run headless (`streamlit.testing`) without exceptions.
+
+---
+
 ## 2026-10-31: new buckets (Petroleum; Power, Emissions and Nat Gas), EUA added, research dashboard rebuilt to 2026-09-30
 
 - **Buckets (research dashboard only).** "Energy" is now **Petroleum** (WTI, Brent, RBOB, Heating Oil). "Energy ex-NatGas" and every with/without-NatGas switch are removed. New bucket **Power, Emissions and Nat Gas** = Henry Hub (still `configs/energy.py`) + TTF (European gas) + EUA (new `configs/emissions.py`, holds both); the other power products come later. Metals, NGL, Precious, Agriculture unchanged. Combined book, By Style, Cross-Pair (15 pairs) and Correlations run over the six buckets. `configs/energy.py` `PRODUCTS` and the Streamlit apps / hub are untouched (Energy there still holds the five products).

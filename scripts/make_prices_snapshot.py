@@ -2,7 +2,10 @@
 
 Source: data/Prices_1029_merged (Prices_0924 history extended with the 29-Oct pull, NGL labels corrected) and data/Emissions_1029 (TTF, Henry Hub, EUA).
 Every sheet is cut at CUTOFF (default 2026-09-30, the research cutoff chosen by the user although data run to 10-28/29). Nothing is altered except the cut;
-the EUA files are reshaped into the layout the engine already reads. Run from the repo root: python scripts/make_prices_snapshot.py [YYYY-MM-DD]
+the EUA files are reshaped into the layout the engine already reads. Run from the repo root:
+  python scripts/make_prices_snapshot.py [YYYY-MM-DD]             -> data/Prices_0930 (everything, cut at the date)
+  python scripts/make_prices_snapshot.py --emissions-only          -> adds ONLY the EUA/TTF files, uncut, to data/Prices_1029_merged (the Streamlit apps' folder,
+                                                                      latest data in the files; written 2026-10-31 when the Streamlit apps were realigned)
 Use it by setting RP_PRICES_DIR=Prices_0930 (scripts/rolling_continuous.py); the Streamlit apps keep reading Prices_0924 unless that is set.
 
 Files written to data/Prices_0930/:
@@ -25,7 +28,11 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "data" / "Prices_1029_merged"
 EMI = ROOT / "data" / "Emissions_1029"
 DST = ROOT / "data" / "Prices_0930"
-CUTOFF = pd.Timestamp(sys.argv[1] if len(sys.argv) > 1 else "2026-09-30")
+EMISSIONS_ONLY = "--emissions-only" in sys.argv
+_args = [a for a in sys.argv[1:] if not a.startswith("--")]
+CUTOFF = pd.Timestamp("2262-01-01") if EMISSIONS_ONLY else pd.Timestamp(_args[0] if _args else "2026-09-30")   # emissions-only: no cut
+if EMISSIONS_ONLY:
+    DST = ROOT / "data" / "Prices_1029_merged"
 
 PRICE_FILES = ["Energy_Futures_Updated.xlsx", "Precious_Metals_Futures_Updated.xlsx", "Metals_Futures_Curve_Updated.xlsx", "Metals_Cash_3M_Updated.xlsx",
                "Agriculture_Futures_Updated.xlsx", "NGL_Futures_Updated_labels_corrected.xlsx",
@@ -54,10 +61,11 @@ def cut_workbook(wb, cutoff):
 
 
 def main():
-    DST.mkdir(exist_ok=False)
-    for f in CAL_FILES:
+    if not EMISSIONS_ONLY:
+        DST.mkdir(exist_ok=False)
+    for f in ([] if EMISSIONS_ONLY else CAL_FILES):
         shutil.copy(SRC / f, DST / f)
-    for f in PRICE_FILES:
+    for f in ([] if EMISSIONS_ONLY else PRICE_FILES):
         wb = openpyxl.load_workbook(SRC / f)
         rem = cut_workbook(wb, CUTOFF)
         rd = wb["README"] if "README" in wb.sheetnames else None
@@ -83,7 +91,7 @@ def main():
     rd = out.active; rd.title = "README"
     for r in [["EUA carbon and TTF gas (ICE Endex) - Futures Curves", None], [None, None],
               ["Source", "data/Emissions_1029/Gas_Power_Emissions_Futures.xlsx, sheets EUA_PX and TTF_PX (Bloomberg generic MO1..MO13 and TZT1..TZT72, PX_LAST)"],
-              ["Cut", f"{CUTOFF.date()} (scripts/make_prices_snapshot.py)"],
+              ["Cut", "none (latest data in the file)" if EMISSIONS_ONLY else f"{CUTOFF.date()} (scripts/make_prices_snapshot.py)"],
               ["EUA", "Quarterly (Mar/Jun/Sep/Dec) from 2006, Dec only for 2005; Phase I contracts (to Mar-08) trade near zero, see config emissions.py"],
               ["TTF", "Monthly contracts, EUR/MWh; tenors beyond F3 are quoted only from 2012-10 (F6) and 2013-10 (F7+), see config emissions.py"],
               ["Format", "title row, Date,F1.. row, data from row 3 (same as Energy_Futures_Updated.xlsx)"]]:
@@ -100,8 +108,9 @@ def main():
             w.append(list(r)); w.cell(w.max_row, 1).number_format = "yyyy-mm-dd"
         print(f"{name}: {len(data)} rows, {data[0][0]:%Y-%m-%d} .. {data[-1][0]:%Y-%m-%d}", flush=True)
     out.save(DST / "Emissions_Futures_Updated.xlsx")
-    wbE.save(DST / "Gas_Power_Emissions_Futures.xlsx")
-    print(f"Gas_Power_Emissions_Futures.xlsx: cut {len(rem)} sheets", flush=True)
+    if not EMISSIONS_ONLY:
+        wbE.save(DST / "Gas_Power_Emissions_Futures.xlsx")
+        print(f"Gas_Power_Emissions_Futures.xlsx: cut {len(rem)} sheets", flush=True)
 
     # --- emissions: EUA and TTF calendars in the load_metal_calendar schema ---
     with pd.ExcelWriter(DST / "Emissions_Expiry_Calendars.xlsx") as xw:

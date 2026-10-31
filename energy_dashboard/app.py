@@ -51,7 +51,7 @@ def _refresh_repo_modules(root=_REPO_ROOT):
 _refresh_repo_modules()
 
 
-from common_shared import inject_css, section_header
+from common_shared import inject_css, section_header, return_basis_selector, register_geo_inputs
 from common_curve_loader import load_curve_simple
 from common_engine import (render_momentum_tab, render_carry_tab, render_value_tab, render_skewness_tab,
                            render_comparison_tab)
@@ -85,6 +85,8 @@ ENERGY_PORTFOLIO_EXCLUDED = ("SingaporeGasoil", "FuelOil")
 with st.sidebar:
     st.markdown('<p class="main-title">🛢️ Energy Dashboard</p>', unsafe_allow_html=True)
     st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value, Skewness</p>', unsafe_allow_html=True)
+    st.divider()
+    return_basis_selector()
     st.divider()
     product_code = st.radio(
         "Product", PRODUCT_ORDER, key="energy_product_choice",
@@ -121,6 +123,7 @@ if f1_df.empty:
 f1_df = reanchor_f1_continuous(f1_df[f1_df.index.year >= 2006])
 f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
 phase = f1_df["Phase"]
+register_geo_inputs(f1_df)
 
 curve = load_curve_simple(ENERGY_FUTURES_FILE, cfg["price_sheet"])
 curve = curve[curve.index.year >= 2006]

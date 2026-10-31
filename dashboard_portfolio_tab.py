@@ -465,7 +465,7 @@ def _compute_reference_returns(_cfg, cfg_name: str, tc_bps: int,
     return gross, net
 
 
-def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int) -> dict:
+def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int, geometric: bool = True) -> dict:
     """Sharpe, annualized return, vol, and max drawdown over [yr_start, yr_end],
     in the same shape as common_engine.py's pos_metrics_generic() so the
     metric cards read the same way as the standalone tabs. Once returns are
@@ -481,6 +481,10 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
         SIMPLE returns, not log-return figures -- see research/
         run_regime_table.py::_metrics for the full derivation of both."""
         if len(s) > 20 and s.std(ddof=1) > 0:
+            if not geometric:
+                # Arithmetic basis: mean simple daily return x 252, no compounding
+                r = np.expm1(s)
+                return float(r.mean() * 252 * 100), float(r.std(ddof=1) * np.sqrt(252) * 100)
             log_ann = float(s.mean() * 252)
             ann = float((np.exp(log_ann) - 1) * 100)
             vol = float(np.expm1(s).std(ddof=1) * np.sqrt(252) * 100)
@@ -497,9 +501,14 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
     ann, vol = _true_ann_vol(n)
     # True value-based drawdown, not log-space peak-to-trough -- see
     # research/run_regime_table.py::_metrics for the full derivation.
-    cum = n.cumsum()
-    value = np.exp(cum)
-    mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
+    if geometric:
+        cum = n.cumsum()
+        value = np.exp(cum)
+        mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
+    else:
+        # Arithmetic basis: additive equity (cumulative sum of simple returns), drawdown in % points
+        cum = np.expm1(n).cumsum()
+        mdd = float((cum - cum.cummax()).min() * 100) if len(cum) else np.nan
     return dict(gross=_sharpe(gross_ann, gross_vol), net=_sharpe(ann, vol), ann=ann, vol=vol, mdd=mdd)
 
 
@@ -1111,7 +1120,12 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     shown = [s for s in applied["shown"] if s in metric_labels] or metric_labels
 
     section_header("Performance metrics")
-    m = _window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end)
+    basis = st.radio("Return basis", ["Geometric (% return)", "Arithmetic (% return)"], horizontal=True,
+                     key=f"{key_prefix}_pf_basis",
+                     help="Geometric (default, the locked portfolio convention): compounded, equity = exp(cumsum of "
+                          "log returns) - 1. Arithmetic: simple daily returns summed, no compounding.")
+    geometric = basis.startswith("Geometric")
+    m = _window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end, geometric)
     mc1, mc2, mc3, mc4, mc5 = st.columns(5)
     with mc1:
         metric_card("Gross Sharpe", _fmt(m["gross"], "{:+.2f}"))
@@ -1138,12 +1152,12 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             continue
         # True cumulative %, not log-return % -- see research/run_regime_table.py::_metrics for
         # the full derivation. Matches the metric cards above (ann/mdd already true %).
-        eq = (np.exp(window.cumsum()) - 1) * 100
+        eq = (np.exp(window.cumsum()) - 1) * 100 if geometric else np.expm1(window).cumsum() * 100
         fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
                                   line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
         if len(window) > 20 and window.std(ddof=1) > 0:
             log_ret = float(window.mean() * 252)
-            ret = (np.exp(log_ret) - 1) * 100
+            ret = (np.exp(log_ret) - 1) * 100 if geometric else float(np.expm1(window).mean() * 252 * 100)
             # True annualized volatility of simple returns, not the log-return
             # distribution's spread -- see research/run_regime_table.py::
             # _metrics for the full derivation.

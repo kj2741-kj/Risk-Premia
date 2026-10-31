@@ -10,7 +10,7 @@ Each product keeps its own data file, roll calendar and start date:
   * TTF (TZT):       Emissions_Futures_Updated.xlsx + Emissions_Expiry_Calendars.xlsx (Bloomberg expiry history), from 2006. Monthly contracts, last trade two business days
                      before the delivery month.
   * EUA (MO):        same files, from 2008-04-01 (the first EU ETS Phase II day; the earlier generic series is Phase I contracts at 0.01-0.07 EUR). Quarterly contracts.
-The Portfolio tab and the cross-asset hub use Carry F1-F3 for TTF and EUA and F1-F3 + F1-F13 for Henry Hub (research/configs/pen.py).
+The Portfolio tab and the cross-asset hub use Carry F1-F2 + F1-F13 for TTF, F1-F2 + F1-F5 for EUA and F1-F3 + F1-F13 for Henry Hub (research/configs/pen.py).
 """
 
 import os
@@ -161,6 +161,6 @@ with tab_compare:
 with tab_portfolio:
     st.caption("Combines the 3 products (Henry Hub, TTF, EUA) into one bucket-level portfolio, independent of the sidebar's Product selection above, "
                "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. The common data window starts with the latest product start "
-               "(EUA, 2008-04-01). Carry and Carry momentum: Henry Hub F1-F3 + F1-F13, TTF and EUA F1-F3 only.")
+               "(EUA, 2008-04-01). Carry and Carry momentum: Henry Hub F1-F3 + F1-F13, TTF F1-F2 + F1-F13, EUA F1-F2 + F1-F5.")
     render_portfolio_tab(pen_research_cfg, key_prefix="pen_portfolio",
                           excluded_products=PEN_PORTFOLIO_EXCLUDED)

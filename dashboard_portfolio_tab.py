@@ -896,7 +896,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                  "portfolio aggregate.")
 
     if per_product_pairs:
-        st.caption("Carry and Carry momentum for this asset class combine the short pair F1-F2 with a long pair that differs by product ("
+        st.caption(getattr(cfg, "CARRY_CAPTION", None) or "Carry and Carry momentum for this asset class combine the short pair F1-F2 with a long pair that differs by product ("
                    + ", ".join(f"{p_} F1-{f_}" for p_, f_ in cfg.CARRY_LONG_FAR_BY_PRODUCT.items()) + "), as in the Final dashboard.")
     reference_strategies = _build_reference_strategies(cfg)
     if separate_tenor_carry or not has_multi_tenor:

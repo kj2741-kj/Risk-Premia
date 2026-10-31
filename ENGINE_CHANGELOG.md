@@ -6,6 +6,15 @@ that led to it.
 
 ---
 
+## 2026-11-01: TTF and EUA Carry aligned to the 12-month convention; liquidity metric (Cal 2025) added
+
+- **Carry tenor pairs for the two emissions products** (`research/configs/emissions.py`, `pen.py`; user decision 2026-10-31, replaces F1-F3 only): short pair F1-F2 plus a pair 12 months out, as for Precious and Agriculture. TTF is monthly (F1-F2 spans 1 month, F1-F13 spans 12); EUA is quarterly (F1-F2 spans 3 months, F1-F5 spans 12). Henry Hub unchanged (F1-F3 + F1-F13). `pen.CARRY_TENOR_PAIRS` now shows the F1-F2 short pair and `carry_pairs(product)` gives each product's list, so the hub and the Portfolio tab use them by default.
+- **Consequence:** TTF F13 is first quoted on 2013-10-04, so the TTF long-pair z-score (252 observations) first exists on 2014-09-25; before that the summed Carry value is missing, the signal stays flat. TTF Carry and Carry-Momentum are therefore flat for the first part of the 2012 reporting window. EUA F5 is available (99.8% of days from 2008-04).
+- Research pages (tags 0930 and 1029: Final dashboard, Rankings, Skewness, VTI) rebuilt on the new pairs; the Notes section of the Final dashboard states the pairs and the TTF start.
+- **Liquidity metric, Calendar 2025:** `scripts/liquidity_cal2025.py`, `Analysis/Liquidity_Cal2025_Method_and_Results.md`, `Analysis/Liquidity_Cal2025_results.csv` (x = ADV x price x sigma x multiplier over a 12-month strip, K = $10M, CME-only NGL).
+
+---
+
 ## 2026-10-31 (night): EUA data review, research dashboard on the latest data, Skewness and VTI pages rebuilt
 
 - **EUA data review** (`Analysis/EUA_Data_Review_2026-10-31.md`): no data error found, nothing changed. Calendar, stale-price, curve-shape and total-volume tests pass; price levels match dated published anchors (Dec-2013 contract closing 2012 at 6.67 matched exactly); all 40 daily moves above 10% move the whole curve together. Caveats: F2-F4 repeat the same price on many days in 2008-2010 and 2016-2018 (flat curve; F1-F3 slope exactly zero on 38% of days in 2017); a list of 2013-2014 daily moves could not be matched to news (needs the ICE settlement file). The "EUA Active" series in the file is a far-dated contract, not a front-month check.

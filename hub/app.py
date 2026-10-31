@@ -567,7 +567,7 @@ with tab_crossasset:
                    "With the pairs left at their defaults, Precious and Agriculture also blend each product's own long "
                    "pair (Gold F1-F7, Silver F1-F6, Platinum/Palladium F1-F5; Corn/Wheat/Coffee F1-F6, Soybean/Soybean Oil "
                    "F1-F8, Sugar F1-F5) with the F1-F2 shown, exactly as in the Final Research Dashboard. Power, Emissions and Nat Gas uses "
-                   "F1-F3 for TTF and EUA and F1-F3 plus F1-F13 for Henry Hub. Editing any pair "
+                   "F1-F2 plus F1-F13 for TTF, F1-F2 plus F1-F5 for EUA and F1-F3 plus F1-F13 for Henry Hub. Editing any pair "
                    "below replaces that with one uniform pair list for the asset class.")
         k1, k2, k3 = st.columns([2, 1, 1])
         with k1:

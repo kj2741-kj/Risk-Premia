@@ -5,8 +5,8 @@ research/configs/pen.py
 roll calendar, start date and parameters of its own config; this module only dispatches by product so the bucket looks like one asset class to the Streamlit Portfolio tab and the
 cross-asset engine. The other power products are not in yet.
 
-Carry tenor pairs (user decisions): Henry Hub F1-F3 + F1-F13 (the Energy setting), TTF F1-F3 only, EUA F1-F3 only. CARRY_TENOR_PAIRS holds the uniform pair every product uses (F1-F3);
-CARRY_LONG_FAR_BY_PRODUCT adds Henry Hub's long pair via carry_pairs(product), the same mechanism Precious Metals and Agriculture use. TTF and EUA start dates: see emissions.py.
+Carry tenor pairs (user decisions): Henry Hub F1-F3 + F1-F13 (the Energy setting), TTF F1-F2 + F1-F13 and EUA F1-F2 + F1-F5 (2026-10-31: short pair plus a pair 12 months out; TTF is monthly, EUA quarterly,
+see emissions.py). CARRY_TENOR_PAIRS holds the short pair shown as the default (F1-F2, as for Precious and Agriculture); carry_pairs(product) returns each product's own list, the same mechanism Precious Metals and Agriculture use. TTF and EUA start dates: see emissions.py.
 """
 from __future__ import annotations
 
@@ -34,15 +34,20 @@ for _name in ("MOMENTUM_PAIRS", "MOMENTUM_SHIFT_N", "CARRY_ZSCORE_WINDOW", "CARR
               "VALUE_CONTRACT", "VALUE_LOOKBACK_DAYS", "VALUE_THRESHOLD", "VALUE_SHIFT_N", "ROLL_RULE", "ROLL_N"):
     assert getattr(_en, _name) == getattr(_em, _name), f"pen.py: {_name} differs between energy.py and emissions.py"
 
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3")]
-CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"NatGas": "F13"}
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]   # the short pair shown as the default (TTF, EUA); Henry Hub keeps F1-F3 + F1-F13 via carry_pairs()
+CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"NatGas": "F13", "TTF": "F13", "EUA": "F5"}
+CARRY_CAPTION = "Carry and Carry momentum combine each product's short and long pair: Henry Hub F1-F3 + F1-F13, TTF F1-F2 + F1-F13, EUA F1-F2 + F1-F5 (12 months out), as in the Final dashboard."
 STATARB_ENABLED = False
 
 
 def carry_pairs(product: str) -> list[tuple[str, str]]:
-    """The product's Carry / Carry-Momentum pairs: F1-F3, plus F1-F13 for Henry Hub only."""
+    """The product's Carry / Carry-Momentum pairs: Henry Hub F1-F3 + F1-F13, TTF F1-F2 + F1-F13, EUA F1-F2 + F1-F5."""
     if product not in _SOURCE:
         raise ValueError(f"Unknown product {product!r}; valid: {PRODUCTS}")
+    if _SOURCE[product] is _em:
+        return _em.carry_pairs(product)
+    if _SOURCE[product] is _en:
+        return _en.carry_pairs(product)   # Henry Hub: F1-F3 + F1-F13, unchanged
     pairs = list(CARRY_TENOR_PAIRS)
     far = CARRY_LONG_FAR_BY_PRODUCT.get(product)
     if far is not None and ("F1", far) not in pairs:

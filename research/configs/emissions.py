@@ -20,10 +20,11 @@ START DATES (user decision 2026-10-31: research starts in 2011, so a later start
   * EUA: 2008-04-01, the first Phase II day. Before it the generic series is Phase I contracts at 0.01-0.07 EUR, and F1 jumps from 0.02 to 22.52 on 2008-04-01 (log move 7.0).
   * TTF: 2006-01-01 (the data begin 2005-06-29; same convention as Energy).
 
-CARRY (user decision 2026-10-31): F1-F3 ONLY, no long tenor, for EUA and TTF. This is also the only pair that exists for the whole TTF sample: F4 and F5 are almost never quoted
-before 2012, F6 starts 2012-10-02 and F7 to F72 start 2013-10-04, so a long pair would be missing for the first years of the reporting window (and a missing z-score keeps
-the previous signal). For EUA, F13 is quoted on only about half of the days and F8 on 98%, but F1-F3 alone was the user's choice. One pair, so "summed z-scores" is simply
-the sign of the F1-F3 carry z-score (research/carry_zsum.py).
+CARRY (user decision 2026-10-31, replaces the earlier F1-F3-only rule): a short pair F1-F2 plus a pair about 12 months out, for both products, matching the Precious / Agriculture
+convention (short F1-F2 plus a long pair of roughly 12 months). EUA is quarterly, so F1-F2 spans 3 months and F1-F5 spans 12 months. TTF is monthly, so F1-F2 spans 1 month and F1-F13
+spans 12 months. EUA F5 is quoted on 99.8% of days from 2008-04. TTF F13 only exists from 2013-10-04 (F4 and F5 are almost never quoted before 2012, F6 starts 2012-10-02, F7 to F72
+start 2013-10-04), so the TTF long-pair z-score cannot exist before about October 2014 (252-day window); until then the summed carry value is missing and the previous signal is kept
+(flat before any signal exists), i.e. TTF Carry and Carry momentum are flat for the first part of the reporting window. Carry V2 = sign of the summed z-scores (research/carry_zsum.py).
 
 OTHER SETTINGS as everywhere: Momentum (1,20)/(5,60)/(20,250); Value F3, 1260-day average, +-10% (504 observations minimum in the dashboard); Skewness 252 days; 5 bps costs with
 roll days charged (log_return_daily).
@@ -65,7 +66,8 @@ ANALYSIS_STARTS = {"EUA": "2008-04-01",    # first Phase II day, see the module 
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3")]   # F1-F3 only for both products (user decision 2026-10-31)
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]   # short pair for both products (user decision 2026-10-31)
+CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"TTF": "F13", "EUA": "F5"}   # long pair F1-far: 12 months out (monthly TTF: F13; quarterly EUA: F5)
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 
@@ -74,10 +76,14 @@ ROLL_N = 5
 
 
 def carry_pairs(product: str) -> list[tuple[str, str]]:
-    """Carry / Carry-Momentum tenor pairs (summed z-scores): CARRY_TENOR_PAIRS (F1-F3 only)."""
+    """Carry / Carry-Momentum tenor pairs (summed z-scores): the short pair F1-F2 plus the product's long pair (TTF F1-F13, EUA F1-F5)."""
     if product not in SHEET_NAMES:
         raise ValueError(f"Unknown product {product!r}; valid: {PRODUCTS}")
-    return list(CARRY_TENOR_PAIRS)
+    pairs = list(CARRY_TENOR_PAIRS)
+    far = CARRY_LONG_FAR_BY_PRODUCT.get(product)
+    if far is not None and ("F1", far) not in pairs:
+        pairs.append(("F1", far))
+    return pairs
 
 
 CARRY_MOMENTUM_HORIZON = 20

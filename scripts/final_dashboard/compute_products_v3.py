@@ -1,9 +1,9 @@
 """Per-product sleeve net returns for the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_0930/products_nets.pkl
 Data: data/Prices_0930 (merged 29-Oct pull, every sheet cut at 2026-09-30) or data/Prices_1029_merged (nothing cut, latest data); set RP_PRICES_DIR to one of them, this script refuses to run otherwise.
 Same sleeves, signals, roll rule (5th trading day of the last-trade-date month), tenor-pair rule and 5 bps costs (roll days charged) as compute_products.py, plus:
-  * the Emissions class (EUA from the first Phase II day 2008-04-01, TTF from 2006; research/configs/emissions.py; Carry F1-F3 only for both; own calendars in Emissions_Expiry_Calendars.xlsx);
+  * the Emissions class (EUA from the first Phase II day 2008-04-01, TTF from 2006; research/configs/emissions.py; Carry F1-F2 plus a 12-month pair for both (TTF F1-F13, EUA F1-F5; TTF has no Carry signal before 2014-09-25); own calendars in Emissions_Expiry_Calendars.xlsx);
   * Value needs 504 observations of F3 (not 630), as in the 2012 variant, so that every product's Value is defined before the 2012 reporting start.
-Tenor pairs: Metals / Energy: F1-F3 + F1-F13;  NGL: F2-F4 + F2-F14;  Emissions (EUA, TTF): F1-F3 only;  Precious / Agriculture: F1-F2 + long (as compute_products.py).
+Tenor pairs: Metals / Energy: F1-F3 + F1-F13;  NGL: F2-F4 + F2-F14;  Emissions: TTF F1-F2 + F1-F13, EUA F1-F2 + F1-F5;  Precious / Agriculture: F1-F2 + long (as compute_products.py).
 Run from the repo root:  RP_PRICES_DIR=Prices_0930 (or Prices_1029_merged) python scripts/final_dashboard/compute_products_v3.py   (tag 0930 / 1029, see fd_config.py)"""
 import os
 import sys

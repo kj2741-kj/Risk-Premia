@@ -45,7 +45,7 @@ b = rep(b, "one per asset class, plus By Style, Cross-Pair, Correlations and Not
 b = rep(b, "every control you can change: period, commodity, metric, Energy with or without NatGas.", "every control you can change: period, commodity, metric.")
 b = rep(b, "<b>Each asset-class tab</b>", "<b>Each bucket tab</b>")
 b = rep(b, "<li>Metals and Energy: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14.</li>",
-        "<li>Metals, Petroleum and Nat Gas: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14. TTF and EUA: F1-F3 only, with no long tenor (TTF tenors beyond F3 are not quoted before 2012-10, so no long pair exists for the early years).</li>")
+        "<li>Metals, Petroleum and Nat Gas: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14. TTF: F1-F2 and F1-F13. EUA: F1-F2 and F1-F5 (EUA is quarterly, so F5 is 12 months out; TTF is monthly, so F13 is). TTF F13 is not quoted before 2013-10-04, so TTF Carry and Carry-Momentum have no signal until 2014-09-25 (the 252-day z-score needs a year of the long slope) and the position is flat before that.</li>")
 b = rep(b, "This rolls roughly 14 to 16 trading days before expiry for Energy, NGL, Precious and Sugar, about 6 for Metals and about 5 for Corn, Wheat and Soybeans.</li>",
         "Counted from the roll day to the last trade date, this rolls about 5 trading days before expiry for Corn, Wheat, Soybean and Soybean Oil, 6 for Metals, 8 for Coffee, 9 for WTI, 11 for Brent and EUA, 14 for Nat Gas and Precious, 15 for TTF and Sugar, and 16 for RBOB, Heating Oil and NGL.</li>")
 b = rep(b, "<li>Products inside a sleeve are equally weighted on common dates",
@@ -63,12 +63,12 @@ b = rep(b, "<h3>Timing convention (all five sleeves)</h3>",
         "<h3>What changed in this version (2026-10-31)</h3><ul class=\"steps\">"
         "<li><b>Buckets:</b> Energy is now <b>Petroleum</b> (WTI, Brent, RBOB, Heating Oil). Henry Hub moved into the new <b>Power, Emissions and Nat Gas</b> bucket together with <b>TTF</b> (European natural gas, ICE Endex) and <b>EUA</b> carbon allowances (ICE Endex). The Energy ex-NatGas tab and every with/without-NatGas switch are gone. By Style, Cross-Pair (15 pairs) and Correlations cover the six buckets. Metals, NGL, Precious and Agriculture are unchanged.</li>"
         "<li>" + CFG["change_line"] + "</li>"
-        "<li><b>New products:</b> TTF starts in 2006 and EUA on 2008-04-01 (first Phase II day). For both, Carry and Carry-Momentum use the single pair F1-F3. All other settings are those of every other product: same five sleeves, 5 bps costs, 5th-trading-day roll, 252-day skewness window.</li>"
+        "<li><b>New products:</b> TTF starts in 2006 and EUA on 2008-04-01 (first Phase II day). Carry and Carry-Momentum use the short pair F1-F2 plus a pair 12 months out (TTF F1-F13, EUA F1-F5), the same idea as Precious and Agriculture. All other settings are those of every other product: same five sleeves, 5 bps costs, 5th-trading-day roll, 252-day skewness window.</li>"
         "<li><b>EUA data</b> was reviewed in depth on 2026-10-31 (details under Data and calendars): no error was found and nothing was changed.</li></ul>"
         "<h3>Timing convention (all five sleeves)</h3>")
 b = rep(b, "Transaction costs are charged when the position changes.</li></ul>", "Transaction costs of 5 bps per unit of turnover are charged when the position changes, and on every roll day.</li></ul>")
-b = rep(b, "The two z-scores are summed and the sign of the sum is the signal.", "The z-scores of a product's tenor pairs are summed (two pairs for most products, the single pair F1-F3 for TTF and EUA) and the sign of the sum is the signal.")
-b = rep(b, "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.", "summed across the tenor pairs (raw changes, not standardised; a single pair for TTF and EUA) and signed; if a pair is missing the last signal is kept.")
+b = rep(b, "The two z-scores are summed and the sign of the sum is the signal.", "The z-scores of a product's tenor pairs are summed (two pairs for every product) and the sign of the sum is the signal.")
+b = rep(b, "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.", "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.")
 
 # ---------------- page script ----------------
 t = tail

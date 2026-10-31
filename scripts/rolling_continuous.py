@@ -46,6 +46,9 @@ import pandas as pd
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(_SCRIPT_DIR)
 DATA_DIR = os.path.join(_REPO_ROOT, "data")
+# 2026-10-31: price folder under data/ is switchable with the env var RP_PRICES_DIR (default "Prices_0924", so the Streamlit apps and the hub are unchanged).
+# The research dashboard rebuild of 2026-10-31 sets RP_PRICES_DIR=Prices_0930 (merged 29-Oct data cut at 2026-09-30, plus the EUA files).
+PRICES_DIR_NAME = os.environ.get("RP_PRICES_DIR", "Prices_0924")
 OUTPUTS_DIR = os.path.join(_REPO_ROOT, "outputs")
 
 DEFAULT_ROLL_DAY = 5
@@ -156,7 +159,7 @@ METAL_CONFIG: dict[str, dict] = {
 # The overlapping history is identical (Metals/Energy/Precious/NGL verified cell by cell); Gold/Silver only had their deepest
 # columns revised (Gold F14+, Silver F12+), which no code here reads. Calendars stay in data/06-30 (the 24-Sep consolidated
 # calendar agrees with them on every shared contract).
-ENERGY_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Energy_Futures_Updated.xlsx")
+ENERGY_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Energy_Futures_Updated.xlsx")
 ENERGY_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
 
 # LME base metals, refreshed through 2026-06-30 (README sheet inside the
@@ -166,8 +169,21 @@ ENERGY_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_2026070
 # Paired with the matching 2026-07-01-vintage calendar (same file Energy uses)
 # rather than the older expiry_calendars_20260526.xlsx, whose LME sheet names
 # ("LP - LME Copper") don't match this calendar's naming ("LP - Copper (LME)").
-METALS_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Metals_Futures_Curve_Updated.xlsx")
+METALS_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Metals_Futures_Curve_Updated.xlsx")
 METALS_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
+
+# EUA carbon (ICE Endex, Bloomberg root MO) and TTF natural gas (ICE Endex, root TZT), added 2026-10-31. Files exist only in data/Prices_0930 (built by
+# scripts/make_prices_snapshot.py from data/Emissions_1029): the curves in the simple single-header format (Date, F1..Fn) and the calendars from
+# Gas_Power_Emissions_Expiry_History.xlsx (LAST_TRADEABLE_DT = Last Trade Date, FUT_DLV_DT_LAST = Last Delivery Date). EUA: quarterly contracts (Mar/Jun/Sep/Dec)
+# from 2006. TTF: monthly contracts, last trade date two business days before the delivery month (so in the month before it).
+EMISSIONS_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Emissions_Futures_Updated.xlsx")
+EMISSIONS_CALENDAR_FILE = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Emissions_Expiry_Calendars.xlsx")
+EMISSIONS_CONFIG = {
+    "MO": {"name": "EUA Carbon (ICE Endex)", "price_sheet": "EUA Carbon (ICE Endex)", "calendar_sheet": "MO - EUA (ICE Endex)",
+           "f1_col": 1, "f2_col": 2, "data_start_row": 2},
+    "TZT": {"name": "TTF Natural Gas (ICE Endex)", "price_sheet": "TTF Natural Gas (ICE Endex)", "calendar_sheet": "TZT - TTF Gas (ICE Endex)",
+            "f1_col": 1, "f2_col": 2, "data_start_row": 2},
+}
 
 METALS_CONFIG: dict[str, dict] = {
     "LP": {
@@ -253,7 +269,7 @@ ENERGY_CONFIG: dict[str, dict] = {
     # it without a roll calendar. Excluded until a calendar is available.
 }
 
-PRECIOUS_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Precious_Metals_Futures_Updated.xlsx")
+PRECIOUS_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Precious_Metals_Futures_Updated.xlsx")
 # Aligned 2026-10-10: GC/SI/PL/PA sheets keep only the contract months Bloomberg's
 # generic F1..Fn actually uses (Gold Feb/Apr/Jun/Aug/Oct/Dec, Silver Mar/May/Jul/Sep/Dec,
 # Platinum Jan/Apr/Jul/Oct, Palladium Mar/Jun/Sep/Dec); the original had all 12 months per metal,
@@ -293,7 +309,7 @@ PRECIOUS_CONFIG: dict[str, dict] = {
 # verified against EIA Mont Belvieu propane and published ethane/ethylene prices (see outputs/final_dashboard/ngl_label_check.py and the
 # README of the corrected workbook). NGL_Futures_Updated_labels_corrected.xlsx has identical data with the correct sheet names,
 # the same names NGL_CONFIG below uses.
-NGL_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "NGL_Futures_Updated_labels_corrected.xlsx")
+NGL_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "NGL_Futures_Updated_labels_corrected.xlsx")
 NGL_CALENDAR_FILE = os.path.join(DATA_DIR, "06-30", "expiry_calendars_20260701.xlsx")
 
 # Calendar sheet names for NGL/petrochemical tickers use an em dash (—,
@@ -369,8 +385,8 @@ NGL_CONFIG: dict[str, dict] = {
 #     duplicate the adjacent real quarterly contract's date back to 2005; 16
 #     contracts from U24 through Q26 share an identical stale date). Needs a
 #     clean re-pull before Sugar can be added back.
-AGRI_FUTURES_FILE  = os.path.join(DATA_DIR, "Prices_0924", "Agriculture_Futures_Updated.xlsx")
-AGRI_CALENDAR_FILE = os.path.join(DATA_DIR, "Prices_0924", "Agri_Rolling_Calendar.xlsx")
+AGRI_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Agriculture_Futures_Updated.xlsx")
+AGRI_CALENDAR_FILE = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Agri_Rolling_Calendar.xlsx")
 
 AGRI_CONFIG: dict[str, dict] = {
     "C": {
@@ -456,7 +472,7 @@ AGRI_CONFIG: dict[str, dict] = {
 # AGRI_CONFIG above. AGRI_CALENDAR_FILE / AGRI_CONFIG above are left unchanged because
 # scripts/build_agri_calendar_real_cycle.py and generate_tradebooks.py still use them for the
 # original 14-product workbook.
-AGRI_CALENDAR_FILE_BBG = os.path.join(DATA_DIR, "Prices_0924", "Agri_Rolling_Calendar_bloomberg_matched.xlsx")
+AGRI_CALENDAR_FILE_BBG = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Agri_Rolling_Calendar_bloomberg_matched.xlsx")
 AGRI_BBG_CONFIG: dict[str, dict] = {
     **{code: AGRI_CONFIG[code] for code in ("C", "W", "S", "BO", "KC")},
     "SB": {

@@ -11,7 +11,7 @@ Prof. Bouchouev's request (25 Oct): a one-time snapshot on Calendar 2025 only, x
 5. Dollar risk per contract c = m x P x sigma.
 6. ADV (lots per day): mean over the 2025 trading days of the volume summed over the contracts of a 12-month strip; a day with no print counts as zero. Volume only, open interest is never substituted.
 7. x = ADV x c, in USD of one-sigma daily risk traded per day (shown in USD millions).
-8. K / x with K = $10M of one-sigma daily risk: the size of a $10M position as a multiple of one day of the market's risk turnover. A value of 0.05 is 5% of a day, 29 is 29 days of the entire market's flow. The ranking by x does not depend on K.
+8. K / x with K = $1M of one-sigma daily risk (changed from $10M on 2026-11-01; K is a risk budget, not a notional, and every L is ten times smaller): the size of a $1M position as a multiple of one day of the market's risk turnover. A value of 0.05 is 5% of a day, 3 is 3 days of the entire market's flow. The ranking by x does not depend on K.
 
 12-month strip: the number of tenors that spans 12 months depends on the contract chain. Monthly products (LME metals, petroleum, Gasoil, Henry Hub, TTF, NGL) use F1-F12. Gold F1-F6 (even-month chain), Silver F1-F5, Platinum and Palladium F1-F4, Corn, Wheat and Coffee F1-F5, Soybean F1-F7, Soybean Oil F1-F8, Sugar F1-F4, EUA F1-F4 (quarterly). These are the same chains that fix the Carry long pairs (about 12 months out).
 
@@ -23,40 +23,40 @@ CME: WTI 1,000 bbl; RBOB and NY Harbor ULSD 42,000 gal; Henry Hub 10,000 MMBtu; 
 
 Data check: our all-tenor volume equals CME's published final volume for 26 to 28 Oct 2026 within about 1% for RBOB, ULSD, Butane, Isobutane, Henry Hub, WTI and TET Propane. Ethane is the exception (60 to 65% of CME on two days). The Gasoil series (Bloomberg root QS) is ICE Low Sulphur Gasoil, not Singapore Gasoil as the engine config name suggests.
 
-## Result (K = $10M)
+## Result (K = $1M)
 
 | # | Product | Bucket | Strip | ADV (lots/day) | Risk per contract ($) | x ($m/day) | K/x | x held ($m/day) |
 |---|---|---|---|---|---|---|---|---|
-| 1 | Brent | petroleum | F1-F12 | 1,116,127 | 1,187 | 1,324.9 | 0.008 | 394.56 |
-| 2 | Gold | precious | F1-F6 | 254,407 | 4,486 | 1,141.2 | 0.009 | 729.84 |
-| 3 | WTI | petroleum | F1-F12 | 837,025 | 1,242 | 1,039.9 | 0.010 | 341.34 |
-| 4 | Henry Hub | pen | F1-F12 | 515,680 | 1,296 | 668.3 | 0.015 | 185.98 |
-| 5 | Gasoil (ICE) | petroleum | F1-F12 | 351,370 | 1,418 | 498.3 | 0.020 | 113.37 |
-| 6 | Silver | precious | F1-F5 | 86,216 | 4,777 | 411.8 | 0.024 | 314.98 |
-| 7 | Heating Oil | petroleum | F1-F12 | 195,204 | 1,801 | 351.5 | 0.028 | 117.75 |
-| 8 | RBOB | petroleum | F1-F12 | 188,064 | 1,362 | 256.1 | 0.039 | 91.46 |
-| 9 | Copper | metals | F1-F12 | 83,063 | 2,947 | 244.8 | 0.041 | 53.81 |
-| 10 | TTF | pen | F1-F12 | 270,092 | 784 | 211.9 | 0.047 | 45.25 |
-| 11 | Soybean | agri | F1-F7 | 288,372 | 545 | 157.1 | 0.064 | 55.91 |
-| 12 | Coffee | agri | F1-F5 | 34,914 | 3,207 | 112.0 | 0.089 | 37.98 |
-| 13 | Corn | agri | F1-F5 | 425,628 | 258 | 109.8 | 0.091 | 44.33 |
-| 14 | Aluminium | metals | F1-F12 | 157,841 | 640 | 101.0 | 0.099 | 22.60 |
-| 15 | Soybean Oil | agri | F1-F8 | 178,724 | 495 | 88.4 | 0.113 | 26.70 |
-| 16 | Platinum | precious | F1-F4 | 38,905 | 1,694 | 65.9 | 0.152 | 48.66 |
-| 17 | Zinc | metals | F1-F12 | 64,414 | 904 | 58.3 | 0.172 | 10.56 |
-| 18 | Wheat | agri | F1-F5 | 135,652 | 377 | 51.1 | 0.196 | 22.08 |
-| 19 | EUA | pen | F1-F4 | 30,103 | 1,300 | 39.1 | 0.255 | 11.24 |
-| 20 | Sugar | agri | F1-F4 | 122,500 | 283 | 34.7 | 0.288 | 17.12 |
-| 21 | Palladium | precious | F1-F4 | 7,094 | 3,374 | 23.9 | 0.418 | 18.72 |
-| 22 | Lead | metals | F1-F12 | 42,887 | 449 | 19.3 | 0.519 | 3.36 |
-| 23 | Propane | ngl | F1-F12 | 8,273 | 586 | 4.8 | 2.062 | 1.19 |
-| 24 | Butane | ngl | F1-F12 | 2,907 | 624 | 1.8 | 5.510 | 0.46 |
-| 25 | Ethane | ngl | F1-F12 | 1,203 | 290 | 0.3492 | 29 | 0.10 |
-| 26 | Isobutane | ngl | F1-F12 | 10 | 642 | 0.0064 | 1,562 | 0.00 |
+| 1 | Brent | petroleum | F1-F12 | 1,116,127 | 1,187 | 1,324.9 | 0.0008 | 394.56 |
+| 2 | Gold | precious | F1-F6 | 254,407 | 4,486 | 1,141.2 | 0.0009 | 729.84 |
+| 3 | WTI | petroleum | F1-F12 | 837,025 | 1,242 | 1,039.9 | 0.0010 | 341.34 |
+| 4 | Henry Hub | pen | F1-F12 | 515,680 | 1,296 | 668.3 | 0.0015 | 185.98 |
+| 5 | Gasoil (ICE) | petroleum | F1-F12 | 351,370 | 1,418 | 498.3 | 0.0020 | 113.37 |
+| 6 | Silver | precious | F1-F5 | 86,216 | 4,777 | 411.8 | 0.0024 | 314.98 |
+| 7 | Heating Oil | petroleum | F1-F12 | 195,204 | 1,801 | 351.5 | 0.0028 | 117.75 |
+| 8 | RBOB | petroleum | F1-F12 | 188,064 | 1,362 | 256.1 | 0.0039 | 91.46 |
+| 9 | Copper | metals | F1-F12 | 83,063 | 2,947 | 244.8 | 0.0041 | 53.81 |
+| 10 | TTF | pen | F1-F12 | 270,092 | 784 | 211.9 | 0.0047 | 45.25 |
+| 11 | Soybean | agri | F1-F7 | 288,372 | 545 | 157.1 | 0.0064 | 55.91 |
+| 12 | Coffee | agri | F1-F5 | 34,914 | 3,207 | 112.0 | 0.0089 | 37.98 |
+| 13 | Corn | agri | F1-F5 | 425,628 | 258 | 109.8 | 0.0091 | 44.33 |
+| 14 | Aluminium | metals | F1-F12 | 157,841 | 640 | 101.0 | 0.0099 | 22.60 |
+| 15 | Soybean Oil | agri | F1-F8 | 178,724 | 495 | 88.4 | 0.0113 | 26.70 |
+| 16 | Platinum | precious | F1-F4 | 38,905 | 1,694 | 65.9 | 0.0152 | 48.66 |
+| 17 | Zinc | metals | F1-F12 | 64,414 | 904 | 58.3 | 0.0172 | 10.56 |
+| 18 | Wheat | agri | F1-F5 | 135,652 | 377 | 51.1 | 0.0196 | 22.08 |
+| 19 | EUA | pen | F1-F4 | 30,103 | 1,300 | 39.1 | 0.0255 | 11.24 |
+| 20 | Sugar | agri | F1-F4 | 122,500 | 283 | 34.7 | 0.0288 | 17.12 |
+| 21 | Palladium | precious | F1-F4 | 7,094 | 3,374 | 23.9 | 0.0418 | 18.72 |
+| 22 | Lead | metals | F1-F12 | 42,887 | 449 | 19.3 | 0.0519 | 3.36 |
+| 23 | Propane | ngl | F1-F12 | 8,273 | 586 | 4.8 | 0.2062 | 1.19 |
+| 24 | Butane | ngl | F1-F12 | 2,907 | 624 | 1.8 | 0.5510 | 0.46 |
+| 25 | Ethane | ngl | F1-F12 | 1,203 | 290 | 0.3492 | 2.86 | 0.10 |
+| 26 | Isobutane | ngl | F1-F12 | 10 | 642 | 0.0064 | 156 | 0.00 |
 
 Least liquid non-energy products: Lead x = 19.3, Palladium x = 23.9, Sugar 34.7 (USD millions of one-sigma risk per day).
 
-NGL against the least liquid non-energy product (Lead): Propane 0.25x, Butane 0.09x, Ethane 0.018x, Isobutane 0.0003x. Against Palladium: Propane 0.20x, Butane 0.08x, Ethane 0.015x. A $10M position in Propane is about two days of its entire CME market flow, in Ethane about 29 days.
+NGL against the least liquid non-energy product (Lead): Propane 0.25x, Butane 0.09x, Ethane 0.018x, Isobutane 0.0003x. Against Palladium: Propane 0.20x, Butane 0.08x, Ethane 0.015x. A $1M position in Propane is about 0.2 days of its entire CME market flow, in Ethane about 3 days.
 
 ## Caveats and open items
 

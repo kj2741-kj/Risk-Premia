@@ -1,5 +1,5 @@
 """Liquidity metric, Calendar 2025 (one-time snapshot), 26 products -> Analysis/Liquidity_Cal2025_results.csv.
-x = ADV * P * sigma * multiplier = USD of one-sigma daily risk traded per day (Prof. Bouchouev's denominator); K/x with K = $10M.
+x = ADV * P * sigma * multiplier = USD of one-sigma daily risk traded per day (Prof. Bouchouev's denominator); K/x with K = $1M.
 ADV = mean over 2025 trading days of volume summed over the contracts of a 12-month strip (F1-F12 for monthly products, fewer for quarterly or
 bi-monthly chains, see P below); NaN volume = 0. NGL is the CME half only (ICE to be added). Held-contract and F1-F3 ADV are kept as sensitivities.
 Run from the repo root: python scripts/liquidity_cal2025.py. Needs data/Prices_1029 (volume), data/Prices_1029_merged (prices), data/Emissions_1029."""
@@ -10,7 +10,7 @@ import importlib
 import numpy as np, pandas as pd
 V = "data/Prices_1029/"
 EUR = 1.1300      # ECB euro reference rate, mean of 255 daily fixes in 2025 (data-api.ecb.europa.eu)
-K = 10e6          # USD of 1-sigma daily risk per product
+K = 1e6           # USD of 1-sigma daily risk per product (changed from 10e6 on 2026-11-01; the ranking by x does not depend on K)
 OUT = "Analysis/Liquidity_Cal2025_results.csv"
 # (module, engine product name, bucket, volume file kind, root, lot multiplier, price->USD/unit factor, fx, N contracts in a 12-month strip)
 P = [

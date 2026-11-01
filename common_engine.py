@@ -140,6 +140,14 @@ def exec_shift(sigbin: pd.Series, shift_n: int) -> pd.Series:
 # MOMENTUM: MA CROSSOVER
 # ═══════════════════════════════════════════════════════════════
 
+def ma_average_position(f1r: pd.Series, pairs, shift_n: int = 1) -> pd.Series:
+    """Custom average of several MA-crossover strategies: the sign of the mean of their raw signs (a equal-weight vote), exactly the dashboard's Momentum
+    composite (research/engine.py::momentum_composite_position, which the dashboards use with the three default pairs). A date where any selected
+    pair is still in its own burn-in window stays NaN for the whole composite, then flat after the execution lag."""
+    from engine import momentum_composite_position
+    return momentum_composite_position(f1r, tuple((int(f), int(s_)) for f, s_ in pairs), shift_n=shift_n)
+
+
 def ma_crossover_position(f1r: pd.Series, fast: int, slow: int, shift_n: int = 1) -> pd.Series:
     sig = np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
     return exec_shift(sig, shift_n).fillna(0)
@@ -364,6 +372,15 @@ def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
     })
 
 
+def _mom_feature_label(feature, avg_label: str) -> str | None:
+    """Label of the strategy featured in the Momentum Performance Metrics (a (fast, slow) pair, or the custom average)."""
+    if isinstance(feature, str):
+        return avg_label or None
+    if isinstance(feature, (tuple, list)) and len(feature) == 2:
+        return f"MA({feature[0]},{feature[1]})"
+    return None
+
+
 def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label: str,
                          key_prefix: str, heatmap_max_window: int = 250, phase: pd.Series | None = None,
                          default_feature_pair: tuple[int, int] | None = None):
@@ -424,6 +441,20 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         key=f"{key_prefix}_mom_multiselect",
     )
 
+    # Custom average (2026-11-01): one extra strategy = the equal-weight vote of the MA pairs picked here, the dashboard's Momentum composite for any set of pairs.
+    avg_on = st.checkbox("Add a custom average of selected strategies", value=False, key=f"{key_prefix}_mom_avg_on",
+                         help="Adds one more strategy whose signal is the sign of the average of the selected MA crossovers' signals (an equal-weight vote). "
+                              "With the three defaults MA(1,20), MA(5,60) and MA(20,250) it is exactly the Momentum composite of the Final Research Dashboard.")
+    avg_pairs: list = []
+    if avg_on:
+        avg_pairs = st.multiselect("Strategies to average (at least two)", options=active, default=[p_ for p_ in chosen] or active,
+                                    format_func=lambda p: f"MA({p[0]},{p[1]})", key=f"{key_prefix}_mom_avg_sel")
+        if len(avg_pairs) < 2:
+            st.info("Pick at least two strategies to average.")
+    use_avg = avg_on and len(avg_pairs) >= 2
+    AVG = "AVG"
+    avg_label = ("Avg(" + "+".join(f"MA({f},{s_})" for f, s_ in avg_pairs) + ")") if use_avg else ""
+
     st.divider()
 
     # ── Year-range slider: shared by Performance Metrics (below) and the heatmap ──
@@ -438,7 +469,8 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     # ── Performance Metrics: ONE featured strategy from the active list above,
     # scoped to the year range above -- recomputes when either changes. ──────
     st.markdown("**Performance Metrics**")
-    if not chosen:
+    feature_options = list(chosen) + ([AVG] if use_avg else [])
+    if not feature_options:
         st.info("Select at least one strategy above to see its performance metrics.")
     else:
         if default_feature_pair is not None and default_feature_pair in chosen:
@@ -446,16 +478,20 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         elif (1, 20) in chosen:
             default_feature = (1, 20)
         else:
-            default_feature = chosen[0]
+            default_feature = feature_options[0]
         feature_pair = st.selectbox(
-            "Strategy to feature", options=chosen, index=chosen.index(default_feature),
-            format_func=lambda p: f"MA({p[0]},{p[1]})", key=f"{key_prefix}_mom_feature",
+            "Strategy to feature", options=feature_options, index=feature_options.index(default_feature),
+            format_func=lambda p: avg_label if (isinstance(p, str) and p == AVG) else f"MA({p[0]},{p[1]})", key=f"{key_prefix}_mom_feature",
         )
-        f_fast, f_slow = feature_pair
+        is_avg_feature = isinstance(feature_pair, str) and feature_pair == AVG
+        f_slow = max(s_ for _f, s_ in avg_pairs) if is_avg_feature else feature_pair[1]
         if len(f1r_scoped) < f_slow + 20:
             st.info("Not enough data in the selected year range for this pair.")
         else:
-            feature_pos = ma_crossover_position(f1r, f_fast, f_slow, shift_n=shift_n)      # full history, so the slow MA is warmed up at the start of the range
+            if is_avg_feature:
+                feature_pos = ma_average_position(f1r, avg_pairs, shift_n=shift_n)
+            else:
+                feature_pos = ma_crossover_position(f1r, feature_pair[0], feature_pair[1], shift_n=shift_n)      # full history, so the slow MA is warmed up at the start of the range
             m = pos_metrics_generic(feature_pos, f1r, f1c, tc_bps, phase, window=(range_start, range_end))
             c1, c2, c3, c4, c5 = st.columns(5)
             with c1:
@@ -504,14 +540,17 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     # ── Cumulative PnL / Rolling Sharpe / Signal & Position: every active
     # strategy overlaid simultaneously, full history. show_metrics=False since
     # Performance Metrics is already shown (featured strategy) above. ────────
-    if not chosen:
+    if not chosen and not use_avg:
         st.divider()
         st.info("Select at least one strategy above to see its equity curve.")
         return {}
 
     positions = {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in chosen}
+    if use_avg:
+        positions[avg_label] = ma_average_position(f1r, avg_pairs, shift_n=shift_n)
     _render_multi_strategy_block(
         positions, f1r, f1c, tc_bps, key_prefix + "_mom", unit_label, show_metrics=False, phase=phase,
+        default_focus=_mom_feature_label(st.session_state.get(f"{key_prefix}_mom_feature"), avg_label),
     )
     return positions
 
@@ -700,6 +739,7 @@ def render_skewness_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     positions = {f"Skew({w})": skewness_position(lret, w, shift_n) for w in chosen}
     _render_multi_strategy_block(
         positions, f1r, f1c, tc_bps, key_prefix + "_skew", unit_label, show_metrics=False, phase=phase,
+        default_focus=f"Skew({feature_window})" if feature_window is not None else None,
     )
     return positions
 
@@ -1330,7 +1370,7 @@ def _fmt_metric(x, fmt: str) -> str:
 def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
                                   tc_bps: int, key_prefix: str, unit_label: str = "/unit",
                                   show_charts: bool = True, show_metrics: bool = True,
-                                  phase: pd.Series | None = None):
+                                  phase: pd.Series | None = None, default_focus: str | None = None):
     """show_charts=False renders ONLY the Performance Metrics section (no
     equity curve / rolling Sharpe / signal & position). show_metrics=False
     renders ONLY the charts (no Performance Metrics) -- for call sites that
@@ -1425,8 +1465,15 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     # (the chart is inherently single-strategy: a price + long/short bar
     # panel), matching the Stage 1 Metals dashboard's two-panel style.
     st.markdown("**Signal & Position History**")
-    focus_label = st.selectbox("Strategy to display", options=list(positions.keys()),
-                                key=f"{key_prefix}_sigpos_focus")
+    fk = f"{key_prefix}_sigpos_focus"
+    if default_focus in positions:
+        # Follows the strategy featured above: when the featured strategy changes, this selector moves to it (the user can still pick another one).
+        if st.session_state.get(fk + "_follow") != default_focus:
+            st.session_state[fk] = default_focus
+            st.session_state[fk + "_follow"] = default_focus
+    if st.session_state.get(fk) not in positions:
+        st.session_state.pop(fk, None)
+    focus_label = st.selectbox("Strategy to display", options=list(positions.keys()), key=fk)
     render_signal_position_chart(positions[focus_label], f1r, focus_label, key_prefix)
 
 

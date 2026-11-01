@@ -24,6 +24,15 @@ res = json.load(open(R / out_dir(TAG) / "final_v3.json"))
 COLS = [("full", "Full", "2012-2026"), ("p1", "P1", "2012-2016"), ("p2", "P2", "2017-2021"), ("p3", "P3", "2022-2026"), ("y26", "2026", "YTD")]
 data = dict(res, cols=[dict(key=k, label=l, years=y) for k, l, y in COLS])
 
+# Liquidity metric, Calendar 2025 (Analysis/Liquidity_Cal2025_results.csv, scripts/liquidity_cal2025.py): L = K / x with K = USD 1M of one-sigma daily risk, shown in the By-product tables
+import csv
+_liq = {r["product"]: r for r in csv.DictReader(open(R / "Analysis/Liquidity_Cal2025_results.csv", encoding="utf8"))}
+for _r in _liq.values():
+    assert abs(float(_r["N_contracts_for_K"]) * float(_r["risk_per_contract"]) - 1e6) < 1, ("L is not on K = USD 1M", _r["product"])
+_pk = list(res["meta"]["rolls"].keys())
+assert all(k.split("|")[1] in _liq for k in _pk), [k for k in _pk if k.split("|")[1] not in _liq]
+data["meta"] = dict(res["meta"], liq={k: float(_liq[k.split("|")[1]]["L_strip"]) for k in _pk})
+
 h = TEMPLATE.read_text(encoding="utf8")
 m = re.search(r"<script>\nconst D=(.*?);\n", h, re.S)
 assert m, "template layout changed: const D= not found"
@@ -45,7 +54,7 @@ b = rep(b, "one per asset class, plus By Style, Cross-Pair, Correlations and Not
 b = rep(b, "every control you can change: period, commodity, metric, Energy with or without NatGas.", "every control you can change: period, commodity, metric.")
 b = rep(b, "<b>Each asset-class tab</b>", "<b>Each bucket tab</b>")
 b = rep(b, "<li>Metals and Energy: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14.</li>",
-        "<li>Metals, Petroleum and Nat Gas: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14. TTF: F1-F2 and F1-F13. EUA: F1-F2 and F1-F5 (EUA is quarterly, so F5 is 12 months out; TTF is monthly, so F13 is). TTF F13 is not quoted before 2013-10-04, so TTF Carry and Carry-Momentum have no signal until 2014-09-25 (the 252-day z-score needs a year of the long slope) and the position is flat before that.</li>")
+        "<li>Metals, Petroleum and Nat Gas: F1-F3 and F1-F13. NGL: F2-F4 and F2-F14. TTF: F1-F2 and F1-F13. EUA: F1-F2 and F1-F5 (EUA is quarterly, so F5 is 12 months out; TTF is monthly, so F13 is). TTF F13 is not quoted before 2013-10-04. A pair joins the sum from its own first value, so until then TTF runs on the short pair F1-F2 alone, and the long pair F1-F13 is added when its value first exists: for Carry from 2014-09-25 (the 252-day z-score needs a year of the long slope), for Carry-Momentum from 2013-11-01 (the 20-observation slope change).</li>")
 b = rep(b, "This rolls roughly 14 to 16 trading days before expiry for Energy, NGL, Precious and Sugar, about 6 for Metals and about 5 for Corn, Wheat and Soybeans.</li>",
         "Counted from the roll day to the last trade date, this rolls about 5 trading days before expiry for Corn, Wheat, Soybean and Soybean Oil, 6 for Metals, 8 for Coffee, 9 for WTI, 11 for Brent and EUA, 14 for Nat Gas and Precious, 15 for TTF and Sugar, and 16 for RBOB, Heating Oil and NGL.</li>")
 b = rep(b, "<li>Products inside a sleeve are equally weighted on common dates",
@@ -54,19 +63,27 @@ b = rep(b, "<li>Each asset-class portfolio combines its five sleeves", "<li>Each
 b = rep(b, "sleeves into an asset-class portfolio, then the five asset-class portfolios into one book; all four EW / Inverse Vol pairs are shown, with and without NatGas. <b>Cross-pair portfolios</b> blend two asset classes' portfolios",
         "sleeves into a bucket portfolio, then the six bucket portfolios into one book; all four EW / Inverse Vol pairs are shown. <b>Cross-pair portfolios</b> blend two buckets' portfolios")
 b = rep(b, "<li>Prices run through 2026-09-23 for all five asset classes. Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to 23 September. Value requires two years of F3 price history before its first signal.</li>",
-        "<li>" + CFG["data_line"] + " Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to " + CFG["short"] + ". Value requires two years of price history of its contract (F3; F2 for Precious and Agriculture) before its first signal.</li>" + BR + "<li>EUA: the series starts on 2008-04-01, the first Phase II day. The earlier generic series is Phase I contracts trading at 0.01-0.07 EUR and is not used. TTF starts in 2006. EUA data review (2026-10-31): no data error was found and nothing was changed. Checks passed: trading calendar and holidays, no stale runs, a normal and never-inverted curve, price levels against dated published anchors (for example the December 2013 contract closing 2012 at 6.67, matched exactly), and every daily move above 10% (40 days) moves the whole curve together, on 36 of the 40 days with at least the median trading volume. Caveats: tenors F2 to F4 repeat the same price on many days in 2008 to 2010 and in 2016 to 2018, when the curve was flat, and a few 2013 and 2014 daily moves could not be matched to a news source.</li>")
+        "<li>" + CFG["data_line"].replace(" (the 29-Oct Bloomberg pull extends the 24-Sep file; every sheet is cut at 30 September)", "") + " Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to " + CFG["short"] + ". Value requires two years of price history of its contract (F3; F2 for Precious and Agriculture) before its first signal.</li>")
 b = rep(b, "Metals, Energy and NGL use expiry dates published by the exchange.</li>",
         "Metals, Energy (including Henry Hub) and NGL use expiry dates published by the exchange. EUA and TTF use ICE Endex last trade dates from Bloomberg's expiry history (EUA: third Monday of the delivery month; TTF: two business days before the delivery month).</li>")
 b = rep(b, "and P3 covers 1 January 2022 to 23 September 2026 (the last price date).", "and P3 covers 1 January 2022 to " + CFG["last_txt"] + ".")
 # Notes tab: what changed, carry wording for one-pair products, costs
-b = rep(b, "<h3>Timing convention (all five sleeves)</h3>",
-        "<h3>What changed in this version (2026-10-31)</h3><ul class=\"steps\">"
-        "<li><b>Buckets:</b> Energy is now <b>Petroleum</b> (WTI, Brent, RBOB, Heating Oil). Henry Hub moved into the new <b>Power, Emissions and Nat Gas</b> bucket together with <b>TTF</b> (European natural gas, ICE Endex) and <b>EUA</b> carbon allowances (ICE Endex). The Energy ex-NatGas tab and every with/without-NatGas switch are gone. By Style, Cross-Pair (15 pairs) and Correlations cover the six buckets. Metals, NGL, Precious and Agriculture are unchanged.</li>"
-        "<li>" + CFG["change_line"] + "</li>"
-        "<li><b>New products:</b> TTF starts in 2006 and EUA on 2008-04-01 (first Phase II day). Carry and Carry-Momentum use the short pair F1-F2 plus a pair 12 months out (TTF F1-F13, EUA F1-F5), the same idea as Precious and Agriculture. All other settings are those of every other product: same five sleeves, 5 bps costs, 5th-trading-day roll, 252-day skewness window.</li>"
-        "<li><b>Value contract:</b> Precious and Agriculture now use the F2 contract for Value (F3 for every other bucket). Their cycles are sparse, so F3 can sit 4 to 6 months from the front. Value on F1, F2 and F3 was compared for both buckets (same 5-year average, 10% threshold and 5 bps costs): the equal-weight information ratio is about zero at all three, so the choice does not change the result.</li>"
-        "<li><b>EUA data</b> was reviewed in depth on 2026-10-31 (details under Data and calendars): no error was found and nothing was changed.</li></ul>"
-        "<h3>Timing convention (all five sleeves)</h3>")
+b = rep(b, "<h2>Method, data and what changed</h2>", "<h2>Methodology and data</h2>")   # the Notes tab starts with the Timing convention (the 'What changed in this version' block was removed on 2026-11-01)
+# Value contract: stated where the sleeve is defined (F2 for Precious and Agriculture)
+b = rep(b, "<li><b>Value:</b> F3 price against its own 1,260-day average, long below -10%, short above +10%.", "<li><b>Value:</b> price of the Value contract (F3; F2 for Precious and Agriculture, whose contract cycles are sparse, so F3 can sit 4 to 6 months from the front) against its own 1,260-day average, long below -10%, short above +10%.")
+b = rep(b, "d_t=\\frac{P^{F3}_t}{\\frac1{1260}\\sum_{i=0}^{1259}P^{F3}_{t-i}}-1", "d_t=\\frac{P^{V}_t}{\\frac1{1260}\\sum_{i=0}^{1259}P^{V}_{t-i}}-1")
+# Liquidity metric pointer (equations as in the v7 document, Appendix liquidity section)
+b = rep(b, "<h3>Data and calendars</h3>",
+        "<h3>Liquidity metric</h3><ul class=\"steps\">"
+        "<li><b>Dollar risk turnover:</b> the amount of one-standard-deviation daily price risk a market trades per day, which puts contracts of different size, price and volatility on one scale."
+        "<div class=\"formula\">$$c_i=m_i\\,\\bar P_i\\,\\sigma_i,\\qquad \\mathrm{ADV}_i=\\frac1{T_i}\\sum_{t=1}^{T_i}\\sum_{j\\in S_i}V_{i,j,t},\\qquad x_i=\\mathrm{ADV}_i\\,c_i,\\qquad L_i=\\frac{K}{x_i}$$</div></li>"
+        "<li><b>Terms:</b> <i>m<sub>i</sub></i> contract multiplier (units per lot); <i>P&#772;<sub>i</sub></i> mean price of the contract held over the window (USD per unit); <i>&sigma;<sub>i</sub></i> standard deviation of the daily log returns of the roll-adjusted series over the window; "
+        "<i>S<sub>i</sub></i> the strip of tenors spanning twelve months (F1-F12 for monthly chains; Gold F1-F6, Silver F1-F5, Platinum and Palladium F1-F4, Corn, Wheat and Coffee F1-F5, Soybean F1-F7, Soybean Oil F1-F8, Sugar F1-F4, EUA F1-F4); "
+        "<i>V<sub>i,j,t</sub></i> volume in lots of tenor <i>j</i> on day <i>t</i> (a day without a print counts as zero, open interest is never used); <i>T<sub>i</sub></i> the trading days of the window on the product's own calendar.</li>"
+        "<li><b>L (days):</b> <i>K</i> is a reference position of USD 1 million of one-sigma daily risk, and <i>L</i> is its size as a multiple of one day of the market's risk turnover, i.e. the time in days to trade it at full market participation (0.05 is five per cent of a day, 3 is three days of the entire market's flow). "
+        "It is shown as <i>Time to trade 1 sigma risk (in Days)</i> in each By-product table. The ranking of products does not depend on <i>K</i>.</li>"
+        "<li>For research purposes the metric has been evaluated on 2025 volumes for each product (a one-time snapshot); NGL volume is the CME half only.</li></ul>"
+        "<h3>Data and calendars</h3>")
 b = rep(b, "Transaction costs are charged when the position changes.</li></ul>", "Transaction costs of 5 bps per unit of turnover are charged when the position changes, and on every roll day.</li></ul>")
 b = rep(b, "The two z-scores are summed and the sign of the sum is the signal.", "The z-scores of a product's tenor pairs are summed (two pairs for every product) and the sign of the sum is the signal.")
 b = rep(b, "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.", "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.")
@@ -80,7 +97,8 @@ t = t[:i0] + ('const LABEL=D.meta.labels;\n'
 t = rep(t, 'const HIDDEN_TABS=["all5","all5_exng"];', 'const HIDDEN_TABS=["all6"];')
 t = rep(t, 'const asset=ASSET[key],t=D.tabs[key];\n  const sleeves', 'const t=D.tabs[key];\n  const sleeves')
 t = rep(t, 't.products.map(pr=>{const d=D.products[asset+"|"+pr];return `<tr><td>${pr}</td>`', 't.pkeys.map((pk,ix)=>{const pr=t.products[ix];const d=D.products[pk];return `<tr><td>${pr}</td>`')
-t = rep(t, '${D.meta.pairs[asset+"|"+pr].join(", ")}</td><td>${D.meta.rolls[asset+"|"+pr]}</td>', '${D.meta.pairs[pk].join(", ")}</td><td>${D.meta.rolls[pk]}</td>')
+t = rep(t, '${D.meta.pairs[asset+"|"+pr].join(", ")}</td><td>${D.meta.rolls[asset+"|"+pr]}</td>', '${D.meta.pairs[pk].join(", ")}</td><td>${(v=>v==null?"n/a":String(Number(v.toPrecision(3))))(D.meta.liq[pk])}</td>')
+t = rep(t, '<th>Tenor pairs</th><th>Roll events</th>', '<th>Tenor pairs</th><th>Time to trade 1 sigma risk (in Days)</th>')
 t = rep(t, 'const asset=ASSET[key],t=D.tabs[key],host=p.querySelector("[data-peq]");', 'const t=D.tabs[key],host=p.querySelector("[data-peq]");')
 t = rep(t, '${t.products.map(x=>`<option>${x}</option>`).join("")}', '${t.pkeys.map((k,ix)=>`<option value="${k}">${t.products[ix]}</option>`).join("")}')
 t = rep(t, 'renderEquity(inner,"prod|"+asset+"|"+sel.value)', 'renderEquity(inner,"prod|"+sel.value)')

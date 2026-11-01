@@ -7,7 +7,8 @@ engine.raw_signal_carry_v2, WITHOUT taking its sign); the pairs' z-scores are su
 the sum is exactly zero (no flat day because the pairs point in opposite directions).
 Carry-Momentum V3: for each pair the change of the carry slope over `horizon` observations (engine.raw_signal_carrymom without its sign); summed across pairs
 (raw slope changes, not standardised) and signed.
-Missing values: if any pair's value is missing on a day (warm-up, a missing tenor price) the sum is missing and the signal of the last available day is carried
+Missing values: a pair that does not exist yet is left out of the sum until its own first valid value (2026-11-01: TTF runs on F1-F2 alone until its F1-F13 value exists);
+after that, if any joined pair's value is missing on a day (a missing tenor price) the sum is missing and the signal of the last available day is carried
 forward; before any signal exists the position is flat. The execution lag is applied afterwards, once, by the caller (engine.exec_shift)."""
 from __future__ import annotations
 
@@ -89,9 +90,17 @@ def carry_z_diff(curve: pd.DataFrame, near: str, far: str, window: int = 252, ho
 
 
 def summed_signal(parts: list[pd.Series], index: pd.Index) -> pd.Series:
-    """Sign of the sum of `parts` (NaN if any part is missing), reindexed to the price `index`, last available signal carried forward; NaN only before the first signal."""
+    """Sign of the sum of `parts`, reindexed to the price `index`, last available signal carried forward; NaN only before the first signal.
+    A part joins the sum from its own first valid value: a pair that does not exist yet (TTF F1-F13 before the F13 contract is quoted on 2013-10-04, and then before its
+    252-observation z-score exists) is left out, so the signal runs on the pairs that exist (TTF: the short pair F1-F2 alone) and the long pair is added the day its value
+    first exists (2026-11-01 rule). After a part has joined, a missing value of any joined part makes the sum missing and the last signal is carried forward, as before."""
     parts = [s for s in parts if not s.empty]
     if not parts:
         return pd.Series(np.nan, index=index)
-    sig = np.sign(pd.concat(parts, axis=1).sum(axis=1, skipna=False).where(pd.concat(parts, axis=1).notna().all(axis=1)))
+    df = pd.concat(parts, axis=1)
+    first = [c.first_valid_index() for _, c in df.items()]
+    joined = pd.DataFrame({i: (df.index >= f) if f is not None else np.zeros(len(df), dtype=bool) for i, f in enumerate(first)}, index=df.index)
+    joined.columns = df.columns
+    ok = (df.notna() | ~joined).all(axis=1) & joined.any(axis=1)
+    sig = np.sign(df.where(joined).sum(axis=1)).where(ok)
     return sig.reindex(index.union(sig.index)).ffill().reindex(index)

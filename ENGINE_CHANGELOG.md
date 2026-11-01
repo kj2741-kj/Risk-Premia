@@ -6,6 +6,14 @@ that led to it.
 
 ---
 
+## 2026-11-01 (evening): a tenor pair joins the Carry / Carry-Momentum sum from its own first value (TTF runs on F1-F2 until F1-F13 exists); dashboard Notes and By-product table
+
+- **Rule** (`research/carry_zsum.summed_signal`, used by the research pipeline, `cross_asset_engine`, `run_regime_table` and the Streamlit Portfolio tab): a pair that does not exist yet is left out of the sum, so the signal runs on the pairs that exist; the pair is added the day its own value first exists. After that the old rule holds (a missing value of any joined pair makes the sum missing and the last signal is carried forward). TTF: Carry runs on F1-F2 alone until 2014-09-25 (F1-F13 z-score, 252 observations after the first F13 quote on 2013-10-04), Carry-Momentum until 2013-11-01 (20-observation change). Before, both sleeves were flat until those dates.
+- **Effect (tag 0930):** from 2012-01-01 only TTF changes (Carry P1 IR 0.732 to 0.408, Carry-Momentum P1 0.417 to 0.232; P2 and P3 identical). The PEN bucket moves in Full and P1 only (EW PORT 0.503 to 0.491 Full, 0.170 to 0.132 P1); Metals, Petroleum, NGL, Precious and Agriculture class tabs are identical. Warm-up signals before 2012 also change slightly for RBOB, EUA, Propane, Butane, Isobutane, Platinum and Palladium (long pair first valid later than the short pair), with no difference from 2012 on. The 1029 pages were not rebuilt and still use the old rule until they are.
+- **Dashboard (0930):** Notes tab renamed "Methodology and data" and starts with the Timing convention (the "What changed in this version" block, the 29-Oct data remark and the EUA data-review bullet are removed); Value contract stated in the Value sleeve (F3, F2 for Precious and Agriculture); new "Liquidity metric" pointer with the equations; the By-product table's "Roll events" column is replaced by "Time to trade 1 sigma risk (in Days)" (L = K/x, K = USD 1M, Calendar 2025 snapshot from `Analysis/Liquidity_Cal2025_results.csv`). `Commodity_Rankings_0930.html` rebuilt on the new TTF signals.
+
+---
+
 ## 2026-11-01 (later): tab metrics aligned with the Final Research Dashboard (full-history signals, window metrics, IR, Value minimum, Skewness gaps)
 
 Why: Aluminium Value (F3, 5yr, 10%) for P3 (2022 onwards) read net Sharpe -0.48 in the apps and IR +0.63 in the HTML dashboard. Positions and daily returns were identical when both used full history; the three differences below explained all of it.

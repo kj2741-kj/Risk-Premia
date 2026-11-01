@@ -6,6 +6,18 @@ that led to it.
 
 ---
 
+## 2026-11-01 (later): tab metrics aligned with the Final Research Dashboard (full-history signals, window metrics, IR, Value minimum, Skewness gaps)
+
+Why: Aluminium Value (F3, 5yr, 10%) for P3 (2022 onwards) read net Sharpe -0.48 in the apps and IR +0.63 in the HTML dashboard. Positions and daily returns were identical when both used full history; the three differences below explained all of it.
+
+- **Signals on full history, metrics on the window** (`common_shared.pos_metrics_generic(..., window=(start, end))`, used by the Momentum, Carry, Value and Skewness Performance Metrics cards and by the Momentum, Carry and Value heatmaps in `common_engine.py`): the year-range slider no longer cuts the price curve before the signal is built (a 5yr Value lookback was empty for a 2022+ range: 264 instead of 670 days in position), and the first return of the window is no longer dropped. Execution lag is unchanged, so no look-ahead (tested: positions built on data truncated at D equal the full-history positions on D).
+- **IR next to the active-day Sharpe:** a second card row (Gross IR, Net IR, Ann Vol) with the dashboard's definition: true annual return / true annual vol over every day of the window, flat days as zero (`_ir_fields`). The active-day Sharpe cards are unchanged.
+- **Value minimum history:** `common_engine.value_v1_position` needs at most 504 observations (two years) before the moving average is valid (`VALUE_MIN_PERIODS_CAP`), as in the 2012-start dashboard (`VALUE_MIN = 504`). Only NGL (data from 2009) is affected. `research/engine.raw_signal_value` gets an optional `min_periods` (default unchanged); the Portfolio tab's Value sleeve passes the same cap. The hub's cross-asset engine is not changed.
+- **Skewness and missing returns:** `skewness_position` fills isolated NaN returns (TTF, EUA holidays) with 0 after the first observation, as the dashboard's price series does; before, each gap blanked the 252-observation rolling skewness for a year.
+- **Check:** `Value` and `Skewness` (default settings) for 25 products in Full / P1 / P2 / P3 against `outputs/final_dashboard_1029/final_v3.json`: 200 of 200 IR values within 0.006 (188 of 200 before the last two items).
+
+---
+
 ## 2026-11-01: TTF and EUA Carry aligned to the 12-month convention; liquidity metric (Cal 2025) added
 
 - **Carry tenor pairs for the two emissions products** (`research/configs/emissions.py`, `pen.py`; user decision 2026-10-31, replaces F1-F3 only): short pair F1-F2 plus a pair 12 months out, as for Precious and Agriculture. TTF is monthly (F1-F2 spans 1 month, F1-F13 spans 12); EUA is quarterly (F1-F2 spans 3 months, F1-F5 spans 12). Henry Hub unchanged (F1-F3 + F1-F13). `pen.CARRY_TENOR_PAIRS` now shows the F1-F2 short pair and `carry_pairs(product)` gives each product's list, so the hub and the Portfolio tab use them by default.

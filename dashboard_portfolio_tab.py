@@ -284,7 +284,8 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
         contract, lookback, threshold = leg.get("contract"), leg.get("lookback"), leg.get("threshold")
         if contract is None or lookback is None or threshold is None:
             return pd.Series(dtype=float)
-        return raw_signal_value(curve, contract, int(lookback), float(threshold))
+        lb_ = int(lookback)   # 2026-11-01: same minimum history as the Final Research Dashboard (two years at most), see common_engine.VALUE_MIN_PERIODS_CAP
+        return raw_signal_value(curve, contract, lb_, float(threshold), min_periods=min(max(lb_ // 2, min(lb_, 60)), 504))
     if family == "Skewness":
         window = leg.get("window")
         if window is None:

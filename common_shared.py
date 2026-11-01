@@ -383,7 +383,28 @@ def ann_label() -> str:
     return "Ann Return (Net)" if is_geometric() else "Ann PnL (Net)"
 
 
-def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
+def _ir_fields(gross_r: pd.Series, net_r: pd.Series, geometric: bool) -> dict:
+    """The Final Research Dashboard's reading of a window: IR = true annual return / true annual volatility over EVERY day of the window,
+    flat days counting as zero return (research/engine + scripts/final_dashboard/analyze_v3.py). Geometric basis: true compounded %
+    return over true annualised vol of the simple returns, as the Portfolio tab. Arithmetic basis: mean / std of the daily $ PnL x sqrt(252)
+    over all days. `vol` is in % (geometric) or in the product's unit (arithmetic)."""
+    def _one(r):
+        r = r.dropna()
+        if len(r) <= 20 or not r.std(ddof=1) > 0:
+            return np.nan, np.nan
+        if geometric:
+            ann = (np.exp(float(r.mean() * 252)) - 1) * 100
+            vol = float(np.expm1(r).std(ddof=1) * np.sqrt(252) * 100)
+        else:
+            ann = float(r.mean() * 252)
+            vol = float(r.std(ddof=1) * np.sqrt(252))
+        return (ann / vol if vol > 0 else np.nan), vol
+    ir_g, _ = _one(gross_r)
+    ir_n, vol = _one(net_r)
+    return dict(ir_gross=ir_g, ir_net=ir_n, vol=vol)
+
+
+def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None, window=None) -> dict:
     """Active-day gross/net Sharpe, annualized $PnL, max-DD ($) for a position series.
     PnL on F1_continuous; TC on F1_raw. All metrics in native dollar/unit terms (e.g.
     USD/MT, USD/bbl) -- NOT %-of-notional. %-of-notional was dropped because it requires
@@ -397,27 +418,40 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
     curve chart these feed (explicitly labeled "Net of TC") -- both move when
     tc_bps changes, same as `net` Sharpe. `gross` Sharpe is kept as the
     before-costs reference point. Pass `phase` to also charge roll-day TC
-    (see transaction_cost())."""
+    (see transaction_cost()).
+
+    `window` = (start, end) (2026-11-01, aligned with the Final Research Dashboard): pass the FULL-history `pos`, `f1r`, `f1c`, `phase`
+    and the daily returns are built on the full history, then cut to [start, end]. A year-range slider therefore does not cold-start the
+    signal or drop the window's first return; a regime (e.g. 2022 onwards) gives the same series the dashboard uses. Without `window`
+    the whole input is the window, as before. The result also carries the dashboard's IR (see _ir_fields): ir_gross, ir_net, vol."""
     pos = pos.reindex(f1c.index).fillna(0.0)
+    if window is not None:
+        wmask = (f1c.index >= pd.Timestamp(window[0])) & (f1c.index <= pd.Timestamp(window[1]))
+    else:
+        wmask = np.ones(len(f1c.index), dtype=bool)
+    pos_w = pos[wmask]
     if is_geometric():
         gp, net = geometric_daily_returns(pos, f1r, f1c, tc_bps, phase)
+        gp, net = gp[wmask], net[wmask]
 
         def _sg(r):
-            a = r[pos != 0].dropna()
+            a = r[pos_w != 0].dropna()
             return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
 
         value = np.exp(net.fillna(0).cumsum())
         log_ann = net.dropna().mean() * 252 if net.notna().any() else np.nan
         return dict(gross=_sg(gp), net=_sg(net),
                     ann=float((np.exp(log_ann) - 1) * 100) if pd.notna(log_ann) else np.nan,
-                    mdd=float((value / value.cummax() - 1).min() * 100), nact=int((pos != 0).sum()),
-                    flat_pct=float(100 * (pos == 0).sum() / len(pos)) if len(pos) else np.nan)
+                    mdd=float((value / value.cummax() - 1).min() * 100), nact=int((pos_w != 0).sum()),
+                    flat_pct=float(100 * (pos_w == 0).sum() / len(pos_w)) if len(pos_w) else np.nan,
+                    **_ir_fields(gp, net, True))
     gp = pos * f1c.diff()
     tc = transaction_cost(pos, f1r, tc_bps, phase)
     net = gp - tc
+    gp, net = gp[wmask], net[wmask]
 
     def _s(pnl):
-        a = pnl[pos != 0].dropna()
+        a = pnl[pos_w != 0].dropna()
         return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
 
     # NOTE 2026-08-04: this function is DOLLAR PnL (gp = pos * f1c.diff(), a raw
@@ -430,8 +464,9 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
     ann_pnl = net.dropna().mean() * 252 if net.notna().any() else np.nan
     return dict(gross=_s(gp), net=_s(net),
                 ann=float(ann_pnl) if pd.notna(ann_pnl) else np.nan,
-                mdd=float((cum - cum.cummax()).min()), nact=int((pos != 0).sum()),
-                flat_pct=float(100 * (pos == 0).sum() / len(pos)) if len(pos) else np.nan)
+                mdd=float((cum - cum.cummax()).min()), nact=int((pos_w != 0).sum()),
+                flat_pct=float(100 * (pos_w == 0).sum() / len(pos_w)) if len(pos_w) else np.nan,
+                **_ir_fields(gp, net, False))
 
 
 def tc_label_map(last_price: float, unit_label: str = "/unit") -> dict:

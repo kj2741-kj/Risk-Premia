@@ -260,6 +260,20 @@ def ma_crossover_trapezoid_position(f1r: pd.Series, fast: int, slow: int, z_wind
     return exec_shift(sig, shift_n).fillna(0)
 
 
+def _ir_cards(m: dict, unit_label: str) -> None:
+    """Second row under Performance Metrics (2026-11-01): the Final Research Dashboard's IR for the same window, next to the active-day Sharpe above.
+    IR = annual return / annual vol over every day of the window (flat days count as zero), see common_shared._ir_fields."""
+    c1, c2, c3, _c4, _c5 = st.columns(5)
+    with c1:
+        metric_card("Gross IR (all days)", _fmt_metric(m.get("ir_gross"), "{:+.2f}"))
+    with c2:
+        metric_card("Net IR (all days)", _fmt_metric(m.get("ir_net"), "{:+.2f}"))
+    with c3:
+        metric_card("Ann Vol", _fmt_metric(m.get("vol"), "{:,.2f}"), unit=f" {pnl_unit(unit_label)}")
+    st.caption("Sharpe above = active days only (days in a position). IR = annual return / annual vol over every day of the window, flat days as zero: "
+               "the figure the Final Research Dashboard shows per period. Signals are built on the full history and cut to the year range, as in the dashboard.")
+
+
 def _heatmap_gate(key: str, sig: tuple, f1r: pd.Series, f1c: pd.Series) -> bool:
     """On-demand heatmaps: they are slow, so nothing is computed until the user clicks "Load". `sig` holds every
     setting the result depends on; the heatmap stays up while they are unchanged and hides again (needing a new
@@ -297,34 +311,36 @@ def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
     eff_shift = shift_n + 1
 
     mask = (f1r.index >= pd.Timestamp(start)) & (f1r.index <= pd.Timestamp(end))
-    f1r_w = f1r[mask].astype(float)
-    f1c_w = f1c[mask].astype(float)
-    n = len(f1r_w)
-    if n < eff_shift + 20:
+    if int(mask.sum()) < eff_shift + 20:
         return pd.DataFrame(columns=["fast", "slow", "sharpe"])
-
+    # 2026-11-01 (aligned with the Final Research Dashboard): moving averages and signals are built on the FULL history, and only the PnL
+    # days are cut to [start, end]. A slow MA is therefore warmed up at the start of a short range (no empty first N days), and the
+    # position held on day t still uses only data up to t - eff_shift.
+    f1r_a = f1r.astype(float)
+    n = len(f1r_a)
     if geo:
         # geometric basis: ratio-stitched daily log returns instead of $ changes of F1_continuous
-        delta = geo_log_returns(f1r.astype(float), f1c.astype(float))[mask].values
+        delta = geo_log_returns(f1r_a, f1c.astype(float)).values
     else:
-        delta = f1c_w.diff().values
+        delta = f1c.astype(float).diff().values
+    day_in_range = np.asarray(mask)[eff_shift:]
 
     sma = np.full((n, max_window), np.nan)
     for k in range(max_window):
-        sma[:, k] = f1r_w.rolling(k + 1).mean().values
+        sma[:, k] = f1r_a.rolling(k + 1).mean().values
 
     # Batch the inner (slow) loop into one 2D numpy op per fast value instead
     # of looping pair-by-pair (250 outer iterations instead of ~31k total).
     # Sharpe computed via masked sum/count instead of nanmean/nanstd (which
     # carry extra overhead) -- roughly 2x faster on top of the batching.
-    delta_shifted = delta[eff_shift:]
+    delta_shifted = delta[eff_shift:][day_in_range]
     fast_out, slow_out, sharpe_out = [], [], []
     for fi in range(max_window - 1):
         fast_col = sma[:, fi]
         slow_cols = sma[:, fi + 1:max_window]                       # (n, n_slow)
         raw_sig = np.sign(fast_col[:, None] - slow_cols)
         sig = raw_sig[:-eff_shift, :]                               # aligned to delta_shifted
-        pos = np.where(np.isfinite(sig), sig, 0.0)
+        pos = np.where(np.isfinite(sig), sig, 0.0)[day_in_range, :]
         pnl = pos * delta_shifted[:, None]
         active_mask = (pos != 0) & np.isfinite(pnl)
         pnl_masked = np.where(active_mask, pnl, 0.0)
@@ -439,8 +455,8 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
         if len(f1r_scoped) < f_slow + 20:
             st.info("Not enough data in the selected year range for this pair.")
         else:
-            feature_pos = ma_crossover_position(f1r_scoped, f_fast, f_slow, shift_n=shift_n)
-            m = pos_metrics_generic(feature_pos, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
+            feature_pos = ma_crossover_position(f1r, f_fast, f_slow, shift_n=shift_n)      # full history, so the slow MA is warmed up at the start of the range
+            m = pos_metrics_generic(feature_pos, f1r, f1c, tc_bps, phase, window=(range_start, range_end))
             c1, c2, c3, c4, c5 = st.columns(5)
             with c1:
                 metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
@@ -452,6 +468,7 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
                 metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
             with c5:
                 metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+            _ir_cards(m, unit_label)
 
     st.divider()
 
@@ -517,7 +534,12 @@ except ImportError:                    # research/ not yet on sys.path (the app 
 def skewness_position(log_returns: pd.Series, window: int, shift_n: int = 1) -> pd.Series:
     """Position from the shared signal (research/engine.py::raw_signal_skewness_from_returns) with this
     module's execution lag. `log_returns` = ratio_log_returns(...) of the dashboard's series."""
-    return exec_shift(raw_signal_skewness_from_returns(log_returns, window), shift_n).fillna(0)
+    # Holiday gaps in the price file leave single NaN returns (TTF, EUA): the dashboard fills them with 0 (price unchanged), so the 252-observation
+    # rolling skewness keeps running instead of going blank for a year after every gap. Only the first return stays NaN.
+    r = log_returns.copy()
+    if len(r) > 1:
+        r.iloc[1:] = r.iloc[1:].fillna(0.0)
+    return exec_shift(raw_signal_skewness_from_returns(r, window), shift_n).fillna(0)
 
 
 @st.cache_data(show_spinner="Computing skewness window sweep...")
@@ -616,8 +638,8 @@ def render_skewness_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
             st.info("Not enough data in the selected year range.")
         else:
             # signal warmed up on full history, then sliced to the range
-            feature_pos = skewness_position(lret, feature_window, shift_n).reindex(f1r_scoped.index).fillna(0)
-            m = pos_metrics_generic(feature_pos, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
+            feature_pos = skewness_position(lret, feature_window, shift_n)       # full history
+            m = pos_metrics_generic(feature_pos, f1r, f1c, tc_bps, phase, window=(range_start, range_end))
             c1, c2, c3, c4, c5 = st.columns(5)
             with c1:
                 metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
@@ -629,6 +651,7 @@ def render_skewness_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
                 metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
             with c5:
                 metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+            _ir_cards(m, unit_label)
 
     st.divider()
 
@@ -737,21 +760,17 @@ def carry_heatmap(curve: pd.DataFrame, contracts: tuple[str, ...], days: int | N
     vectorization: this grid tops out around a few hundred pairs (e.g. 27
     contracts -> 351 pairs), two orders of magnitude smaller than momentum's
     250x250/~31k-pair grid, so the extra vectorization isn't needed here."""
-    mask = (f1r.index >= pd.Timestamp(start)) & (f1r.index <= pd.Timestamp(end))
-    f1r_w = f1r[mask]
-    f1c_w = f1c.reindex(f1r_w.index)
-    curve_w = curve[(curve.index >= pd.Timestamp(start)) & (curve.index <= pd.Timestamp(end))]
-
+    # 2026-11-01: signals built on the FULL curve, metrics cut to [start, end] (pos_metrics_generic window), as in the Final Research Dashboard
     rows = []
     for i, near in enumerate(contracts):
         for far in contracts[i + 1:]:
             if days is None:
-                pos = carry_v1_position(curve_w, near, far, shift_n=shift_n)
+                pos = carry_v1_position(curve, near, far, shift_n=shift_n)
             elif mode == "Zscore":
-                pos = carry_v3_position(curve_w, days, shift_n=shift_n, near=near, far=far)
+                pos = carry_v3_position(curve, days, shift_n=shift_n, near=near, far=far)
             else:
-                pos = carry_v4_position(curve_w, days, shift_n=shift_n, near=near, far=far)
-            sharpe = np.nan if pos.empty else pos_metrics_generic(pos, f1r_w, f1c_w)["gross"]
+                pos = carry_v4_position(curve, days, shift_n=shift_n, near=near, far=far)
+            sharpe = np.nan if pos.empty else pos_metrics_generic(pos, f1r, f1c, window=(start, end))["gross"]
             rows.append({"near": near, "far": far, "sharpe": sharpe})
     return pd.DataFrame(rows)
 
@@ -931,8 +950,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         default_feature = feature_options[0]
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
                                   index=feature_options.index(default_feature), key=f"{key_prefix}_car_feature")
-    feature_pos_scoped = _build_position(feature_label, curve_scoped)
-    m = pos_metrics_generic(feature_pos_scoped, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
+    feature_pos_full = _build_position(feature_label, curve)       # full-history curve: the z-score / momentum windows are warmed up at the start of the range
+    m = pos_metrics_generic(feature_pos_full, f1r, f1c, tc_bps, phase, window=(range_start, range_end))
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
@@ -944,6 +963,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+    _ir_cards(m, unit_label)
 
     st.divider()
 
@@ -1034,14 +1054,20 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 # VALUE: V1 MA-REVERSION ONLY
 # ═══════════════════════════════════════════════════════════════
 
+# 2026-11-01 (aligned with the Final Research Dashboard, 2012-start variant): the Value moving average becomes valid after at most two years of F-contract
+# observations (504), not half the lookback (630 for 5yr). Only matters for products with a short history (NGL starts in 2009).
+VALUE_MIN_PERIODS_CAP = 504
+
+
 def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, threshold: float,
-                       shift_n: int = 2) -> pd.Series:
+                       shift_n: int = 2, min_periods: int | None = None) -> pd.Series:
     if contract not in curve.columns:
         return pd.Series(dtype=float)
     fk = curve[contract].dropna()
     if len(fk) < max(lookback // 2, 60):
         return pd.Series(dtype=float)
-    ma = fk.rolling(lookback, min_periods=max(lookback // 2, min(lookback, 60))).mean()
+    mp = min(max(lookback // 2, min(lookback, 60)), VALUE_MIN_PERIODS_CAP) if min_periods is None else min_periods
+    ma = fk.rolling(lookback, min_periods=mp).mean()
     dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan).dropna()
     sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                      index=dev.index)
@@ -1071,16 +1097,12 @@ def value_heatmap(curve: pd.DataFrame, contracts: tuple[str, ...], lookback_item
     Gross only (no TC), matching momentum_heatmap/carry_heatmap's convention.
     Plain per-pair loop, same reasoning as carry_heatmap: this grid is
     similarly small (e.g. 27 contracts x 8 lookbacks = 216 cells)."""
-    mask = (f1r.index >= pd.Timestamp(start)) & (f1r.index <= pd.Timestamp(end))
-    f1r_w = f1r[mask]
-    f1c_w = f1c.reindex(f1r_w.index)
-    curve_w = curve[(curve.index >= pd.Timestamp(start)) & (curve.index <= pd.Timestamp(end))]
-
+    # 2026-11-01: signals built on the FULL curve, metrics cut to [start, end], as in the Final Research Dashboard
     rows = []
     for contract in contracts:
         for label, days in lookback_items:
-            pos = value_v1_position(curve_w, contract, days, threshold, shift_n=shift_n)
-            sharpe = np.nan if pos.empty else pos_metrics_generic(pos, f1r_w, f1c_w)["gross"]
+            pos = value_v1_position(curve, contract, days, threshold, shift_n=shift_n)
+            sharpe = np.nan if pos.empty else pos_metrics_generic(pos, f1r, f1c, window=(start, end))["gross"]
             rows.append({"contract": contract, "lookback": label, "sharpe": sharpe})
     return pd.DataFrame(rows)
 
@@ -1218,8 +1240,8 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     feature_label = st.selectbox("Strategy to feature", options=feature_options,
                                   index=feature_options.index(default_feature), key=f"{key_prefix}_val_feature")
     v_c, v_lb, v_thr = label_to_combo[feature_label]
-    feature_pos_scoped = value_v1_position(curve_scoped, v_c, _resolve_lookback_days(v_lb, lookback_map), v_thr, shift_n=shift_n)
-    m = pos_metrics_generic(feature_pos_scoped, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
+    feature_pos_full = value_v1_position(curve, v_c, _resolve_lookback_days(v_lb, lookback_map), v_thr, shift_n=shift_n)   # full history: a 5yr lookback is populated in a 2022+ window
+    m = pos_metrics_generic(feature_pos_full, f1r, f1c, tc_bps, phase, window=(range_start, range_end))
     c1, c2, c3, c4, c5 = st.columns(5)
     with c1:
         metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
@@ -1231,6 +1253,7 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+    _ir_cards(m, unit_label)
 
     st.divider()
 

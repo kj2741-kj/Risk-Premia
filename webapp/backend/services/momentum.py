@@ -22,7 +22,8 @@ from plotly.subplots import make_subplots
 from common_engine import daily_returns, equity_curve, ma_crossover_position, momentum_heatmap, rolling_sharpe
 from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic
 
-from cache import load_series
+from cache import load_series, locked
+from common_shared import register_geo_inputs
 from config_registry import get_asset_config, get_product_code
 
 _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
@@ -57,12 +58,14 @@ def _fig_to_json(fig: go.Figure) -> dict:
 def _load(asset_class: str, product: str, roll_method: str, roll_n: int):
     code = get_product_code(asset_class, product)
     f1_df, curve = load_series(asset_class, code, roll_method, roll_n)
+    register_geo_inputs(f1_df)
     return f1_df["F1_raw"], f1_df["F1_continuous"], f1_df["Phase"], curve
 
 
+@locked
 def get_momentum(
     asset_class: str, product: str, *,
-    roll_method: str = "ltd", roll_n: int = 5,
+    roll_method: str = "5td", roll_n: int = 5,
     tc_bps: int = 5, shift_n: int = 1,
     pairs: list[tuple[int, int]] | None = None,
     metrics_year_start: int | None = None, metrics_year_end: int | None = None,
@@ -129,7 +132,7 @@ def get_momentum(
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
 
     # ── Rolling Sharpe (252-Day) ──────────────────────────────────────────
     fig_rs = go.Figure()
@@ -182,9 +185,10 @@ def get_momentum(
     }
 
 
+@locked
 def get_momentum_heatmap(
     asset_class: str, product: str, *,
-    roll_method: str = "ltd", roll_n: int = 5,
+    roll_method: str = "5td", roll_n: int = 5,
     tc_bps: int = 5, shift_n: int = 1,
     year_start: int | None = None, year_end: int | None = None,
     max_window: int = 250,

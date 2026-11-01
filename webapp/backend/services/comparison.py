@@ -14,7 +14,8 @@ import plotly.graph_objects as go
 from common_engine import daily_returns, rolling_price_vol, rolling_sharpe
 from common_shared import CHART_LAYOUT, COLORS
 
-from cache import load_series
+from cache import load_series, locked
+from common_shared import register_geo_inputs
 from config_registry import get_asset_config, get_product_code
 from services.momentum import _fig_to_json
 
@@ -28,9 +29,10 @@ def _series_from_json(dates: list[str], values: list[float]) -> pd.Series:
     return pd.Series(values, index=pd.to_datetime(dates))
 
 
+@locked
 def get_comparison(
     asset_class: str, product: str, *,
-    roll_method: str = "ltd", roll_n: int = 5,
+    roll_method: str = "5td", roll_n: int = 5,
     groups: dict[str, dict[str, dict]],  # {"Momentum": {label: {"dates":[...],"values":[...]}}, ...}
     tc_bps: int = 5,
     vol_window_label: str = "63d (1qtr)",
@@ -41,6 +43,7 @@ def get_comparison(
 ) -> dict:
     code = get_product_code(asset_class, product)
     f1_df, _curve = load_series(asset_class, code, roll_method, roll_n)
+    register_geo_inputs(f1_df)
     f1r, f1c, phase = f1_df["F1_raw"], f1_df["F1_continuous"], f1_df["Phase"]
     ac = get_asset_config(asset_class)
     unit_label = ac["products"][product]["unit"]
@@ -79,7 +82,7 @@ def get_comparison(
         eq = pnl_w.fillna(0).cumsum()
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    layout = dict(CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    layout = dict(CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
     if show_vol_overlay:
         vol_w = vol[(vol.index >= eq_start) & (vol.index <= eq_end)]
         fig_eq.add_trace(go.Scatter(x=vol_w.index, y=vol_w.values, mode="lines",

@@ -171,8 +171,8 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
         <div className="metric-row">
           <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => fmtSigned(v)} />
           <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => fmtSigned(v)} />
-          <MetricCard label="Ann PnL (Net)" value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit={` ${data.unit_label}`} />
-          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit={` ${data.unit_label}`} />
+          <MetricCard label="Ann Return (Net)" value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit=" %" />
+          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit=" %" />
           <MetricCard label="% Flat" value={data.metrics.flat_pct} format={(v) => v.toFixed(0)} unit="%" />
         </div>
       )}
@@ -207,7 +207,7 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
 
       {data && (
         <>
-          <div className="section-header">Cumulative PnL (Equity Curve, {data.unit_label}): Net of TC</div>
+          <div className="section-header">Cumulative Return (Equity Curve, %): Net of TC</div>
           <div className="control-row">
             <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
               onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

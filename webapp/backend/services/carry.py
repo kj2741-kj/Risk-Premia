@@ -12,7 +12,8 @@ from common_engine import carry_heatmap, carry_v1_position, carry_v3_position, c
 import plotly.graph_objects as go
 from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic
 
-from cache import load_series
+from cache import load_series, locked
+from common_shared import register_geo_inputs
 from config_registry import get_asset_config, get_product_code
 from services.momentum import _clean_metrics, _fig_to_json, _series_to_json  # reuse, no reimplementation
 
@@ -23,6 +24,7 @@ _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
 def _load(asset_class: str, product: str, roll_method: str, roll_n: int):
     code = get_product_code(asset_class, product)
     f1_df, curve = load_series(asset_class, code, roll_method, roll_n)
+    register_geo_inputs(f1_df)
     return f1_df["F1_raw"], f1_df["F1_continuous"], f1_df["Phase"], curve
 
 
@@ -52,9 +54,10 @@ def _build_position(v: dict, curve, shift_n: int, near_default: str, far_default
     return carry_v4_position(curve, v["horizon"], shift_n=shift_n, near=near_default, far=far_default)
 
 
+@locked
 def get_carry(
     asset_class: str, product: str, *,
-    roll_method: str = "ltd", roll_n: int = 5,
+    roll_method: str = "5td", roll_n: int = 5,
     tc_bps: int = 5, shift_n: int = 1,
     variants: list[dict] | None = None,
     skip_front_contract: bool = False,
@@ -127,7 +130,7 @@ def get_carry(
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
 
     fig_rs = go.Figure()
     for i, (label, pos) in enumerate(positions.items()):
@@ -169,9 +172,10 @@ def get_carry(
     }
 
 
+@locked
 def get_carry_heatmap(
     asset_class: str, product: str, *,
-    roll_method: str = "ltd", roll_n: int = 5,
+    roll_method: str = "5td", roll_n: int = 5,
     tc_bps: int = 5, shift_n: int = 1,
     skip_front_contract: bool = False,
     days: int | None = None, mode: str | None = None,

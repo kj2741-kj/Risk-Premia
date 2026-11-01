@@ -1,53 +1,36 @@
 """
-Adapter for the Portfolio tab -- mirrors dashboard_portfolio_tab.py's
-computation exactly. Uses research/engine.py's LOG-RETURN methodology, not
-common_engine.py's dollar-PnL convention -- these numbers will not reconcile
-with the Momentum/Carry/Value/Comparison tabs (same disclosure the Streamlit
-tab makes). research/engine.py and research/risk_parity.py have zero
-Streamlit dependency, so they're reused verbatim; only the Streamlit
-widget/session-state orchestration is replaced.
+Adapter for the Portfolio tab. Every computation is a direct call into dashboard_portfolio_tab.py (the Streamlit tab's own
+module), so the reference strategies, the per-product Carry pairs (Precious, Agriculture, TTF, EUA, Henry Hub), the Combined
+Carry / CarryMom rows, the Skewness sleeve, the combine methods and the metric formulas are the same code the Streamlit
+dashboards run. This file only replaces the st.* widget and session-state orchestration with function arguments, and the
+st.plotly_chart figure with figure JSON.
 
-Simplification vs. the Streamlit tab: custom portfolios are NOT frozen at
-"Add" time. Every /results call recomputes every portfolio (reference
-strategies, their aggregate, and every custom portfolio) fresh from the
-CURRENT tc_bps/combine_method -- more internally consistent (everything on
-screen always reflects the current global settings) than the Streamlit
-original, which keeps whatever tc_bps was active when a portfolio was added
-even if tc_bps changes afterward.
+Log-return methodology (research/engine.py), not the dollar-PnL convention of the Momentum/Carry/Value tabs, as in Streamlit.
+
+Simplification vs. the Streamlit tab: custom portfolios are not frozen at "Add" time. Every /results call recomputes every
+portfolio fresh from the current tc_bps / combine_method.
 """
 
-import functools
 import importlib
 
 import numpy as np
-import pandas as pd
 import plotly.graph_objects as go
 
+import dashboard_portfolio_tab as dpt
 from common_shared import CHART_LAYOUT
-from engine import (combine_positions, combine_returns, exec_shift, log_return_daily,
-                     raw_signal_carry_v1, raw_signal_carry_v2, raw_signal_carrymom,
-                     raw_signal_momentum, raw_signal_value)
-from drp import rolling_drp_combine
-from risk_parity import rolling_erc_combine
 
+from cache import locked
 from services.momentum import _clean, _fig_to_json
 
-PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
-           "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
+FAMILY_TITLE = dpt.FAMILY_TITLE
+PALETTE = dpt.PALETTE
 
-FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value"}
+_CONFIG_MODULES = {"metals": "metals", "petroleum": "petroleum", "pen": "pen", "ngl": "ngl", "precious": "precious", "agri": "agri"}
 
-_CONFIG_MODULES = {"metals": "metals", "energy": "energy", "precious": "precious", "ngl": "ngl"}
-
-# Dashboard-display-only product exclusions, mirroring energy_dashboard/app.py's
-# ENERGY_PORTFOLIO_EXCLUDED (2026-08-03) -- research/configs/energy.py's own
-# PRODUCTS list is untouched, this only filters what the Portfolio route
-# computes/returns. Names match cfg.PRODUCTS' own strings (no space), not
-# config_registry.py's display-label keys.
+# Dashboard-display-only product exclusions, as the Streamlit apps pass them (precious_metals_dashboard, ngl_dashboard).
 EXCLUDED_PRODUCTS: dict[str, tuple[str, ...]] = {
-    "energy": ("SingaporeGasoil", "FuelOil"),
-    "ngl": ("Ethylene", "Propylene"),
     "precious": ("Copper_COMEX",),
+    "ngl": ("Ethylene", "Propylene"),
 }
 
 
@@ -57,356 +40,118 @@ def get_cfg(asset_class: str):
     return importlib.import_module(_CONFIG_MODULES[asset_class])
 
 
-@functools.lru_cache(maxsize=8)
-def _load_products(asset_class: str):
-    """Curve + log-return F1 series for every product in cfg.PRODUCTS (minus
-    EXCLUDED_PRODUCTS.get(asset_class, ())), truncated to the common date
-    window across the remaining products. Cached on the primitive asset_class
-    string only -- the expensive step (Excel parsing + roll-adjustment for
-    every product)."""
+def _data(asset_class: str):
     cfg = get_cfg(asset_class)
-    excluded = EXCLUDED_PRODUCTS.get(asset_class, ())
-    data = {}
-    for product in cfg.PRODUCTS:
-        if product in excluded:
-            continue
-        f1 = cfg.load_f1_series_logret(product)
-        curve = cfg.load_curve(product)
-        data[product] = {"f1r": f1["F1_raw"], "log_price": f1["log_price"],
-                          "phase": f1["Phase"], "curve": curve}
-    common_start = max(d["f1r"].index.min() for d in data.values())
-    common_end = min(d["f1r"].index.max() for d in data.values())
-    for d in data.values():
-        d["f1r"] = d["f1r"].loc[common_start:common_end]
-        d["log_price"] = d["log_price"].loc[common_start:common_end]
-        d["phase"] = d["phase"].loc[common_start:common_end]
-        d["curve"] = d["curve"].loc[common_start:common_end]
-    return data, common_start, common_end
-
-
-def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
-    curve, f1r = product_data["curve"], product_data["f1r"]
-    if family == "Momentum":
-        fast, slow = leg.get("fast"), leg.get("slow")
-        if fast is None or slow is None:
-            return pd.Series(dtype=float)
-        return raw_signal_momentum(f1r, int(fast), int(slow))
-    if family == "Carry":
-        near, far = leg.get("near"), leg.get("far")
-        if near is None or far is None:
-            return pd.Series(dtype=float)
-        leg_type = leg.get("type", "V1 Level")
-        if leg_type == "V1 Level":
-            return raw_signal_carry_v1(curve, near, far)
-        if leg_type == "V2 Z-score":
-            return raw_signal_carry_v2(curve, near, far, int(leg.get("zwindow") or 252))
-        if leg_type == "V3 Carry-Momentum":
-            horizon = leg.get("horizon")
-            if horizon is None:
-                return pd.Series(dtype=float)
-            return raw_signal_carrymom(curve, near, far, int(horizon))
-        return pd.Series(dtype=float)
-    if family == "CarryMom":
-        near, far, horizon = leg.get("near"), leg.get("far"), leg.get("horizon")
-        if near is None or far is None or horizon is None:
-            return pd.Series(dtype=float)
-        return raw_signal_carrymom(curve, near, far, int(horizon))
-    if family == "Value":
-        contract, lookback, threshold = leg.get("contract"), leg.get("lookback"), leg.get("threshold")
-        if contract is None or lookback is None or threshold is None:
-            return pd.Series(dtype=float)
-        return raw_signal_value(curve, contract, int(lookback), float(threshold))
-    raise ValueError(f"Unknown family {family!r}")
-
-
-def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Series:
-    """Pre-shift combined raw signal for one strategy family on one product
-    (mirrors dashboard_portfolio_tab.py's helper of the same name)."""
-    if not instance["legs"]:
-        return pd.Series(dtype=float)
-    raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
-    raws = [r for r in raws if not r.empty]
-    if not raws:
-        return pd.Series(dtype=float)
-    return raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
-
-
-def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
-    empty = pd.Series(dtype=float)
-    combo = _instance_product_raw_signal(instance, product_data)
-    if combo.empty:
-        return empty, empty
-    pos = exec_shift(combo, int(instance["shift_n"])).fillna(0)
-    return log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
-
-
-def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
-    grosses, nets = [], []
-    for product_data in data.values():
-        g, n = _instance_product_returns(instance, product_data, tc_bps)
-        if not n.empty:
-            grosses.append(g)
-            nets.append(n)
-    empty = pd.Series(dtype=float)
-    gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
-    net_agg = combine_returns(nets, "equal_weight") if nets else empty
-    return gross_agg, net_agg
-
-
-def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict],
-                                    data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
-    """Signal-level Combined Carry / Combined CarryMom (mirrors
-    dashboard_portfolio_tab.py): equal-weight the raw (pre-shift) composite
-    signals of this asset class's Carry tenor pairs per product, shift ONCE,
-    then compute PnL."""
-    shift_n = cfg.CARRY_SHIFT_N if family == "Carry" else cfg.CARRY_MOMENTUM_SHIFT_N
-    grosses, nets = [], []
-    for product_data in data.values():
-        raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
-        raws = [r for r in raws if not r.empty]
-        if not raws:
-            continue
-        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
-        pos = exec_shift(combo, shift_n).fillna(0)
-        g, n = log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
-        if not n.empty:
-            grosses.append(g)
-            nets.append(n)
-    empty = pd.Series(dtype=float)
-    gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
-    net_agg = combine_returns(nets, "equal_weight") if nets else empty
-    return gross_agg, net_agg
-
-
-def _build_reference_strategies(cfg) -> list[dict]:
-    instances = [{
-        "id": "mom", "family": "Momentum", "label": "Momentum",
-        "legs": [{"fast": f, "slow": s} for f, s in cfg.MOMENTUM_PAIRS],
-        "shift_n": cfg.MOMENTUM_SHIFT_N, "combine_method": "equal_weight",
-    }]
-    for near, far in cfg.CARRY_TENOR_PAIRS:
-        instances.append({
-            "id": f"carry_{near}{far}", "family": "Carry", "label": f"Carry ({near}-{far})",
-            "legs": [
-                {"type": "V1 Level", "near": near, "far": far,
-                 "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
-                {"type": "V2 Z-score", "near": near, "far": far,
-                 "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
-            ],
-            "shift_n": cfg.CARRY_SHIFT_N, "combine_method": "equal_weight",
-        })
-    for near, far in cfg.CARRY_TENOR_PAIRS:
-        instances.append({
-            "id": f"carrymom_{near}{far}", "family": "CarryMom", "label": f"CarryMom ({near}-{far})",
-            "legs": [{"near": near, "far": far, "horizon": cfg.CARRY_MOMENTUM_HORIZON}],
-            "shift_n": cfg.CARRY_MOMENTUM_SHIFT_N, "combine_method": "equal_weight",
-        })
-    instances.append({
-        "id": "value", "family": "Value", "label": "Value",
-        "legs": [{"contract": cfg.VALUE_CONTRACT, "lookback": cfg.VALUE_LOOKBACK_DAYS,
-                  "threshold": cfg.VALUE_THRESHOLD}],
-        "shift_n": cfg.VALUE_SHIFT_N, "combine_method": "equal_weight",
-    })
-    return instances
-
-
-def _describe_leg(family: str, leg: dict) -> str:
-    if family == "Momentum":
-        return f"MA crossover, fast={leg.get('fast')}, slow={leg.get('slow')}"
-    if family == "Carry":
-        leg_type = leg.get("type", "V1 Level")
-        text = f"{leg_type} ({leg.get('near')}-{leg.get('far')})"
-        if leg_type == "V2 Z-score":
-            text += f", z-window={leg.get('zwindow')}"
-        elif leg_type == "V3 Carry-Momentum":
-            text += f", horizon={leg.get('horizon')}"
-        return text
-    if family == "CarryMom":
-        return f"Carry-Momentum ({leg.get('near')}-{leg.get('far')}), horizon={leg.get('horizon')}"
-    if family == "Value":
-        return f"contract={leg.get('contract')}, lookback={leg.get('lookback')}d, threshold=+-{leg.get('threshold')}"
-    return str(leg)
-
-
-@functools.lru_cache(maxsize=32)
-def _compute_reference_returns(asset_class: str, tc_bps: int) -> tuple[dict, dict]:
-    """Never mutate the returned dicts -- lru_cache hands back the SAME
-    object on a cache hit, so callers must copy before adding entries."""
-    cfg = get_cfg(asset_class)
-    reference_strategies = _build_reference_strategies(cfg)
-    data, _, _ = _load_products(asset_class)
-    gross: dict[str, pd.Series] = {}
-    net: dict[str, pd.Series] = {}
-    for instance in reference_strategies:
-        g, n = _instance_asset_returns(instance, data, tc_bps)
-        if not n.empty:
-            gross[instance["label"]] = g
-            net[instance["label"]] = n
-    return gross, net
+    return cfg, dpt._load_products(cfg, cfg.ASSET_CLASS, EXCLUDED_PRODUCTS.get(asset_class, ()))
 
 
 def _has_multi_tenor(cfg) -> bool:
-    return len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2
-
-
-@functools.lru_cache(maxsize=32)
-def _compute_combined_tenor_returns(asset_class: str, tc_bps: int) -> tuple[dict, dict]:
-    """Combined Carry / Combined CarryMom gross+net, or ({}, {}) when this
-    asset class has fewer than two Carry tenor pairs."""
-    cfg = get_cfg(asset_class)
-    if not _has_multi_tenor(cfg):
-        return {}, {}
-    by_id = {inst["id"]: inst for inst in _build_reference_strategies(cfg)}
-    carry_inst = [by_id[f"carry_{n}{f}"] for n, f in cfg.CARRY_TENOR_PAIRS if f"carry_{n}{f}" in by_id]
-    cm_inst = [by_id[f"carrymom_{n}{f}"] for n, f in cfg.CARRY_TENOR_PAIRS if f"carrymom_{n}{f}" in by_id]
-    if len(carry_inst) != len(cfg.CARRY_TENOR_PAIRS) or len(cm_inst) != len(cfg.CARRY_TENOR_PAIRS):
-        return {}, {}
-    data, _, _ = _load_products(asset_class)
-    cc_g, cc_n = _combined_tenor_family_returns("Carry", cfg, carry_inst, data, tc_bps)
-    ccm_g, ccm_n = _combined_tenor_family_returns("CarryMom", cfg, cm_inst, data, tc_bps)
-    return ({"Combined Carry": cc_g, "Combined CarryMom": ccm_g},
-            {"Combined Carry": cc_n, "Combined CarryMom": ccm_n})
-
-
-def _apply_weight_schedule(returns_by_name: dict, weights_over_time: pd.DataFrame) -> pd.Series:
-    names = list(weights_over_time.columns)
-    aligned = pd.concat([returns_by_name[k].reindex(weights_over_time.index).fillna(0.0)
-                          for k in names], axis=1, keys=names)
-    return pd.Series((aligned.values * weights_over_time.values).sum(axis=1), index=weights_over_time.index)
-
-
-def _combine_sleeves(gross_by_name: dict, net_by_name: dict, combine_method: str,
-                      vol_window: int = 63, tilt: float = 0.0) -> tuple[pd.Series, pd.Series]:
-    if len(net_by_name) < 2:
-        return (combine_returns(list(gross_by_name.values()), "equal_weight"),
-                combine_returns(list(net_by_name.values()), "equal_weight"))
-    if combine_method == "Inverse Vol":
-        return (combine_returns(list(gross_by_name.values()), "inverse_vol", vol_window=vol_window),
-                combine_returns(list(net_by_name.values()), "inverse_vol", vol_window=vol_window))
-    if combine_method == "Risk Parity (ERC, rolling)":
-        net_combined, weights_over_time = rolling_erc_combine(net_by_name, tilt=tilt)
-        gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
-        return gross_combined, net_combined
-    if combine_method == "Dynamic Risk Parity (DRP, rolling)":
-        net_combined, weights_over_time = rolling_drp_combine(net_by_name)
-        gross_combined = _apply_weight_schedule(gross_by_name, weights_over_time)
-        return gross_combined, net_combined
-    return (combine_returns(list(gross_by_name.values()), "equal_weight"),
-            combine_returns(list(net_by_name.values()), "equal_weight"))
-
-
-def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int) -> dict:
-    def _slice(s):
-        return s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
-
-    def _true_ann_vol(s):
-        """True compounded annual return and true annualized volatility of
-        SIMPLE returns, not log-return figures."""
-        if len(s) > 20 and s.std(ddof=1) > 0:
-            log_ann = float(s.mean() * 252)
-            ann = float((np.exp(log_ann) - 1) * 100)
-            vol = float(np.expm1(s).std(ddof=1) * np.sqrt(252) * 100)
-            return ann, vol
-        return np.nan, np.nan
-
-    def _sharpe(ann_pct, vol_pct):
-        return float(ann_pct / vol_pct) if pd.notna(vol_pct) and vol_pct > 0 else np.nan
-
-    g, n = _slice(gross), _slice(net)
-    gross_ann, gross_vol = _true_ann_vol(g)
-    ann, vol = _true_ann_vol(n)
-    cum = n.cumsum()
-    value = np.exp(cum)
-    mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
-    return dict(gross=_sharpe(gross_ann, gross_vol), net=_sharpe(ann, vol), ann=ann, vol=vol, mdd=mdd)
+    return len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2 or dpt._per_product_pairs(cfg)
 
 
 def get_reference_strategies(asset_class: str) -> dict:
     cfg = get_cfg(asset_class)
-    instances = _build_reference_strategies(cfg)
+    instances = dpt._build_reference_strategies(cfg)
+    per_product = dpt._per_product_pairs(cfg)
     multi = _has_multi_tenor(cfg)
+    long_note = ""
+    if per_product:
+        long_note = getattr(cfg, "CARRY_CAPTION", None) or (
+            "Carry and Carry momentum for this asset class combine the short pair F1-F2 with a long pair that differs by product ("
+            + ", ".join(f"{p_} F1-{f_}" for p_, f_ in cfg.CARRY_LONG_FAR_BY_PRODUCT.items()) + "), as in the Final dashboard.")
     combined = []
     if multi:
         combined = [
-            {"label": "Combined Carry", "note": "Carry V1+V2 composite",
+            {"label": "Combined Carry", "note": "Carry V2 (z-scores summed across the pairs)",
              "tenor_pairs": [list(p) for p in cfg.CARRY_TENOR_PAIRS]},
-            {"label": "Combined CarryMom", "note": "Carry-Momentum",
+            {"label": "Combined CarryMom", "note": "Carry momentum (slope changes summed across the pairs)",
              "tenor_pairs": [list(p) for p in cfg.CARRY_TENOR_PAIRS]},
         ]
     return {
         "has_multi_tenor": multi,
+        "per_product_pairs": per_product,
+        "carry_note": long_note,
         "combined": combined,
         "strategies": [
             {
                 "id": inst["id"], "label": inst["label"], "family": inst["family"], "shift_n": inst["shift_n"],
                 "legs": inst["legs"],
-                "legs_desc": [_describe_leg(inst["family"], leg) for leg in inst["legs"]],
+                "legs_desc": [dpt._describe_leg(inst["family"], leg) for leg in inst["legs"]],
             }
             for inst in instances
         ],
     }
 
 
+@locked
 def get_results(
     asset_class: str, *, tc_bps: int = 5,
     combine_method: str = "Equal Weight", vol_window: int = 63, return_tilt: float = 0.0,
     custom_portfolios: list[dict] | None = None,
     yr_start: int | None = None, yr_end: int | None = None,
     metric_strategy: str | None = None, shown: list[str] | None = None,
-    separate_tenor_carry: bool = False,
+    separate_tenor_carry: bool = False, geometric: bool = True,
 ) -> dict:
-    data, common_start, common_end = _load_products(asset_class)
+    cfg, (data, common_start, common_end) = _data(asset_class)
+    excluded = EXCLUDED_PRODUCTS.get(asset_class, ())
     min_year, max_year = int(common_start.year), int(common_end.year)
     yr_start, yr_end = yr_start or min_year, yr_end or max_year
 
-    ref_gross, ref_net = _compute_reference_returns(asset_class, tc_bps)
-    instance_gross, instance_net = dict(ref_gross), dict(ref_net)  # copy: cached dicts must not be mutated
+    per_product = dpt._per_product_pairs(cfg)
+    has_multi = _has_multi_tenor(cfg)
+    separate = bool(separate_tenor_carry) and has_multi and not per_product
+    reference_strategies = dpt._build_reference_strategies(cfg)
+    raw_gross, raw_net = dpt._compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded)
 
-    # Default view (matches Streamlit): four reference strategies -- Momentum, Combined Carry,
-    # Combined CarryMom, Value -- when the asset class has >=2 Carry tenor pairs. The
-    # separate_tenor_carry toggle restores the original six-row breakdown.
-    if ref_net and _has_multi_tenor(get_cfg(asset_class)) and not separate_tenor_carry:
-        comb_gross, comb_net = _compute_combined_tenor_returns(asset_class, tc_bps)
-        if comb_net:
-            instance_gross = {"Momentum": ref_gross["Momentum"], "Combined Carry": comb_gross["Combined Carry"],
-                               "Combined CarryMom": comb_gross["Combined CarryMom"], "Value": ref_gross["Value"]}
-            instance_net = {"Momentum": ref_net["Momentum"], "Combined Carry": comb_net["Combined Carry"],
-                             "Combined CarryMom": comb_net["Combined CarryMom"], "Value": ref_net["Value"]}
+    # Same flow as render_portfolio_tab: default view = Momentum, Combined Carry, Combined CarryMom, Value (+ Skewness).
+    if raw_net and has_multi and not separate:
+        by_id = {inst["id"]: inst for inst in reference_strategies}
+        carry_inst = [by_id[f"carry_{n}{f}"] for n, f in cfg.CARRY_TENOR_PAIRS if f"carry_{n}{f}" in by_id]
+        cm_inst = [by_id[f"carrymom_{n}{f}"] for n, f in cfg.CARRY_TENOR_PAIRS if f"carrymom_{n}{f}" in by_id]
+        if len(carry_inst) == len(cfg.CARRY_TENOR_PAIRS) and len(cm_inst) == len(cfg.CARRY_TENOR_PAIRS):
+            cc_g, cc_n = dpt._combined_tenor_family_returns("Carry", cfg, carry_inst, data, tc_bps)
+            ccm_g, ccm_n = dpt._combined_tenor_family_returns("CarryMom", cfg, cm_inst, data, tc_bps)
+            instance_gross = {"Momentum": raw_gross["Momentum"], "Combined Carry": cc_g, "Combined CarryMom": ccm_g, "Value": raw_gross["Value"]}
+            instance_net = {"Momentum": raw_net["Momentum"], "Combined Carry": cc_n, "Combined CarryMom": ccm_n, "Value": raw_net["Value"]}
+            if "Skewness" in raw_net:
+                instance_gross["Skewness"], instance_net["Skewness"] = raw_gross["Skewness"], raw_net["Skewness"]
+        else:
+            instance_gross, instance_net = dict(raw_gross), dict(raw_net)
+    else:
+        instance_gross, instance_net = dict(raw_gross), dict(raw_net)
 
-    agg_label = None
+    agg_label = agg5_label = None
     if instance_net:
-        # Stable key, deliberately NOT combine_method-dependent (matches Streamlit 2026-09-23 fix).
         agg_label = "Portfolio (all reference strategies)"
-        agg_gross, agg_net = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window, tilt=return_tilt)
-        instance_gross[agg_label] = agg_gross
-        instance_net[agg_label] = agg_net
+        core_g = {k: v for k, v in instance_gross.items() if k != "Skewness"}
+        core_n = {k: v for k, v in instance_net.items() if k != "Skewness"}
+        instance_gross[agg_label], instance_net[agg_label] = dpt._combine_sleeves(core_g, core_n, combine_method, vol_window, tilt=return_tilt)
+        if "Skewness" in instance_net:
+            agg5_label = "Portfolio (all reference strategies + Skewness)"
+            five_g = {k: v for k, v in instance_gross.items() if k != agg_label}
+            five_n = {k: v for k, v in instance_net.items() if k != agg_label}
+            instance_gross[agg5_label], instance_net[agg5_label] = dpt._combine_sleeves(five_g, five_n, combine_method, vol_window, tilt=return_tilt)
 
     for portfolio in (custom_portfolios or []):
         gross_by_name, net_by_name = {}, {}
         for sleeve in portfolio["sleeves"]:
-            g, n = _instance_asset_returns(sleeve, data, tc_bps)
+            g, n = dpt._instance_asset_returns(sleeve, data, tc_bps)
             if not n.empty:
                 label = FAMILY_TITLE[sleeve["family"]]
-                gross_by_name[label] = g
-                net_by_name[label] = n
+                gross_by_name[label], net_by_name[label] = g, n
         if net_by_name:
-            g_combined, n_combined = _combine_sleeves(gross_by_name, net_by_name, combine_method, vol_window, tilt=return_tilt)
-            instance_gross[portfolio["label"]] = g_combined
-            instance_net[portfolio["label"]] = n_combined
+            gc, nc = dpt._combine_sleeves(gross_by_name, net_by_name, combine_method, vol_window, tilt=return_tilt)
+            instance_gross[portfolio["label"]], instance_net[portfolio["label"]] = gc, nc
 
     metric_labels = list(instance_net.keys())
     if not metric_labels:
-        return {
-            "common_start": str(common_start.date()), "common_end": str(common_end.date()),
-            "min_year": min_year, "max_year": max_year, "metric_labels": [],
-            "metrics": None, "equity_fig": None, "table_rows": [],
-        }
+        return {"common_start": str(common_start.date()), "common_end": str(common_end.date()), "min_year": min_year, "max_year": max_year,
+                "metric_labels": [], "metrics": None, "equity_fig": None, "table_rows": []}
 
     metric_strategy = metric_strategy if metric_strategy in metric_labels else metric_labels[0]
     shown = [s for s in (shown or []) if s in metric_labels] or metric_labels
-
-    metrics = {k: _clean(v) for k, v in
-               _window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end).items()}
+    m = dpt._window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end, geometric)
+    metrics = {k: _clean(v) for k, v in m.items()}
 
     fig = go.Figure()
     rows = []
@@ -415,18 +160,15 @@ def get_results(
         window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
         if window.empty:
             continue
-        # True cumulative %, not log-return %.
-        eq = (np.exp(window.cumsum()) - 1) * 100
-        fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
-                                  line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
+        eq = (np.exp(window.cumsum()) - 1) * 100 if geometric else np.expm1(window).cumsum() * 100
+        fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines", line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
         if len(window) > 20 and window.std(ddof=1) > 0:
-            ret = (np.exp(float(window.mean() * 252)) - 1) * 100
+            ret = (np.exp(float(window.mean() * 252)) - 1) * 100 if geometric else float(np.expm1(window).mean() * 252 * 100)
             vol = float(np.expm1(window).std(ddof=1) * np.sqrt(252) * 100)
             ir = ret / vol if vol > 0 else float("nan")
         else:
             ret = vol = ir = float("nan")
         rows.append({"strategy": label, "return": _clean(ret), "vol": _clean(vol), "ir": _clean(ir)})
-
     layout = dict(CHART_LAYOUT)
     layout["yaxis_title"] = "Cumulative Return (%)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=460)
@@ -434,11 +176,7 @@ def get_results(
     return {
         "common_start": str(common_start.date()), "common_end": str(common_end.date()),
         "min_year": min_year, "max_year": max_year,
-        "metric_labels": metric_labels,
-        "n_products": len(data),
-        "agg_label": agg_label,
-        "combine_method": combine_method,
-        "metrics": metrics,
-        "equity_fig": _fig_to_json(fig),
-        "table_rows": rows,
+        "metric_labels": metric_labels, "n_products": len(data),
+        "agg_label": agg_label, "agg5_label": agg5_label, "combine_method": combine_method,
+        "metrics": metrics, "equity_fig": _fig_to_json(fig), "table_rows": rows,
     }

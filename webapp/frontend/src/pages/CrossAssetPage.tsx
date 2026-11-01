@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  fetchCrossAssetMeta, fetchCrossCommodity, fetchCrossCorrelation, fetchCrossN,
+  fetchCrossAssetMeta, fetchCrossCommodity, fetchCrossCorrelation, fetchCrossN, fetchCrossPairs,
   type EquityBlock,
 } from "../lib/api";
 import { fmtSigned } from "../lib/fmt";
@@ -104,7 +104,9 @@ export default function CrossAssetPage() {
   const [ccHidden, setCcHidden] = useState<string[]>([]);
 
   // Cross-Asset-Class
-  const [cnAssets, setCnAssets] = useState<string[]>(["Metals", "Energy"]);
+  const [cnAssets, setCnAssets] = useState<string[]>(["Metals", "Petroleum"]);
+  const [cnSkew, setCnSkew] = useState(false);
+  const [cpYr, setCpYr] = useState<[number, number] | null>(null);
   const [cnCombine, setCnCombine] = useState("Equal Weight");
   const [cnYr, setCnYr] = useState<[number, number] | null>(null);
   const [cnFocus, setCnFocus] = useState<string | undefined>();
@@ -116,7 +118,7 @@ export default function CrossAssetPage() {
 
   useEffect(() => {
     if (meta && ccAssets === null) setCcAssets(meta.asset_classes);
-    if (meta && ccStyles === null) setCcStyles(meta.styles);
+    if (meta && ccStyles === null) setCcStyles(meta.default_styles);
   }, [meta, ccAssets, ccStyles]);
 
   const ccParams = useDebouncedValue(
@@ -128,10 +130,13 @@ export default function CrossAssetPage() {
   });
 
   const cnParams = useDebouncedValue(
-    { tcBps, assets: cnAssets, combine: cnCombine, yrStart: cnYr?.[0], yrEnd: cnYr?.[1], focus: cnFocus, hidden: cnHidden }, 400);
+    { tcBps, assets: cnAssets, combine: cnCombine, skewness: cnSkew, yrStart: cnYr?.[0], yrEnd: cnYr?.[1], focus: cnFocus, hidden: cnHidden }, 400);
   const cn = useQuery({
     queryKey: ["cn", cnParams], queryFn: () => fetchCrossN(cnParams), placeholderData: (p) => p,
   });
+
+  const cpParams = useDebouncedValue({ tcBps, skewness: cnSkew, yrStart: cpYr?.[0], yrEnd: cpYr?.[1] }, 400);
+  const cp = useQuery({ queryKey: ["cp", cpParams], queryFn: () => fetchCrossPairs(cpParams), placeholderData: (p) => p });
 
   const corrAll = useQuery({
     queryKey: ["corr-base", tcBps], queryFn: () => fetchCrossCorrelation({ tcBps }), placeholderData: (p) => p,
@@ -197,21 +202,26 @@ export default function CrossAssetPage() {
 
       <div className="section-header">Cross-Asset-Class Portfolio</div>
       <p className="tab-caption">
-        Combination of 1-4 asset classes' own Equal Weight portfolios (generalizes the 4 fixed Cross-Pairs
-        shown on the static report to any 1-4 you pick). Pick just one to see that asset class's own EW
+        Combination of 1-6 asset classes' own Equal Weight portfolios (generalizes the fixed Cross-Pairs
+        to any selection you pick). Pick just one to see that asset class's own EW
         Portfolio number on its own, matching its individual dashboard's Portfolio tab.
       </p>
       <div className="control-row" style={{ alignItems: "flex-start" }}>
         <div style={{ flex: "3 1 320px" }}>
-          <CheckPills label="Asset classes (choose 1-4)" options={meta?.asset_classes ?? []} selected={cnAssets} onChange={setCnAssets} />
+          <CheckPills label="Asset classes (choose 1-6)" options={meta?.asset_classes ?? []} selected={cnAssets} onChange={setCnAssets} />
         </div>
+        <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, textTransform: "none" }}
+          title="Off (default): each asset class's own portfolio is the Equal Weight of the four validated styles. On: Skewness is added as a fifth equal-weighted style inside each asset class before the asset classes are combined.">
+          <input type="checkbox" checked={cnSkew} onChange={(e) => setCnSkew(e.target.checked)} />
+          Add Skewness as a fifth style
+        </label>
         <label title={CN_COMBINE_HELP}>Combine method
           <select value={cnCombine} onChange={(e) => setCnCombine(e.target.value)}>
             {(meta?.cn_combine_methods ?? ["Equal Weight"]).map((m) => <option key={m}>{m}</option>)}
           </select>
         </label>
       </div>
-      {cnAssets.length < 1 ? <div className="warning-box">Pick between 1 and 4 asset classes.</div> : (
+      {cnAssets.length < 1 ? <div className="warning-box">Pick between 1 and 6 asset classes.</div> : (
         <EquityBlockView data={cn.data} loading={cn.isFetching} error={cn.error as Error | null}
           yr={cnYr} onYr={(a, b) => setCnYr([a, b])} onFocus={setCnFocus}
           hidden={cnHidden} onHidden={setCnHidden} />
@@ -219,10 +229,42 @@ export default function CrossAssetPage() {
 
       <hr className="divider" />
 
+      <div className="section-header">Cross-Pair Portfolios (all pairs)</div>
+      <p className="tab-caption">
+        Every pair of the six buckets ({cp.data?.n_pairs ?? 15} pairs): a 50/50 blend of the two buckets' own Equal Weight portfolios on the
+        pair's common dates. Uses the Skewness choice of the section above.
+      </p>
+      {cp.data && (
+        <>
+          <div className="control-row">
+            <YearRangeSlider min={cp.data.min_year} max={cp.data.max_year}
+              start={cpYr?.[0] ?? cp.data.yr_start} end={cpYr?.[1] ?? cp.data.yr_end} onChange={(a, b) => setCpYr([a, b])} />
+          </div>
+          <table className="stat-table">
+            <thead><tr><th>Pair</th><th>Gross Sharpe</th><th>Net Sharpe</th><th>Ann Return (Net, %)</th><th>Ann Vol (%)</th><th>Max DD (Net, %)</th></tr></thead>
+            <tbody>
+              {cp.data.rows.map((r) => (
+                <tr key={r.pair}>
+                  <td>{r.pair}</td>
+                  <td>{r.gross != null ? fmtSigned(r.gross) : "N/A"}</td>
+                  <td>{r.net != null ? fmtSigned(r.net) : "N/A"}</td>
+                  <td>{r.ann != null ? fmtSigned(r.ann) : "N/A"}</td>
+                  <td>{r.vol != null ? r.vol.toFixed(2) : "N/A"}</td>
+                  <td>{r.mdd != null ? fmtSigned(r.mdd) : "N/A"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {!cp.data && <div className="chart-loading">{cp.error ? (cp.error as Error).message : "Computing…"}</div>}
+
+      <hr className="divider" />
+
       <div className="section-header">Correlation vs Traditional Assets</div>
       <p className="tab-caption">
         How the Cross-Commodity Portfolio's strategy rows (Momentum/Carry/CarryMom/Value/EW PORT/Risk
-        Parity/Dynamic Risk Parity) correlate with Equity (S&amp;P 500), Fixed Income (US Aggregate Bond), a
+        Parity/Dynamic Risk Parity, plus the Skewness rows) correlate with Equity (S&amp;P 500), Fixed Income (US Aggregate Bond), a
         broad passive Commodity Index (DBC), Gold as a distinct safe-haven, and a traditional 60/40
         stock-bond portfolio: the standard "does this add value beyond simple beta, and does it diversify
         a traditional portfolio" questions for any systematic commodity strategy. Data: research/benchmarks.py
@@ -249,7 +291,7 @@ export default function CrossAssetPage() {
       <hr className="divider" />
       <p className="caption">
         Engine: research/cross_asset_engine.py (a new, isolated module that does not modify common_engine.py,
-        research/engine.py, research/risk_parity.py, or any of the 4 live asset-class dashboards).
+        research/engine.py, research/risk_parity.py, or any of the live asset-class dashboards).
         Signal-level Carry/Carry-Momentum combination across tenor pairs (Methodology doc Section 7), not
         the return-level construction used in an earlier static HTML report edit; these numbers and those
         reports are not directly comparable until the reports are regenerated to match.

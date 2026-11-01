@@ -25,28 +25,45 @@ from services.momentum import _clean, _fig_to_json
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
            "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
 
-ASSET_LABEL_TO_KEY = {v: k for k, v in cae.ASSET_CLASS_LABELS.items()}
+ASSET_LABEL_TO_KEY = {v: k for k, v in cae.LIVE_ASSET_CLASS_LABELS.items()}      # the six live buckets, as hub/app.py
 STYLE_LABEL_TO_KEY = {"Momentum": "Momentum", "Carry": "Combined Carry",
-                       "CarryMom": "Combined CarryMom", "Value": "Value"}
-CC_COMBINE_KEYS = {"Equal Weight": "equal_weight", "Risk Parity": "risk_parity",
+                      "CarryMom": "Combined CarryMom", "Value": "Value", "Skewness": "Skewness"}
+CC_COMBINE_KEYS = {"Equal Weight": "equal_weight", "Inverse Vol": "inverse_vol", "Risk Parity": "risk_parity",
                     "Dynamic Risk Parity": "dynamic_risk_parity"}
 CN_COMBINE_KEYS = {"Equal Weight": "equal_weight", "Dynamic Risk Parity": "dynamic_risk_parity"}
 
 
-@functools.lru_cache(maxsize=16)
+@functools.lru_cache(maxsize=32)
 def _cached_per_product_four_row(asset_class: str, tc_bps: int):
-    return cae.per_product_four_row(asset_class, tc_bps)
+    """hub/app.py::_cached_per_product_four_row with the hub's default Carry settings: the rule-default CarrySpec and each product's own
+    tenor pairs (cfg.carry_pairs), Skewness included."""
+    return cae.per_product_four_row(asset_class, tc_bps, cae.default_carry_spec(asset_class), per_product_pairs=True,
+                                    include_skewness=True)
 
 
 @functools.lru_cache(maxsize=4)
 def _cached_cross_commodity_portfolio(tc_bps: int):
-    return cae.cross_commodity_portfolio(tc_bps)
+    return cae.cross_commodity_portfolio(tc_bps, tuple(cae.ALL_ASSET_CLASSES), per_product_fetcher=_cached_per_product_four_row)
 
 
 @functools.lru_cache(maxsize=4)
 def _cached_cross_commodity_drp(tc_bps: int):
-    _, n = cae.cross_commodity_dynamic(tc_bps, tuple(cae.ASSET_CLASSES), cae.STYLE_NAMES, "dynamic_risk_parity")
+    _, n = cae.cross_commodity_dynamic(tc_bps, tuple(cae.ALL_ASSET_CLASSES), cae.STYLE_NAMES, "dynamic_risk_parity",
+                                       per_product_fetcher=_cached_per_product_four_row)
     return n["Portfolio"]
+
+
+@functools.lru_cache(maxsize=4)
+def _cached_cross_commodity_skew(tc_bps: int):
+    _, n = cae.cross_commodity_dynamic(tc_bps, tuple(cae.ALL_ASSET_CLASSES), cae.ALL_STYLE_NAMES, "equal_weight",
+                                       per_product_fetcher=_cached_per_product_four_row)
+    return {"Skewness": n["Skewness"], "EW PORT + Skewness": n["Portfolio"]}
+
+
+@functools.lru_cache(maxsize=4)
+def _cached_cross_pairs(tc_bps: int, with_skew: bool):
+    return cae.cross_pair_portfolios_dynamic(tc_bps, tuple(cae.ALL_ASSET_CLASSES), per_product_fetcher=_cached_per_product_four_row,
+                                             styles=cae.ALL_STYLE_NAMES if with_skew else cae.STYLE_NAMES)
 
 
 @functools.lru_cache(maxsize=1)
@@ -56,8 +73,9 @@ def _cached_benchmark_returns():
 
 def get_meta() -> dict:
     return {
-        "asset_classes": list(cae.ASSET_CLASS_LABELS.values()),
-        "styles": ["Momentum", "Carry", "CarryMom", "Value"],
+        "asset_classes": list(cae.LIVE_ASSET_CLASS_LABELS.values()),
+        "styles": ["Momentum", "Carry", "CarryMom", "Value", "Skewness"],
+        "default_styles": ["Momentum", "Carry", "CarryMom", "Value"],
         "cc_combine_methods": list(CC_COMBINE_KEYS),
         "cn_combine_methods": list(CN_COMBINE_KEYS),
     }
@@ -157,20 +175,23 @@ def get_cross_commodity(*, tc_bps: int, assets: list[str], styles: list[str], co
     return _equity_and_metrics(gross, net, yr_start=yr_start, yr_end=yr_end, focus=focus, hidden=hidden)
 
 
-def get_cross_n(*, tc_bps: int, assets: list[str], combine: str,
+def get_cross_n(*, tc_bps: int, assets: list[str], combine: str, skewness: bool = False,
                  yr_start=None, yr_end=None, focus=None, hidden=None) -> dict:
-    if not 1 <= len(assets) <= 4:
-        return {"warning": "Pick between 1 and 4 asset classes."}
+    n_max = len(cae.ALL_ASSET_CLASSES)
+    if not 1 <= len(assets) <= n_max:
+        return {"warning": f"Pick between 1 and {n_max} asset classes."}
     asset_keys = tuple(ASSET_LABEL_TO_KEY[a] for a in assets)
     gross, net = cae.cross_n_portfolio(
         tc_bps, asset_keys, per_product_fetcher=_cached_per_product_four_row,
-        combine_method=CN_COMBINE_KEYS[combine])
+        combine_method=CN_COMBINE_KEYS[combine],
+        styles=cae.ALL_STYLE_NAMES if skewness else cae.STYLE_NAMES)
     return _equity_and_metrics(gross, net, yr_start=yr_start, yr_end=yr_end, focus=focus, hidden=hidden)
 
 
 def get_correlation(*, tc_bps: int, yr_start=None, yr_end=None, strategies=None) -> dict:
     strat_net = dict(_cached_cross_commodity_portfolio(tc_bps))
     strat_net["Dynamic Risk Parity"] = _cached_cross_commodity_drp(tc_bps)
+    strat_net.update(_cached_cross_commodity_skew(tc_bps))
     bench = _cached_benchmark_returns()
 
     years = []
@@ -226,3 +247,19 @@ def get_correlation(*, tc_bps: int, yr_start=None, yr_end=None, strategies=None)
     fig.update_layout(**layout, title=f"Correlation Matrix, {yr_start} to {yr_end}", height=380)
     out["fig"] = _fig_to_json(fig)
     return out
+
+
+def get_cross_pairs(*, tc_bps: int, skewness: bool = False, yr_start=None, yr_end=None) -> dict:
+    """hub/app.py "Cross-Pair Portfolios (all pairs)": every pair of the six buckets, 50/50 of the two buckets' own Equal Weight portfolios."""
+    gross, net = _cached_cross_pairs(tc_bps, bool(skewness))
+    nonempty = [s for s in net.values() if not s.empty]
+    min_year = min(int(s.index.min().year) for s in nonempty)
+    max_year = max(int(s.index.max().year) for s in nonempty)
+    yr_start = int(yr_start) if yr_start else max(min_year, 2011)
+    yr_end = int(yr_end) if yr_end else max_year
+    rows = []
+    for label in net:
+        m = _window_metrics(gross[label], net[label], yr_start, yr_end)
+        rows.append({"pair": label, **{k: _clean(v) for k, v in m.items()}})
+    rows.sort(key=lambda r: (r["net"] is None, -(r["net"] or 0)))
+    return {"min_year": min_year, "max_year": max_year, "yr_start": yr_start, "yr_end": yr_end, "rows": rows, "n_pairs": len(rows)}

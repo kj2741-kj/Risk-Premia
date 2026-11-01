@@ -8,6 +8,7 @@ from services import crossasset as crossasset_service
 from services import fundamental as fundamental_service
 from services import momentum as momentum_service
 from services import portfolio as portfolio_service
+from services import skewness as skewness_service
 from services import value as value_service
 
 router = APIRouter(prefix="/api")
@@ -33,7 +34,7 @@ def _skip_front_contract(asset_class: str, product: str) -> bool:
 @router.get("/{asset_class}/{product}/momentum")
 def momentum(
     asset_class: str, product: str,
-    roll_method: str = Query("ltd", pattern="^(ltd|5td)$"),
+    roll_method: str = Query("5td", pattern="^(ltd|5td)$"),
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
@@ -66,7 +67,7 @@ def momentum(
 @router.get("/{asset_class}/{product}/momentum/heatmap")
 def momentum_heatmap_endpoint(
     asset_class: str, product: str,
-    roll_method: str = Query("ltd", pattern="^(ltd|5td)$"),
+    roll_method: str = Query("5td", pattern="^(ltd|5td)$"),
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
@@ -84,6 +85,36 @@ def momentum_heatmap_endpoint(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
+# ── Skewness ────────────────────────────────────────────────────────────────
+
+@router.get("/{asset_class}/{product}/skewness")
+def skewness(
+    asset_class: str, product: str,
+    roll_method: str = Query("5td", pattern="^(ltd|5td)$"),
+    roll_n: int = Query(5, ge=1, le=10),
+    tc_bps: int = Query(5),
+    shift_n: int = Query(1, ge=0, le=2),
+    windows: str | None = Query(None, description="e.g. 126,252,504"),
+    metrics_year_start: int | None = None,
+    metrics_year_end: int | None = None,
+    feature_window: int | None = None,
+    equity_year_start: int | None = None,
+    equity_year_end: int | None = None,
+    rs_basis: str = Query("net", pattern="^(net|gross)$"),
+):
+    try:
+        return skewness_service.get_skewness(
+            asset_class, product,
+            roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
+            windows=[int(w) for w in windows.split(",")] if windows else None,
+            metrics_year_start=metrics_year_start, metrics_year_end=metrics_year_end,
+            feature_window=feature_window, equity_year_start=equity_year_start, equity_year_end=equity_year_end,
+            rs_basis=rs_basis,
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 # ── Carry ───────────────────────────────────────────────────────────────────
 
 class CarryVariant(BaseModel):
@@ -95,7 +126,7 @@ class CarryVariant(BaseModel):
 
 
 class CarryRequest(BaseModel):
-    roll_method: str = "ltd"
+    roll_method: str = "5td"
     roll_n: int = 5
     tc_bps: int = 5
     shift_n: int = 1
@@ -130,7 +161,7 @@ def carry(asset_class: str, product: str, body: CarryRequest):
 @router.get("/{asset_class}/{product}/carry/heatmap")
 def carry_heatmap_endpoint(
     asset_class: str, product: str,
-    roll_method: str = Query("ltd", pattern="^(ltd|5td)$"),
+    roll_method: str = Query("5td", pattern="^(ltd|5td)$"),
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
@@ -159,7 +190,7 @@ class ValueCombo(BaseModel):
 
 
 class ValueRequest(BaseModel):
-    roll_method: str = "ltd"
+    roll_method: str = "5td"
     roll_n: int = 5
     tc_bps: int = 5
     shift_n: int = 1
@@ -194,7 +225,7 @@ def value(asset_class: str, product: str, body: ValueRequest):
 @router.get("/{asset_class}/{product}/value/heatmap")
 def value_heatmap_endpoint(
     asset_class: str, product: str,
-    roll_method: str = Query("ltd", pattern="^(ltd|5td)$"),
+    roll_method: str = Query("5td", pattern="^(ltd|5td)$"),
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
@@ -221,7 +252,7 @@ class SeriesIn(BaseModel):
 
 
 class ComparisonRequest(BaseModel):
-    roll_method: str = "ltd"
+    roll_method: str = "5td"
     roll_n: int = 5
     groups: dict[str, dict[str, SeriesIn]]
     tc_bps: int = 5
@@ -287,6 +318,7 @@ class PortfolioLeg(BaseModel):
     contract: str | None = None
     lookback: int | None = None
     threshold: float | None = None
+    window: int | None = None
 
 
 class PortfolioSleeve(BaseModel):
@@ -312,6 +344,7 @@ class PortfolioResultsRequest(BaseModel):
     metric_strategy: str | None = None
     shown: list[str] | None = None
     separate_tenor_carry: bool = False
+    geometric: bool = True
 
 
 @router.post("/{asset_class}/portfolio/results")
@@ -337,7 +370,7 @@ def portfolio_results(asset_class: str, body: PortfolioResultsRequest):
             ],
             yr_start=body.yr_start, yr_end=body.yr_end,
             metric_strategy=body.metric_strategy, shown=body.shown,
-            separate_tenor_carry=body.separate_tenor_carry,
+            separate_tenor_carry=body.separate_tenor_carry, geometric=body.geometric,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -394,6 +427,7 @@ class CrossAssetRequest(BaseModel):
     yr_end: int | None = None
     focus: str | None = None
     hidden: list[str] | None = None
+    skewness: bool = False
 
 
 @router.post("/crossasset/commodity")
@@ -410,10 +444,22 @@ def crossasset_commodity(body: CrossAssetRequest):
 def crossasset_crossn(body: CrossAssetRequest):
     try:
         return crossasset_service.get_cross_n(
-            tc_bps=body.tc_bps, assets=body.assets, combine=body.combine,
+            tc_bps=body.tc_bps, assets=body.assets, combine=body.combine, skewness=body.skewness,
             yr_start=body.yr_start, yr_end=body.yr_end, focus=body.focus, hidden=body.hidden)
     except KeyError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class CrossPairsRequest(BaseModel):
+    tc_bps: int = 5
+    skewness: bool = False
+    yr_start: int | None = None
+    yr_end: int | None = None
+
+
+@router.post("/crossasset/pairs")
+def crossasset_pairs(body: CrossPairsRequest):
+    return crossasset_service.get_cross_pairs(tc_bps=body.tc_bps, skewness=body.skewness, yr_start=body.yr_start, yr_end=body.yr_end)
 
 
 class CorrelationRequest(BaseModel):

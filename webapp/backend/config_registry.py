@@ -8,6 +8,7 @@ classes instead of duplicating route code per asset class.
 """
 
 import rolling_continuous as rc
+import emissions as _em
 
 METALS = {
     "asset_class": "metals",
@@ -29,9 +30,20 @@ METALS = {
     "value_default_combo": None,
 }
 
-ENERGY = {
-    "asset_class": "energy",
-    "label": "Energy",
+_DEFAULTS = {
+    "skip_front_contract": False,
+    "momentum_default_feature": {},
+    "carry_default_near": None,
+    "carry_default_far": None,
+    "carry_default_feature_label": None,
+    "value_default_combo": None,
+}
+
+# Petroleum bucket (matches energy_dashboard/app.py, 2026-10-31): WTI, Brent, RBOB, Heating Oil. Henry Hub moved to PEN.
+# Singapore Gasoil and Fuel Oil stay out of every dashboard (they remain in research/configs/energy.py only).
+PETROLEUM = {
+    "asset_class": "petroleum",
+    "label": "Petroleum",
     "rolling_config": rc.ENERGY_CONFIG,
     "futures_file": rc.ENERGY_FUTURES_FILE,
     "calendar_file": rc.ENERGY_CALENDAR_FILE,
@@ -40,18 +52,29 @@ ENERGY = {
         "Brent Crude": {"code": "CO", "unit": "/bbl"},
         "RBOB Gasoline": {"code": "XB", "unit": "/gal"},
         "Heating Oil": {"code": "HO", "unit": "/gal"},
-        "Nat Gas": {"code": "NG", "unit": "/MMBtu"},
     },
-    # Singapore Gasoil and Fuel Oil removed 2026-08-03 (matching the Streamlit
-    # energy_dashboard's own exclusion, same day) -- both remain in
-    # research/configs/energy.py's own PRODUCTS list for the portfolio route,
-    # excluded there via portfolio.EXCLUDED_PRODUCTS instead of here.
-    "skip_front_contract": False,
-    "momentum_default_feature": {},
-    "carry_default_near": None,
-    "carry_default_far": None,
-    "carry_default_feature_label": None,
-    "value_default_combo": None,
+    **_DEFAULTS,
+}
+
+# Power, Emissions and Nat Gas bucket (matches pen_dashboard/app.py, 2026-10-31). Each product has its own price file, calendar,
+# config registry and first date: Henry Hub from the energy files (2006), TTF from the emissions files (2006), EUA from the
+# emissions files from 2008-04-01 (first EU ETS Phase II day).
+PEN = {
+    "asset_class": "pen",
+    "label": "Power, Emissions & Nat Gas",
+    "rolling_config": rc.ENERGY_CONFIG,
+    "futures_file": rc.ENERGY_FUTURES_FILE,
+    "calendar_file": rc.ENERGY_CALENDAR_FILE,
+    "products": {
+        "Nat Gas Henry Hub": {"code": "NG", "unit": "/MMBtu", "start": "2006-01-01"},
+        "TTF Natural Gas": {"code": "TZT", "unit": "/MWh", "start": _em.ANALYSIS_STARTS["TTF"],
+                            "rolling_config": rc.EMISSIONS_CONFIG, "futures_file": rc.EMISSIONS_FUTURES_FILE,
+                            "calendar_file": rc.EMISSIONS_CALENDAR_FILE},
+        "EUA Carbon": {"code": "MO", "unit": "/t", "start": _em.ANALYSIS_STARTS["EUA"],
+                       "rolling_config": rc.EMISSIONS_CONFIG, "futures_file": rc.EMISSIONS_FUTURES_FILE,
+                       "calendar_file": rc.EMISSIONS_CALENDAR_FILE},
+    },
+    **_DEFAULTS,
 }
 
 PRECIOUS = {
@@ -122,45 +145,30 @@ NGL = {
     "value_default_combo": None,
 }
 
+# Agriculture is six products only (decided 2026-10-11), Bloomberg-matched roll calendar (agri_dashboard/app.py).
 AGRI = {
     "asset_class": "agri",
     "label": "Agriculture",
-    "rolling_config": rc.AGRI_CONFIG,
+    "rolling_config": rc.AGRI_BBG_CONFIG,
     "futures_file": rc.AGRI_FUTURES_FILE,
-    "calendar_file": rc.AGRI_CALENDAR_FILE,
-    # Sugar No.11 excluded: corrupt expiry calendar in the source pull (see
-    # agri_dashboard/app.py). No Portfolio route: Carry tenor pairs are not
-    # locked for this asset class (research/configs/agri.py CARRY_TENOR_PAIRS
-    # is empty), so the frontend hides the Portfolio tab for it.
+    "calendar_file": rc.AGRI_CALENDAR_FILE_BBG,
     "products": {
         "Corn": {"code": "C", "unit": "¢/bu"},
         "Wheat": {"code": "W", "unit": "¢/bu"},
-        "Oats": {"code": "O", "unit": "¢/bu"},
-        "Rough Rice": {"code": "RR", "unit": "$/cwt"},
         "Soybean": {"code": "S", "unit": "¢/bu"},
         "Soybean Oil": {"code": "BO", "unit": "¢/lb"},
-        "Soybean Meal": {"code": "SM", "unit": "$/ton"},
         "Coffee": {"code": "KC", "unit": "¢/lb"},
-        "Cocoa": {"code": "CC", "unit": "$/MT"},
-        "Orange Juice": {"code": "JO", "unit": "¢/lb"},
-        "Cotton": {"code": "CT", "unit": "¢/lb"},
-        "Feeder Cattle": {"code": "FC", "unit": "¢/lb"},
-        "Live Cattle": {"code": "LC", "unit": "¢/lb"},
-        "Lean Hogs": {"code": "LH", "unit": "¢/lb"},
+        "Sugar No.11": {"code": "SB", "unit": "¢/lb"},
     },
-    "skip_front_contract": False,
-    "momentum_default_feature": {},
-    "carry_default_near": None,
-    "carry_default_far": None,
-    "carry_default_feature_label": None,
-    "value_default_combo": None,
+    **_DEFAULTS,
 }
 
 REGISTRY: dict[str, dict] = {
     "metals": METALS,
-    "energy": ENERGY,
-    "precious": PRECIOUS,
+    "petroleum": PETROLEUM,
+    "pen": PEN,
     "ngl": NGL,
+    "precious": PRECIOUS,
     "agri": AGRI,
 }
 
@@ -176,3 +184,15 @@ def get_product_code(asset_class: str, product: str) -> str:
     if product not in ac["products"]:
         raise KeyError(f"Unknown product {product!r} for asset class {asset_class!r}")
     return ac["products"][product]["code"]
+
+
+def get_product_source(asset_class: str, product: str) -> dict:
+    """Price file, calendar, config registry and first date for one product (a product may override the asset class's own)."""
+    ac = get_asset_config(asset_class)
+    p = ac["products"][product]
+    return {
+        "rolling_config": p.get("rolling_config", ac["rolling_config"]),
+        "futures_file": p.get("futures_file", ac["futures_file"]),
+        "calendar_file": p.get("calendar_file", ac["calendar_file"]),
+        "start": p.get("start", "2006-01-01"),
+    }

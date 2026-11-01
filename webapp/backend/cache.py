@@ -10,28 +10,31 @@ Series/DataFrame at all, so it's only used here, one level up, where every
 argument is already a plain string/int.
 """
 
+import contextlib
 import functools
+import threading
 
 import common_curve_loader
 import rolling_continuous
 import rolling_continuous_5td
 
-from config_registry import get_asset_config
+from common_shared import register_geo_inputs
+from config_registry import get_asset_config, get_product_source
 
 
 @functools.lru_cache(maxsize=128)
 def load_series(asset_class: str, product_code: str, roll_method: str, roll_n: int):
     """Returns (f1_df, curve) for one product, cached on primitives only.
 
-    f1_df has columns F1_raw/F2_raw/F1_continuous/Phase/is_roll_date/
-    is_bridge_date/active_contract (see scripts/rolling_continuous.py);
+    Built exactly as each Streamlit dashboard's app.py builds it: the product's own price file, calendar and config registry
+    (PEN products differ), rolled by the chosen method, cut at the product's first date, F1_continuous re-anchored. f1_df has
+    columns F1_raw/F2_raw/F1_continuous/Phase/is_roll_date/is_bridge_date/active_contract (see scripts/rolling_continuous.py);
     curve has columns F1..Fn raw price levels (see common_curve_loader.py).
-    Both already sliced to >= 2006 and F1_continuous re-anchored, matching
-    every existing Streamlit dashboard's app.py convention exactly.
     """
     ac = get_asset_config(asset_class)
-    config = ac["rolling_config"]
-    futures_file, calendar_file = ac["futures_file"], ac["calendar_file"]
+    name = next(n for n, p in ac["products"].items() if p["code"] == product_code)
+    src = get_product_source(asset_class, name)
+    config, futures_file, calendar_file, start = src["rolling_config"], src["futures_file"], src["calendar_file"], src["start"]
 
     if roll_method == "ltd":
         f1_df = rolling_continuous.get_metal_rolling_f1(
@@ -44,7 +47,30 @@ def load_series(asset_class: str, product_code: str, roll_method: str, roll_n: i
             verbose=False, config=config, roll_day=roll_n,
         )
 
-    f1_df = rolling_continuous.reanchor_f1_continuous(f1_df[f1_df.index.year >= 2006])
+    f1_df = rolling_continuous.reanchor_f1_continuous(f1_df[f1_df.index >= start])
     curve = common_curve_loader.load_curve_simple(futures_file, config[product_code]["price_sheet"])
-    curve = curve[curve.index.year >= 2006]
+    curve = curve[curve.index >= start]
     return f1_df, curve
+
+
+# The shared engine reads the F2_raw / Phase of the product being computed from Streamlit's session_state (register_geo_inputs), which
+# is process-global when there is no Streamlit runtime. Every service function therefore computes inside `engine_lock(f1_df)`, which
+# serialises requests and registers that product's inputs, so the numbers equal the Streamlit app's (exact ratio returns on the
+# geometric basis, the default return basis there).
+_ENGINE_LOCK = threading.RLock()
+
+
+@contextlib.contextmanager
+def engine_lock(f1_df):
+    with _ENGINE_LOCK:
+        register_geo_inputs(f1_df)
+        yield
+
+
+def locked(fn):
+    """Run a service function under the engine lock (see engine_lock): one request at a time touches the shared engine state."""
+    @functools.wraps(fn)
+    def wrapper(*a, **k):
+        with _ENGINE_LOCK:
+            return fn(*a, **k)
+    return wrapper

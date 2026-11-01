@@ -302,7 +302,7 @@ export async function fetchMomentumHeatmap(
 export interface PortfolioLeg {
   fast?: number;
   slow?: number;
-  type?: "V1 Level" | "V2 Z-score" | "V3 Carry-Momentum";
+  type?: "V1 - Carry slope" | "V2 - Z-score on carry slope" | "V3 - Carry momentum";
   near?: string;
   far?: string;
   zwindow?: number;
@@ -310,10 +310,11 @@ export interface PortfolioLeg {
   contract?: string;
   lookback?: number;
   threshold?: number;
+  window?: number;
 }
 
 export interface PortfolioSleeve {
-  family: "Momentum" | "Carry" | "CarryMom" | "Value";
+  family: "Momentum" | "Carry" | "CarryMom" | "Value" | "Skewness";
   legs: PortfolioLeg[];
   shift_n: number;
   combine_method: string;
@@ -322,7 +323,7 @@ export interface PortfolioSleeve {
 export interface ReferenceStrategy {
   id: string;
   label: string;
-  family: "Momentum" | "Carry" | "CarryMom" | "Value";
+  family: "Momentum" | "Carry" | "CarryMom" | "Value" | "Skewness";
   shift_n: number;
   legs: PortfolioLeg[];
   legs_desc: string[];
@@ -350,6 +351,7 @@ export interface CombinedReference {
 export interface PortfolioResultsResponse {
   n_products: number;
   agg_label: string | null;
+  agg5_label: string | null;
   combine_method: string;
   common_start: string;
   common_end: string;
@@ -361,7 +363,7 @@ export interface PortfolioResultsResponse {
   table_rows: { strategy: string; return: number | null; vol: number | null; ir: number | null }[];
 }
 
-export async function fetchPortfolioReference(assetClass: string): Promise<{ strategies: ReferenceStrategy[]; has_multi_tenor: boolean; combined: CombinedReference[] }> {
+export async function fetchPortfolioReference(assetClass: string): Promise<{ strategies: ReferenceStrategy[]; has_multi_tenor: boolean; per_product_pairs: boolean; carry_note: string; combined: CombinedReference[] }> {
   return getJson(`${API_BASE}/api/${assetClass}/portfolio/reference`);
 }
 
@@ -372,6 +374,7 @@ export interface PortfolioResultsParams {
   returnTilt?: number;
   customPortfolios?: CustomPortfolioDef[];
   separateTenorCarry?: boolean;
+  geometric?: boolean;
   yrStart?: number;
   yrEnd?: number;
   metricStrategy?: string;
@@ -383,7 +386,7 @@ export async function fetchPortfolioResults(
 ): Promise<PortfolioResultsResponse> {
   return postJson(`${API_BASE}/api/${assetClass}/portfolio/results`, {
     tc_bps: p.tcBps, combine_method: p.combineMethod, vol_window: p.volWindow, return_tilt: p.returnTilt,
-    custom_portfolios: p.customPortfolios, separate_tenor_carry: p.separateTenorCarry,
+    custom_portfolios: p.customPortfolios, separate_tenor_carry: p.separateTenorCarry, geometric: p.geometric,
     yr_start: p.yrStart, yr_end: p.yrEnd, metric_strategy: p.metricStrategy, shown: p.shown,
   });
 }
@@ -439,6 +442,7 @@ export async function fetchFundamental(commodity: string, p: FundamentalParams =
 export interface CrossAssetMeta {
   asset_classes: string[];
   styles: string[];
+  default_styles: string[];
   cc_combine_methods: string[];
   cn_combine_methods: string[];
 }
@@ -480,6 +484,7 @@ export interface CrossAssetParams {
   yrEnd?: number;
   focus?: string;
   hidden?: string[];
+  skewness?: boolean;
 }
 
 export async function fetchCrossAssetMeta(): Promise<CrossAssetMeta> {
@@ -489,7 +494,7 @@ export async function fetchCrossAssetMeta(): Promise<CrossAssetMeta> {
 function crossBody(p: CrossAssetParams) {
   return {
     tc_bps: p.tcBps, assets: p.assets, styles: p.styles, combine: p.combine,
-    yr_start: p.yrStart, yr_end: p.yrEnd, focus: p.focus, hidden: p.hidden,
+    yr_start: p.yrStart, yr_end: p.yrEnd, focus: p.focus, hidden: p.hidden, skewness: p.skewness,
   };
 }
 
@@ -507,4 +512,60 @@ export async function fetchCrossCorrelation(
   return postJson(`${API_BASE}/api/crossasset/correlation`, {
     tc_bps: p.tcBps, yr_start: p.yrStart, yr_end: p.yrEnd, strategies: p.strategies,
   });
+}
+
+// -- Skewness ---------------------------------------------------------------
+
+export interface SkewnessResponse {
+  year_range: { min: number; max: number };
+  unit_label: string;
+  default_windows: number[];
+  windows: number[];
+  feature_window: number;
+  metrics: Metrics | null;
+  sweep_fig: PlotlyFigure | null;
+  sweep_best: { window: number; sharpe: number } | null;
+  rolling_skew_fig: PlotlyFigure;
+  equity_curve_fig: PlotlyFigure;
+  rolling_sharpe_fig: PlotlyFigure;
+  positions: Record<string, SeriesJson>;
+}
+
+export interface SkewnessParams {
+  tcBps?: number;
+  shiftN?: number;
+  windows?: number[];
+  metricsYearStart?: number;
+  metricsYearEnd?: number;
+  featureWindow?: number;
+  equityYearStart?: number;
+  equityYearEnd?: number;
+  rsBasis?: "net" | "gross";
+}
+
+export async function fetchSkewness(assetClass: string, product: string, p: SkewnessParams = {}): Promise<SkewnessResponse> {
+  const q = new URLSearchParams();
+  if (p.tcBps !== undefined) q.set("tc_bps", String(p.tcBps));
+  if (p.shiftN !== undefined) q.set("shift_n", String(p.shiftN));
+  if (p.windows?.length) q.set("windows", p.windows.join(","));
+  if (p.metricsYearStart) q.set("metrics_year_start", String(p.metricsYearStart));
+  if (p.metricsYearEnd) q.set("metrics_year_end", String(p.metricsYearEnd));
+  if (p.featureWindow) q.set("feature_window", String(p.featureWindow));
+  if (p.equityYearStart) q.set("equity_year_start", String(p.equityYearStart));
+  if (p.equityYearEnd) q.set("equity_year_end", String(p.equityYearEnd));
+  if (p.rsBasis) q.set("rs_basis", p.rsBasis);
+  return getJson(`${API_BASE}/api/${assetClass}/${product}/skewness?${q.toString()}`);
+}
+
+export interface CrossPairsBlock {
+  min_year: number;
+  max_year: number;
+  yr_start: number;
+  yr_end: number;
+  n_pairs: number;
+  rows: { pair: string; gross: number | null; net: number | null; ann: number | null; vol: number | null; mdd: number | null }[];
+}
+
+export async function fetchCrossPairs(p: { tcBps: number; skewness?: boolean; yrStart?: number; yrEnd?: number }): Promise<CrossPairsBlock> {
+  return postJson(`${API_BASE}/api/crossasset/pairs`, { tc_bps: p.tcBps, skewness: p.skewness, yr_start: p.yrStart, yr_end: p.yrEnd });
 }

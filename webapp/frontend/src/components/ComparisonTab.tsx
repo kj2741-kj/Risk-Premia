@@ -92,7 +92,7 @@ export default function ComparisonTab({ assetClass, product, groups }: Compariso
         })}
       </div>
 
-      <div className="section-header">Cumulative PnL (Equity Curve): Net of TC</div>
+      <div className="section-header">Cumulative Return (Equity Curve, %): Net of TC</div>
       <div className="control-row">
         <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
           onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

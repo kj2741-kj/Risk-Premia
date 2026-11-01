@@ -2,18 +2,18 @@ import { useCallback, useState } from "react";
 import MomentumTab from "../components/MomentumTab";
 import CarryTab from "../components/CarryTab";
 import ValueTab from "../components/ValueTab";
+import SkewnessTab from "../components/SkewnessTab";
 import ComparisonTab from "../components/ComparisonTab";
 import PortfolioTab from "../components/PortfolioTab";
 import type { SeriesJson } from "../lib/api";
 
-const TABS = ["Momentum", "Carry", "Value", "Comparison", "Portfolio"] as const;
+const TABS = ["Momentum", "Carry", "Value", "Skewness", "Comparison", "Portfolio"] as const;
 type Tab = (typeof TABS)[number];
 
 interface AssetClassPageProps {
   assetClass: string;
   label: string;
   products: string[];
-  // Agriculture has no locked Carry tenor pairs yet, so no Portfolio tab.
   hidePortfolio?: boolean;
 }
 
@@ -21,7 +21,7 @@ export default function AssetClassPage({ assetClass, label, products, hidePortfo
   const [product, setProduct] = useState(products[0]);
   const [tab, setTab] = useState<Tab>("Momentum");
   const [groups, setGroups] = useState<Record<string, Record<string, SeriesJson>>>({
-    Momentum: {}, Carry: {}, Value: {},
+    Momentum: {}, Carry: {}, Value: {}, Skewness: {},
   });
 
   // Each tab fires several real pandas computations on mount. Mounting all
@@ -41,7 +41,7 @@ export default function AssetClassPage({ assetClass, label, products, hidePortfo
   // positions computed for two different products.
   const changeProduct = useCallback((p: string) => {
     setProduct(p);
-    setGroups({ Momentum: {}, Carry: {}, Value: {} });
+    setGroups({ Momentum: {}, Carry: {}, Value: {}, Skewness: {} });
   }, []);
 
   return (
@@ -80,6 +80,12 @@ export default function AssetClassPage({ assetClass, label, products, hidePortfo
         <div style={{ display: tab === "Value" ? "block" : "none" }}>
           <ValueTab assetClass={assetClass} product={product}
             onPositionsChange={(p) => setGroups((g) => ({ ...g, Value: p }))} />
+        </div>
+      )}
+      {visitedTabs.has("Skewness") && (
+        <div style={{ display: tab === "Skewness" ? "block" : "none" }}>
+          <SkewnessTab assetClass={assetClass} product={product}
+            onPositionsChange={(p) => setGroups((g) => ({ ...g, Skewness: p }))} />
         </div>
       )}
       {visitedTabs.has("Comparison") && (

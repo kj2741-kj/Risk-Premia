@@ -10,7 +10,8 @@ from plotly.subplots import make_subplots
 from common_engine import daily_returns, equity_curve, rolling_sharpe, value_heatmap, value_v1_position
 from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic
 
-from cache import load_series
+from cache import load_series, locked
+from common_shared import register_geo_inputs
 from config_registry import get_asset_config, get_product_code
 from services.momentum import _clean_metrics, _fig_to_json, _series_to_json
 
@@ -24,6 +25,7 @@ LOOKBACK_MAP = {"1mo": 20, "1qtr": 60, "6mo": 120, "1yr": 252, "3yr": 756,
 def _load(asset_class: str, product: str, roll_method: str, roll_n: int):
     code = get_product_code(asset_class, product)
     f1_df, curve = load_series(asset_class, code, roll_method, roll_n)
+    register_geo_inputs(f1_df)
     return f1_df["F1_raw"], f1_df["F1_continuous"], f1_df["Phase"], curve
 
 
@@ -44,9 +46,10 @@ def _combo_label(c: dict) -> str:
     return f"{c['contract']} {c['lookback']} ±{c['threshold'] * 100:.0f}%"
 
 
+@locked
 def get_value(
     asset_class: str, product: str, *,
-    roll_method: str = "ltd", roll_n: int = 5,
+    roll_method: str = "5td", roll_n: int = 5,
     tc_bps: int = 5, shift_n: int = 1,
     combos: list[dict] | None = None,
     skip_front_contract: bool = False,
@@ -119,7 +122,7 @@ def get_value(
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
 
     fig_rs = go.Figure()
     for i, (label, pos) in enumerate(positions.items()):
@@ -160,9 +163,10 @@ def get_value(
     }
 
 
+@locked
 def get_value_heatmap(
     asset_class: str, product: str, *,
-    roll_method: str = "ltd", roll_n: int = 5,
+    roll_method: str = "5td", roll_n: int = 5,
     tc_bps: int = 5, shift_n: int = 1,
     skip_front_contract: bool = False,
     threshold: float = 0.10,

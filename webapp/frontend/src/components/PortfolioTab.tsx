@@ -9,10 +9,10 @@ import PlotlyChart from "./PlotlyChart";
 import MetricCard from "./MetricCard";
 import { fmtSigned } from "../lib/fmt";
 
-type Family = "Momentum" | "Carry" | "CarryMom" | "Value";
-const FAMILY_ORDER: Family[] = ["Momentum", "Carry", "CarryMom", "Value"];
-const FAMILY_TITLE: Record<Family, string> = { Momentum: "Momentum", Carry: "Carry", CarryMom: "Carry-Momentum", Value: "Value" };
-const DEFAULT_SHIFT_N: Record<Family, number> = { Momentum: 1, Carry: 1, CarryMom: 1, Value: 1 };
+type Family = "Momentum" | "Carry" | "CarryMom" | "Value" | "Skewness";
+const FAMILY_ORDER: Family[] = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"];
+const FAMILY_TITLE: Record<Family, string> = { Momentum: "Momentum", Carry: "Carry", CarryMom: "Carry momentum", Value: "Value", Skewness: "Skewness" };
+const DEFAULT_SHIFT_N: Record<Family, number> = { Momentum: 1, Carry: 1, CarryMom: 1, Value: 1, Skewness: 1 };
 const COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"];
 const COMBINE_HELP =
   "Applies to both the reference-strategy aggregate below and any portfolio you build in Portfolio " +
@@ -38,7 +38,7 @@ const SEPARATE_TENOR_HELP =
   "Applies to the reference strategies below, the strategy pickers further down, and the " +
   "reference-strategy portfolio aggregate.";
 const FAR_NEAR_OPTIONS = Array.from({ length: 15 }, (_, i) => `F${i + 1}`);
-const CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"] as const;
+const CARRY_TYPES = ["V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"] as const;
 
 interface DraftSleeve {
   enabled: boolean;
@@ -56,13 +56,14 @@ function blankSleeve(family: Family): DraftSleeve {
   };
 }
 function blankDraft(): Record<Family, DraftSleeve> {
-  return { Momentum: blankSleeve("Momentum"), Carry: blankSleeve("Carry"), CarryMom: blankSleeve("CarryMom"), Value: blankSleeve("Value") };
+  return { Momentum: blankSleeve("Momentum"), Carry: blankSleeve("Carry"), CarryMom: blankSleeve("CarryMom"), Value: blankSleeve("Value"), Skewness: blankSleeve("Skewness") };
 }
 
 function newLeg(family: Family, near: string, far: string): PortfolioLeg {
   if (family === "Momentum") return { fast: 5, slow: 60 };
-  if (family === "Carry") return { type: "V1 Level", near, far, zwindow: 252, horizon: 20 };
+  if (family === "Carry") return { type: "V2 - Z-score on carry slope", near, far, zwindow: 252, horizon: 20 };
   if (family === "CarryMom") return { near, far, horizon: 20 };
+  if (family === "Skewness") return { window: 252 };
   return { contract: "F3", lookback: 1260, threshold: 0.10 };
 }
 
@@ -79,7 +80,8 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
   const strategies: ReferenceStrategy[] = refData?.strategies ?? [];
   const [separateTenor, setSeparateTenor] = useState(false);
   const hasMultiTenor = refData?.has_multi_tenor ?? false;
-  const showCombinedCards = hasMultiTenor && !separateTenor;
+  const perProduct = refData?.per_product_pairs ?? false;
+  const showCombinedCards = hasMultiTenor && (!separateTenor || perProduct);
 
   // ── Live controls (debounced, not gated behind Refresh Results -- matches
   // the Streamlit tab, where tc_bps/combine_method/vol_window/return_tilt
@@ -88,6 +90,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
   const [combineMethod, setCombineMethod] = useState("Equal Weight");
   const [volWindow, setVolWindow] = useState(63);
   const [returnTilt, setReturnTilt] = useState(0);
+  const [geometric, setGeometric] = useState(true);
 
   // ── Draft builder ───────────────────────────────────────────────────────
   const [draft, setDraft] = useState<Record<Family, DraftSleeve>>(blankDraft());
@@ -162,8 +165,8 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
   // metric strategy / shown list (matches the st.form in the original tab).
   // tc_bps/combine_method/vol_window/return_tilt/portfolios are live. ─────
   const liveParams = useMemo(
-    () => ({ tcBps, combineMethod, volWindow, returnTilt, separateTenorCarry: separateTenor, customPortfolios: portfolios }),
-    [tcBps, combineMethod, volWindow, returnTilt, separateTenor, portfolios],
+    () => ({ tcBps, combineMethod, volWindow, returnTilt, separateTenorCarry: separateTenor, geometric, customPortfolios: portfolios }),
+    [tcBps, combineMethod, volWindow, returnTilt, separateTenor, geometric, portfolios],
   );
   const debouncedLive = useDebouncedValue(liveParams, 400);
 
@@ -246,12 +249,13 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
         Read-only; use Portfolio Construction below to combine them: switching a family on there
         pre-fills it with these exact same parameters.
       </p>
-      {hasMultiTenor && (
+      {hasMultiTenor && !perProduct && (
         <label title={SEPARATE_TENOR_HELP} style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, textTransform: "none", marginBottom: 10 }}>
           <input type="checkbox" checked={separateTenor} onChange={(e) => setSeparateTenor(e.target.checked)} />
           Treat Carry / Carry-Momentum tenor pairs as separate strategies
         </label>
       )}
+      {perProduct && refData?.carry_note && <p className="tab-caption">{refData.carry_note}</p>}
       {showCombinedCards && (
         <>
           {["mom"].map((id) => {
@@ -271,7 +275,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
               <p className="caption">Combine tenor pairs via: Equal Weight</p>
             </details>
           ))}
-          {["value"].map((id) => {
+          {["value", "skew"].map((id) => {
             const r = strategies.find((x) => x.id === id);
             return r && (
               <details key={id} style={{ marginBottom: 6 }}>
@@ -343,7 +347,7 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
                     {family === "Carry" && (
                       <>
                         <label>Type
-                          <select value={leg.type ?? "V1 Level"} onChange={(e) => updateLeg(family, i, { type: e.target.value as PortfolioLeg["type"] })}>
+                          <select value={leg.type ?? "V2 - Z-score on carry slope"} onChange={(e) => updateLeg(family, i, { type: e.target.value as PortfolioLeg["type"] })}>
                             {CARRY_TYPES.map((t) => <option key={t}>{t}</option>)}
                           </select>
                         </label>
@@ -361,11 +365,11 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
                             </label>
                           </>
                         )}
-                        {leg.type === "V2 Z-score" && (
+                        {leg.type === "V2 - Z-score on carry slope" && (
                           <label>Z-Window <input type="number" min={20} max={756} value={leg.zwindow ?? 252}
                             onChange={(e) => updateLeg(family, i, { zwindow: Number(e.target.value) })} /></label>
                         )}
-                        {leg.type === "V3 Carry-Momentum" && (
+                        {leg.type === "V3 - Carry momentum" && (
                           <label>Horizon <input type="number" min={1} max={252} value={leg.horizon ?? 20}
                             onChange={(e) => updateLeg(family, i, { horizon: Number(e.target.value) })} /></label>
                         )}
@@ -390,6 +394,10 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
                         <label>Horizon <input type="number" min={1} max={252} value={leg.horizon ?? 20}
                           onChange={(e) => updateLeg(family, i, { horizon: Number(e.target.value) })} /></label>
                       </>
+                    )}
+                    {family === "Skewness" && (
+                      <label>Look-back window (days) <input type="number" min={20} max={1000} value={leg.window ?? 252}
+                        onChange={(e) => updateLeg(family, i, { window: Number(e.target.value) })} /></label>
                     )}
                     {family === "Value" && (
                       <>
@@ -459,13 +467,18 @@ export default function PortfolioTab({ assetClass }: PortfolioTabProps) {
 
       {data?.agg_label && (
         <p className="caption">
-          "{data.agg_label}" below is currently combined via <strong>{data.combine_method}</strong>{" "}
+          "{data.agg_label}" (Momentum, Carry, Carry momentum, Value){data.agg5_label ? <> and "{data.agg5_label}" (the same four plus Skewness)</> : null} below are currently combined via <strong>{data.combine_method}</strong>{" "}
           (change it with the "Combine strategies via" dropdown above).
         </p>
       )}
       {isFetching && <p>Computing…</p>}
       {error && <p className="error">{(error as Error).message}</p>}
 
+      <div className="control-row">
+        <span>Return basis</span>
+        <label><input type="radio" checked={geometric} onChange={() => setGeometric(true)} /> Geometric (% return)</label>
+        <label><input type="radio" checked={!geometric} onChange={() => setGeometric(false)} /> Arithmetic (% return)</label>
+      </div>
       {data?.metrics && (
         <div className="metric-row">
           <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => fmtSigned(v)} />

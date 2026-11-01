@@ -2,11 +2,12 @@ import { Link } from "react-router-dom";
 import MetricCard from "../components/MetricCard";
 
 const DASHBOARD_LINKS = [
-  { to: "/metals", name: "Metals", desc: "LME Copper, Aluminium, Lead, and Zinc. Momentum, Carry, and Value strategies." },
-  { to: "/energy", name: "Energy", desc: "WTI, Brent, RBOB, Heating Oil, Nat Gas. Momentum, Carry, Value." },
-  { to: "/precious", name: "Precious Metals", desc: "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value." },
-  { to: "/ngl", name: "NGL / Refined", desc: "Ethane, Propane, Butane, Isobutane. Momentum, Carry, Value." },
-  { to: "/agri", name: "Agriculture", desc: "Grains, softs, oilseeds, and livestock (14 products). Momentum, Carry, Value." },
+  { to: "/metals", name: "Metals", desc: "LME Copper, Aluminium, Lead, and Zinc. Momentum, Carry, Value, Skewness." },
+  { to: "/petroleum", name: "Petroleum", desc: "WTI, Brent, RBOB, Heating Oil. Momentum, Carry, Value, Skewness." },
+  { to: "/pen", name: "Power, Emissions & Nat Gas", desc: "Henry Hub, TTF, EUA. Momentum, Carry, Value, Skewness." },
+  { to: "/ngl", name: "NGL", desc: "Ethane, Propane, Butane, Isobutane. Momentum, Carry, Value, Skewness." },
+  { to: "/precious", name: "Precious Metals", desc: "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value, Skewness." },
+  { to: "/agri", name: "Agriculture", desc: "Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar No.11. Momentum, Carry, Value, Skewness." },
 ];
 
 export default function HomePage() {
@@ -14,8 +15,8 @@ export default function HomePage() {
     <div className="page">
       <h1>Risk Premia</h1>
       <p className="tab-caption">
-        Systematic Momentum, Carry, and Value risk premia across LME metals, energy, precious metals,
-        and refined products, developed as supervised research with Prof. Ilia Bouchouev.
+        Systematic Momentum, Carry, and Value risk premia across metals, petroleum, power, emissions and
+        natural gas, NGL, precious metals and agriculture, developed as supervised research with Prof. Ilia Bouchouev.
       </p>
 
       <div className="section-header">What This Project Is</div>
@@ -31,7 +32,7 @@ export default function HomePage() {
       <p className="tab-caption">
         The framework was first validated on LME Copper and Aluminium, then extended, using the same three
         strategies in a deliberately simplified form (no CTA-paper trend, no structural anchors, no
-        walk-forward out-of-sample testing yet), to oil and energy, precious metals, and refined NGL products.
+        walk-forward out-of-sample testing yet), to petroleum, power, emissions and natural gas, NGL, precious metals and agriculture.
       </p>
 
       <div className="section-header">Methodology (Same Convention Across Every Asset Class)</div>
@@ -56,8 +57,7 @@ export default function HomePage() {
 
       <div className="section-header">Headline Findings</div>
       <div className="warning-box" style={{ background: "rgba(42,120,214,0.08)", borderColor: "#2a78d6", color: "var(--text)" }}>
-        Coming soon. Consolidated headline findings across Metals, Energy, Precious Metals, and NGL will be
-        published here once results from all four asset classes are finalized.
+        Consolidated findings across the six buckets are in the Research page (Final Research Dashboard and Commodity Rankings).
       </div>
 
       <div className="section-header">Conclusion</div>
@@ -67,13 +67,13 @@ export default function HomePage() {
         drawdown. Optimal parameters are asset-specific rather than a single template; each new product is
         assigned its own momentum speed, carry variant, and value anchor, selected from its own data using the
         same methodology throughout. The framework has since been extended to genuinely different asset
-        classes, including energy and refined products, to test whether the same three-premia structure holds
+        classes, including petroleum, natural gas, emissions, NGL and agriculture, to test whether the same three-premia structure holds
         outside metals.
       </p>
 
       <div className="section-header">Explore the Dashboards</div>
       <p className="tab-caption">
-        Each asset class below has its own Momentum, Carry, Value, Comparison, and Portfolio tabs.
+        Each bucket below has its own Momentum, Carry, Value, Skewness, Comparison, and Portfolio tabs.
       </p>
       <div className="control-row" style={{ flexWrap: "wrap" }}>
         {DASHBOARD_LINKS.map((d) => (

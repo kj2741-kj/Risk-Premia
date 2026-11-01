@@ -13,6 +13,9 @@ the rest of the repo) fail loudly at startup, not on a user's first request.
 import os
 import sys
 
+# Same price folder as the Streamlit apps and the hub (latest data, 29-Oct cut); must be set before rolling_continuous is imported.
+os.environ.setdefault("RP_PRICES_DIR", "Prices_1029_merged")
+
 _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(_BACKEND_DIR))
 

@@ -45,12 +45,13 @@ if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
 from rolling_continuous import (DEFAULT_CALENDAR_FILE, DEFAULT_ROLL_DAY,  # noqa: E402
-                                 METAL_CONFIG, _compute_roll_dates,
-                                 load_metal_calendar, load_metal_prices)
+                                 DEFAULT_ROLL_RULE, METAL_CONFIG, _compute_roll_dates,
+                                 _roll_dates_for_rule, load_metal_calendar, load_metal_prices)
 
 
 def build_rolling_f1_ratio(prices: pd.DataFrame, calendar: pd.DataFrame,
-                            roll_day: int = DEFAULT_ROLL_DAY) -> pd.DataFrame:
+                            roll_day: int = DEFAULT_ROLL_DAY,
+                            roll_rule: str = DEFAULT_ROLL_RULE) -> pd.DataFrame:
     """Ratio-adjusted analog of rolling_continuous.build_rolling_f1() -- same
     roll/bridge/F1-F2-tracking phase structure, multiplicative instead of
     additive splicing. Returns columns: F1_raw, F2_raw, F1_continuous_ratio,
@@ -62,8 +63,8 @@ def build_rolling_f1_ratio(prices: pd.DataFrame, calendar: pd.DataFrame,
     price_date_set = set(trading_dates)
     sorted_trading = sorted(price_date_set)
 
-    roll_map, ltd_set, ltd_to_contract = _compute_roll_dates(
-        calendar, sorted_trading, price_date_set, n_days_before=roll_day,
+    roll_map, ltd_set, ltd_to_contract = _roll_dates_for_rule(
+        roll_rule, calendar, sorted_trading, price_date_set, roll_day,
     )
     roll_set = set(roll_map.keys())
 
@@ -171,7 +172,7 @@ def build_rolling_f1_ratio(prices: pd.DataFrame, calendar: pd.DataFrame,
 
 def get_metal_rolling_f1_ratio(metal_code: str, futures_file: str, calendar_file: str = DEFAULT_CALENDAR_FILE,
                                 config: dict | None = None, roll_day: int = DEFAULT_ROLL_DAY,
-                                verbose: bool = False) -> pd.DataFrame:
+                                verbose: bool = False, roll_rule: str = DEFAULT_ROLL_RULE) -> pd.DataFrame:
     """End-to-end ratio-adjusted loader+builder, same call signature as
     rolling_continuous.get_metal_rolling_f1() (additive version)."""
     if config is None:
@@ -183,7 +184,7 @@ def get_metal_rolling_f1_ratio(metal_code: str, futures_file: str, calendar_file
                                 f1_col=cfg["f1_col"], f2_col=cfg["f2_col"],
                                 data_start_row=cfg["data_start_row"])
     cal = load_metal_calendar(filepath=calendar_file, sheet_name=cfg["calendar_sheet"])
-    result = build_rolling_f1_ratio(prices, cal, roll_day=roll_day)
+    result = build_rolling_f1_ratio(prices, cal, roll_day=roll_day, roll_rule=roll_rule)
     if verbose:
         rolls = result["is_roll_date"].sum()
         print(f"[{metal_code}] ratio-continuous built: {rolls} roll events, "

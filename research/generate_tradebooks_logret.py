@@ -236,7 +236,7 @@ def write_momentum_sheet(wb, sheet_name: str, f1_series: pd.DataFrame, pairs, sh
 def write_carry_composite_sheet(wb, sheet_name: str, curve: pd.DataFrame, f1_series: pd.DataFrame,
                                  near: str, far: str, zscore_window: int, shift_n: int, tc_bps: int,
                                  ref_metrics: dict):
-    """V1(Level)+V2(Z-score) composite Carry, on tenor pair (near, far)."""
+    """V1 (Carry slope) + V2 (Z-score on carry slope) composite Carry, on tenor pair (near, far)."""
     ws = wb.create_sheet(sheet_name)
     idx = f1_series.index
     n_rows = len(idx)
@@ -600,7 +600,8 @@ def _common_truncated_series(products):
 def _rebuild_ratio_series(p, common_start, common_end):
     from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio
     raw = get_metal_rolling_f1_ratio(cfg.METAL_CODES[p], futures_file=cfg.CURVE_FILE,
-                                      calendar_file=cfg.CALENDAR_FILE, config=cfg.METALS_CONFIG, verbose=False)
+                                      calendar_file=cfg.CALENDAR_FILE, config=cfg.METALS_CONFIG, verbose=False,
+                                      roll_day=getattr(cfg, "ROLL_N", 5), roll_rule=getattr(cfg, "ROLL_RULE", "ltd_minus_n"))
     raw = raw.loc[common_start:common_end]
     raw = reanchor_f1_continuous_ratio(raw)
     log_price = np.log(raw["F1_continuous_ratio"].where(raw["F1_continuous_ratio"] > 0))

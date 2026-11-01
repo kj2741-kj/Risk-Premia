@@ -9,9 +9,9 @@ render_carry_tab / render_value_tab -- all the signal math, charts,
 and layout live here once.
 
 Stage 2 scope (deliberately simple, per spec): MA-crossover momentum
-only (no CTA/Baz-Granger, no structural Anchors), Carry V1-V3 (V1 Level
-[Roll Yield/Long Slope merged, any contract pair], V2 Z-score, V3
-Carry-Momentum), Value V1 MA-reversion only. No OOS / walk-forward yet
+only (no CTA/Baz-Granger, no structural Anchors), Carry V1-V3 (V1 Carry slope
+[Roll Yield/Long Slope merged, any contract pair], V2 - Z-score on carry slope on carry slope, V3
+Carry momentum), Value V1 MA-reversion only. No OOS / walk-forward yet
 -- in-sample only.
 
 Conventions (identical to Stage 1 / Metals dashboard):
@@ -46,7 +46,8 @@ import streamlit as st
 from plotly.subplots import make_subplots
 
 from common_shared import (CHART_LAYOUT, COLORS, pos_metrics_generic, section_header, tc_label_map,
-                            metric_card, transaction_cost)
+                            metric_card, transaction_cost, is_geometric, geometric_daily_returns,
+                            pnl_unit, ann_label, geo_log_returns)
 
 _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
                    "#A78BFA", "#F472B6", "#22D3EE", "#FB923C", "#60A5FA"]
@@ -64,6 +65,9 @@ def daily_returns(pos: pd.Series, f1r: pd.Series, f1c: pd.Series, tc_bps: int,
     Nat Gas, Fuel Oil), silently flipping return signs or inflating magnitudes.
     Pass `phase` to also charge roll-day TC (see common_shared.transaction_cost())."""
     pos = pos.reindex(f1c.index).fillna(0.0)
+    if is_geometric():
+        # Geometric basis: daily LOG returns (see common_shared.geometric_daily_returns)
+        return geometric_daily_returns(pos, f1r, f1c, tc_bps, phase)
     gp = pos * f1c.diff()
     tc = transaction_cost(pos, f1r, tc_bps, phase)
     net = gp - tc
@@ -71,8 +75,10 @@ def daily_returns(pos: pd.Series, f1r: pd.Series, f1c: pd.Series, tc_bps: int,
 
 
 def equity_curve(pnl: pd.Series) -> pd.Series:
-    """Cumulative $PnL path (native unit, e.g. USD/MT)."""
-    return pnl.fillna(0).cumsum()
+    """Cumulative $PnL path (native unit, e.g. USD/MT); on the geometric basis, compounded % return
+    (exp(cumsum of log returns) - 1) * 100."""
+    cum = pnl.fillna(0).cumsum()
+    return (np.exp(cum) - 1) * 100 if is_geometric() else cum
 
 
 def rolling_sharpe(pnl: pd.Series, window: int = 252) -> pd.Series:
@@ -254,9 +260,26 @@ def ma_crossover_trapezoid_position(f1r: pd.Series, fast: int, slow: int, z_wind
     return exec_shift(sig, shift_n).fillna(0)
 
 
+def _heatmap_gate(key: str, sig: tuple, f1r: pd.Series, f1c: pd.Series) -> bool:
+    """On-demand heatmaps: they are slow, so nothing is computed until the user clicks "Load". `sig` holds every
+    setting the result depends on; the heatmap stays up while they are unchanged and hides again (needing a new
+    click) as soon as one changes, so a slider or toggle move never silently starts a recompute. The data
+    fingerprint covers roll settings / product switches that change the series without changing `sig`."""
+    full_sig = sig + (len(f1r), round(float(f1c.iloc[-1]), 6))
+    sig_key = f"{key}__loaded_sig"
+    if st.session_state.get(sig_key) == full_sig:
+        st.button("Hide heatmap", key=f"{key}__hide", on_click=st.session_state.pop, args=(sig_key, None))
+        return True
+    st.warning("⏳ This heatmap is not loaded by default: computing it can take several minutes. Load it only "
+               "when you need it.")
+    st.button("Load heatmap", key=f"{key}__load", type="primary",
+              on_click=st.session_state.__setitem__, args=(sig_key, full_sig))
+    return False
+
+
 @st.cache_data(show_spinner="Computing 250x250 momentum heatmap...")
 def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
-                      start: str, end: str, shift_n: int, tc_bps: int) -> pd.DataFrame:
+                      start: str, end: str, shift_n: int, tc_bps: int, geo: bool = False) -> pd.DataFrame:
     """Full-resolution grid of gross Sharpe for every valid (fast, slow) pair,
     fast/slow in [1, max_window], slow > fast, over [start, end].
 
@@ -280,7 +303,11 @@ def momentum_heatmap(f1r: pd.Series, f1c: pd.Series, max_window: int,
     if n < eff_shift + 20:
         return pd.DataFrame(columns=["fast", "slow", "sharpe"])
 
-    delta = f1c_w.diff().values
+    if geo:
+        # geometric basis: ratio-stitched daily log returns instead of $ changes of F1_continuous
+        delta = geo_log_returns(f1r.astype(float), f1c.astype(float))[mask].values
+    else:
+        delta = f1c_w.diff().values
 
     sma = np.full((n, max_window), np.nan)
     for k in range(max_window):
@@ -420,9 +447,9 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
             with c2:
                 metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
             with c3:
-                metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+                metric_card(ann_label(), _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
             with c4:
-                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
             with c5:
                 metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
 
@@ -432,9 +459,13 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
     st.markdown(f"**Sharpe Heatmap: Fast × Slow MA Crossover ({heatmap_max_window}×{heatmap_max_window})**")
     st.caption("Scroll/drag to zoom into any region, double-click to reset. Every integer "
                f"(fast, slow) pair with 1 ≤ fast < slow ≤ {heatmap_max_window} is included.")
-    hm_df = momentum_heatmap(f1r, f1c, heatmap_max_window,
-                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n, tc_bps)
-    if not hm_df.empty and hm_df["sharpe"].notna().any():
+    hm_df = (momentum_heatmap(f1r, f1c, heatmap_max_window,
+                              f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n, tc_bps, is_geometric())
+             if _heatmap_gate(f"{key_prefix}_mom_hm", (hm_yr, shift_n, tc_bps, heatmap_max_window, is_geometric()),
+                              f1r, f1c) else None)
+    if hm_df is None:
+        pass
+    elif not hm_df.empty and hm_df["sharpe"].notna().any():
         pivot = hm_df.pivot(index="fast", columns="slow", values="sharpe")
         fig_hm = go.Figure(data=go.Heatmap(
             z=pivot.values, x=pivot.columns, y=pivot.index,
@@ -469,7 +500,189 @@ def render_momentum_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label
 
 
 # ═══════════════════════════════════════════════════════════════
-# CARRY: V1 LEVEL (ROLL YIELD / LONG SLOPE), V2 Z-SCORE, V3 CARRY-MOMENTUM
+# SKEWNESS: MINUS ROLLING SKEWNESS OF DAILY LOG RETURNS
+# ═══════════════════════════════════════════════════════════════
+
+SKEWNESS_DEFAULT_WINDOWS = [126, 252, 504]
+SKEWNESS_FEATURE_WINDOW = 252          # the research window (Skewness_Research.html); featured by default
+
+try:
+    from engine import raw_signal_skewness_from_returns, ratio_log_returns
+except ImportError:                    # research/ not yet on sys.path (the app files add it; this covers other callers)
+    import os as _os, sys as _sys
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "research"))
+    from engine import raw_signal_skewness_from_returns, ratio_log_returns
+
+
+def skewness_position(log_returns: pd.Series, window: int, shift_n: int = 1) -> pd.Series:
+    """Position from the shared signal (research/engine.py::raw_signal_skewness_from_returns) with this
+    module's execution lag. `log_returns` = ratio_log_returns(...) of the dashboard's series."""
+    return exec_shift(raw_signal_skewness_from_returns(log_returns, window), shift_n).fillna(0)
+
+
+@st.cache_data(show_spinner="Computing skewness window sweep...")
+def skewness_window_sweep(log_returns: pd.Series, f1c: pd.Series, start: str, end: str, shift_n: int,
+                           windows: tuple[int, ...], geo: bool = False) -> pd.DataFrame:
+    """Gross active-day Sharpe of the Skewness rule for each look-back window, over [start, end].
+    Signals are computed on the full history (so every window is warmed up) and only the PnL is
+    sliced to the range, unlike the momentum heatmap, which slices first."""
+    delta = log_returns if geo else f1c.diff()
+    mask = (f1c.index >= pd.Timestamp(start)) & (f1c.index <= pd.Timestamp(end))
+    rows = []
+    for w in windows:
+        pos = skewness_position(log_returns, w, shift_n)
+        pnl = (pos * delta)[mask]
+        active = pnl[(pos[mask] != 0) & pnl.notna()]
+        sharpe = float(active.mean() / active.std() * np.sqrt(252)) if len(active) > 20 and active.std() > 0 else np.nan
+        rows.append({"window": w, "sharpe": sharpe})
+    return pd.DataFrame(rows)
+
+
+def render_skewness_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_label: str,
+                         key_prefix: str, phase: pd.Series | None = None, f2r: pd.Series | None = None):
+    """Skewness tab, built like the Momentum tab: year-range toggle, benchmark look-back windows plus a
+    custom one, Sharpe-by-window chart, rolling skewness of the featured window, multi-strategy equity
+    curve, rolling Sharpe, performance metrics, TC filter. Returns the {label: position} dict of the
+    active strategies, for the Comparison tab."""
+    yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
+    # exact ratio-adjusted log returns (same as the research series), not log() of the additive level
+    lret = ratio_log_returns(f1c, f1r, f2r, phase)
+
+    section_header(f"SKEWNESS: {product}")
+    st.caption("signal(t) = sign[ −skewness of the daily log returns of the roll-adjusted (ratio-stitched) continuous series over the "
+               "past N observations ]. Long when skewness is negative, short when positive (Fernandez-Perez, "
+               "Fuertes and Miffre 2021, Table 1, time-series form: one position per product, not a "
+               "cross-sectional sort). N = 252 is the research window.")
+
+    tc_col, timing_col, _ = st.columns([1, 1, 2])
+    with tc_col:
+        tc_map = tc_label_map(float(f1r.dropna().iloc[-1]), unit_label)
+        tc_label = st.selectbox("Transaction Cost", list(tc_map.keys()), index=1, key=f"{key_prefix}_skew_tc")
+        tc_bps = tc_map[tc_label]
+    with timing_col:
+        timing = st.selectbox("Execution Timing", TIMING_OPTIONS, index=1, key=f"{key_prefix}_skew_timing")
+        shift_n = TIMING_SHIFT[timing]
+
+    # ── Strategies to Compare: benchmark windows + custom ──
+    st.markdown("**Strategies to Compare**")
+    ss_key = f"{key_prefix}_skew_active"
+    if ss_key not in st.session_state:
+        st.session_state[ss_key] = list(SKEWNESS_DEFAULT_WINDOWS)
+
+    bcol1, bcol2, bcol3 = st.columns([1, 1, 1])
+    with bcol1:
+        cw = st.number_input("Custom Window (days)", min_value=20, max_value=1000, value=189, step=1,
+                              key=f"{key_prefix}_skew_cw")
+    with bcol2:
+        st.write("")
+        st.write("")
+        if st.button("Add Custom Window", key=f"{key_prefix}_skew_add"):
+            if int(cw) not in st.session_state[ss_key]:
+                st.session_state[ss_key] = sorted(st.session_state[ss_key] + [int(cw)])
+    with bcol3:
+        st.write("")
+        st.write("")
+        if st.button("Reset to Defaults", key=f"{key_prefix}_skew_reset"):
+            st.session_state[ss_key] = list(SKEWNESS_DEFAULT_WINDOWS)
+
+    active = st.session_state[ss_key]
+    chosen = st.multiselect(
+        "Active strategies (performance metrics / equity curve / rolling Sharpe below)",
+        options=active, default=active, format_func=lambda w: f"Skew({w})",
+        key=f"{key_prefix}_skew_multiselect",
+    )
+
+    st.divider()
+
+    hm_yr = st.slider("Year range for performance metrics / window chart", yr0, yr1, (yr0, yr1),
+                       key=f"{key_prefix}_skew_yr")
+    range_start, range_end = pd.Timestamp(f"{hm_yr[0]}-01-01"), pd.Timestamp(f"{hm_yr[1]}-12-31")
+    range_mask = (f1r.index >= range_start) & (f1r.index <= range_end)
+    f1r_scoped = f1r[range_mask]
+    f1c_scoped = f1c.reindex(f1r_scoped.index)
+    phase_scoped = phase.reindex(f1r_scoped.index) if phase is not None else None
+
+    st.markdown("**Performance Metrics**")
+    feature_window = None
+    if not chosen:
+        st.info("Select at least one strategy above to see its performance metrics.")
+    else:
+        default_feature = SKEWNESS_FEATURE_WINDOW if SKEWNESS_FEATURE_WINDOW in chosen else chosen[0]
+        feature_window = st.selectbox(
+            "Strategy to feature", options=chosen, index=chosen.index(default_feature),
+            format_func=lambda w: f"Skew({w})", key=f"{key_prefix}_skew_feature",
+        )
+        if len(f1r_scoped) < 40:
+            st.info("Not enough data in the selected year range.")
+        else:
+            # signal warmed up on full history, then sliced to the range
+            feature_pos = skewness_position(lret, feature_window, shift_n).reindex(f1r_scoped.index).fillna(0)
+            m = pos_metrics_generic(feature_pos, f1r_scoped, f1c_scoped, tc_bps, phase_scoped)
+            c1, c2, c3, c4, c5 = st.columns(5)
+            with c1:
+                metric_card("Gross Sharpe", _fmt_metric(m["gross"], "{:+.2f}"))
+            with c2:
+                metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
+            with c3:
+                metric_card(ann_label(), _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
+            with c4:
+                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
+            with c5:
+                metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
+
+    st.divider()
+
+    # ── Sharpe by look-back window (the 1-D analogue of the momentum heatmap) ──
+    st.markdown("**Gross Sharpe by Look-back Window**")
+    st.caption("Every window from 40 to 760 trading days in steps of 20, over the year range above. "
+               "Signals use full history, so every window is warmed up at the start of the range.")
+    sweep = (skewness_window_sweep(lret, f1c, f"{hm_yr[0]}-01-01", f"{hm_yr[1]}-12-31", shift_n,
+                                    tuple(range(40, 761, 20)), is_geometric())
+             if _heatmap_gate(f"{key_prefix}_skew_sweep", (hm_yr, shift_n, is_geometric()), f1r, f1c) else None)
+    if sweep is None:
+        pass
+    elif sweep["sharpe"].notna().any():
+        fig_sw = go.Figure(go.Bar(
+            x=sweep["window"], y=sweep["sharpe"],
+            marker_color=[COLORS["green"] if (v == v and v >= 0) else COLORS["secondary"] for v in sweep["sharpe"]],
+            hovertemplate="Window: %{x}d<br>Gross Sharpe: %{y:.3f}<extra></extra>",
+        ))
+        fig_sw.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
+        fig_sw.update_layout(**CHART_LAYOUT, height=320, xaxis_title="Look-back window (days)",
+                              yaxis_title="Gross Sharpe", title=dict(text=f"{product}: Sharpe by Skewness Window",
+                                                                      font=dict(size=13)))
+        st.plotly_chart(fig_sw, use_container_width=True, key=f"{key_prefix}_skew_sweep")
+        best = sweep.loc[sweep["sharpe"].idxmax()]
+        st.caption(f"Best in range {hm_yr[0]}-{hm_yr[1]}: {int(best['window'])} days, gross Sharpe {best['sharpe']:+.2f}.")
+    else:
+        st.info("Not enough data in the selected year range to compute the window chart.")
+
+    # ── Rolling skewness of the featured window ──
+    if feature_window is not None:
+        st.markdown(f"**Rolling Skewness ({feature_window}-day) of Daily Log Returns**")
+        st.caption("The signal is long where this line is below zero and short where it is above zero.")
+        sk = lret.rolling(feature_window).skew()
+        fig_sk = go.Figure()
+        fig_sk.add_trace(go.Scatter(x=sk.index, y=sk.values, mode="lines", name=f"Skewness ({feature_window}d)",
+                                     line=dict(color=COLORS["primary"], width=1.3)))
+        fig_sk.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
+        fig_sk.update_layout(**CHART_LAYOUT, height=300, yaxis_title="Skewness")
+        st.plotly_chart(fig_sk, use_container_width=True, key=f"{key_prefix}_skew_rolling")
+
+    if not chosen:
+        st.divider()
+        st.info("Select at least one strategy above to see its equity curve.")
+        return {}
+
+    positions = {f"Skew({w})": skewness_position(lret, w, shift_n) for w in chosen}
+    _render_multi_strategy_block(
+        positions, f1r, f1c, tc_bps, key_prefix + "_skew", unit_label, show_metrics=False, phase=phase,
+    )
+    return positions
+
+
+# ═══════════════════════════════════════════════════════════════
+# CARRY: V1 CARRY SLOPE, V2 Z-SCORE ON CARRY SLOPE, V3 CARRY MOMENTUM
 # ═══════════════════════════════════════════════════════════════
 
 def _carry_base(curve: pd.DataFrame, a: str, b: str) -> pd.Series:
@@ -481,7 +694,7 @@ def _carry_base(curve: pd.DataFrame, a: str, b: str) -> pd.Series:
 
 
 def carry_v1_position(curve: pd.DataFrame, near: str = "F1", far: str = "F2", shift_n: int = 1) -> pd.Series:
-    """V1 Level -- covers what used to be separate V1 Roll Yield (near-tenor
+    """V1 - Carry slope -- covers what used to be separate V1 Roll Yield (near-tenor
     pair) and V2 Long Slope (far-tenor pair) variants: identical formula,
     the only difference was which (near, far) pair fed it, so one function
     with a free pair argument replaces both."""
@@ -509,12 +722,13 @@ def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1,
 
 @st.cache_data(show_spinner="Computing carry Sharpe heatmap...")
 def carry_heatmap(curve: pd.DataFrame, contracts: tuple[str, ...], days: int | None, mode: str | None,
-                   f1r: pd.Series, f1c: pd.Series, start: str, end: str, shift_n: int) -> pd.DataFrame:
+                   f1r: pd.Series, f1c: pd.Series, start: str, end: str, shift_n: int,
+                   geo: bool = False) -> pd.DataFrame:
     """Gross Sharpe for every valid (near, far) contract-pair (near before far
     in `contracts`, e.g. F1 before F27), over [start, end].
-    `days=None` -> V1 Level signal: sign of the raw (near-far)/near yield.
-    `days=N, mode="Momentum"` -> V3 Carry-Momentum: sign of the yield's N-day change.
-    `days=N, mode="Zscore"` -> V2 Z-score: sign of (yield - rolling_mean(N)) / rolling_std(N).
+    `days=None` -> V1 - Carry slope signal: sign of the raw (near-far)/near yield.
+    `days=N, mode="Momentum"` -> V3 - Carry momentum: sign of the yield's N-day change.
+    `days=N, mode="Zscore"` -> V2 - Z-score on carry slope: sign of (yield - rolling_mean(N)) / rolling_std(N).
     (`mode` is an internal identifier, independent of the V1/V2/V3 numbering
     shown in the UI, so a future renumbering doesn't need to touch this.)
     Gross only (no TC), matching momentum_heatmap's convention -- not needed
@@ -553,13 +767,12 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     Renumbered from the original V1-V4 scheme: V1 Roll Yield and V2 Long
     Slope were the identical formula with just a different (near, far)
-    pair, so they're merged into one "V1 Level" variant with a free
+    pair, so they're merged into one "V1 - Carry slope" variant with a free
     Near/Far picker (any pair, not just the two presets each used to
     offer) -- eliminating the old V2 slot. The old V3 Z-score is now V2,
-    and the old V4 Carry-Momentum is now V3, closing the gap. Every label
-    still spells out which original strategy it is (e.g. "V1 Level (Roll
-    Yield / Long Slope)", "V2 Z-score", "V3 Carry-Momentum") so the
-    renumbering doesn't create ambiguity about which logic is which.
+    and the old V4 Carry-Momentum is now V3, closing the gap. Variant names
+    (renamed 2026-10-11): "V1 - Carry slope", "V2 - Z-score on carry slope",
+    "V3 - Carry momentum".
 
     `phase` (if passed) adds roll-day TC on top of position-change TC.
     `default_active_variants`/`default_feature_variant` override the
@@ -583,8 +796,8 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
 
     section_header(f"CARRY: {product}")
     st.caption("Term structure carry: long in backwardation, short in contango. Three variants are "
-               "available: V1 Level (Roll Yield / Long Slope, any contract pair), V2 Z-score, "
-               "and V3 Carry-Momentum.")
+               "available: V1 - Carry slope, V2 - Z-score on carry slope and V3 - Carry momentum. All three take any "
+               f"(Near, Far) contract pair; V2 and V3 default to ({near_default}-{far_default}).")
 
     tc_col, timing_col, _ = st.columns([1, 1, 2])
     with tc_col:
@@ -601,7 +814,7 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
                        "delay (Signal[t−2]); Lag-2 adds two (Signal[t−3]).")
 
     # Every contract with real price data, product-agnostic (e.g. F1..F27 for
-    # Copper, F1..F20 for Gold) -- shared by the "V1 Level" custom Near/Far
+    # Copper, F1..F20 for Gold) -- shared by the "V1 - Carry slope" custom Near/Far
     # pickers below and the Sharpe Heatmap further down, so both draw from the
     # exact same valid-contract list. Same "real data only" filter as the
     # heatmap's own list (a header-only, all-empty far column doesn't count).
@@ -611,34 +824,33 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     if skip_front_contract and "F1" in all_contracts:
         all_contracts.remove("F1")
 
-    V1_LABEL, V2_LABEL, V3_LABEL = "V1 Level (Roll Yield / Long Slope)", "V2 Z-score (252d)", "V3 Carry-Momentum"
+    V1_LABEL, V2_LABEL, V3_LABEL = "V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"
 
     st.markdown("**Add a Carry Variant**")
-    st.caption("V1 Level takes any (Near, Far) contract pair, covering what used to be separate V1 Roll "
-               "Yield and V2 Long Slope variants, the identical formula just with a different pair, so "
-               "one flow covers both (same unification as the heatmap's \"N/A\" mode below).")
-    vcol1, vcol2, vcol3, vcol4 = st.columns([1.3, 1, 1, 0.9])
+    st.caption("Every variant takes any (Near, Far) contract pair. V2 - Z-score on carry slope and V3 - Carry momentum "
+               f"default to ({near_default}-{far_default}); pick a different pair to add them on another tenor. "
+               "A variant on the default pair keeps its short label, e.g. \"V2 (win=252)\".")
+    vcol1, vcol2, vcol3, vcol4, vcol5 = st.columns([1.3, 0.8, 0.8, 1, 0.8])
     with vcol1:
         vgroup = st.selectbox("Variant", [V1_LABEL, V2_LABEL, V3_LABEL], key=f"{key_prefix}_car_vgroup")
-    near_sub = far_sub = None
     with vcol2:
-        if vgroup == V1_LABEL:
-            near_options = all_contracts[:-1] if len(all_contracts) > 1 else all_contracts
-            near_idx = near_options.index(near_default) if near_default in near_options else 0
-            near_sub = st.selectbox("Near", near_options, index=near_idx, key=f"{key_prefix}_car_near")
-        elif vgroup == V3_LABEL:
-            sub = st.selectbox("Horizon (days)", [5, 10, 20, 60], index=2, key=f"{key_prefix}_car_sub")
-        elif vgroup == V2_LABEL:
-            sub = st.selectbox("Window (days)", [126, 252, 504], index=1, key=f"{key_prefix}_car_sub")
+        near_options = all_contracts[:-1] if len(all_contracts) > 1 else all_contracts
+        near_idx = near_options.index(near_default) if near_default in near_options else 0
+        near_sub = st.selectbox("Near", near_options, index=near_idx, key=f"{key_prefix}_car_near")
     with vcol3:
-        if vgroup == V1_LABEL:
-            far_options = [c for c in all_contracts if int(c[1:]) > int(near_sub[1:])]
-            far_idx = far_options.index(far_default) if far_default in far_options else 0
-            # Keyed on near_sub so switching Near always yields a fresh, valid
-            # Far list -- a fixed key here could otherwise retain a stale Far
-            # selection that isn't in the new (near-dependent) options list.
-            far_sub = st.selectbox("Far", far_options, index=far_idx, key=f"{key_prefix}_car_far_{near_sub}")
+        far_options = [c for c in all_contracts if int(c[1:]) > int(near_sub[1:])]
+        far_idx = far_options.index(far_default) if far_default in far_options else 0
+        # Keyed on near_sub so switching Near always yields a fresh, valid
+        # Far list -- a fixed key here could otherwise retain a stale Far
+        # selection that isn't in the new (near-dependent) options list.
+        far_sub = st.selectbox("Far", far_options, index=far_idx, key=f"{key_prefix}_car_far_{near_sub}")
+    sub = None
     with vcol4:
+        if vgroup == V3_LABEL:
+            sub = st.selectbox("Horizon (days)", [5, 10, 20, 60], index=2, key=f"{key_prefix}_car_sub_v3")
+        elif vgroup == V2_LABEL:
+            sub = st.selectbox("Window (days)", [126, 252, 504], index=1, key=f"{key_prefix}_car_sub_v2")
+    with vcol5:
         st.write("")
         st.write("")
         add_clicked = st.button("Add", key=f"{key_prefix}_car_add")
@@ -649,30 +861,33 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
                                      else [f"V1 ({near_default}-{far_default})", "V2 (win=252)", "V3 (N=20)"])
 
     if add_clicked:
+        pair_prefix = "" if (near_sub, far_sub) == (near_default, far_default) else f"{near_sub}-{far_sub}, "
         if vgroup == V1_LABEL:
             label = f"V1 ({near_sub}-{far_sub})"
         elif vgroup == V2_LABEL:
-            label = f"V2 (win={sub})"
+            label = f"V2 ({pair_prefix}win={sub})"
         else:
-            label = f"V3 (N={sub})"
+            label = f"V3 ({pair_prefix}N={sub})"
         if label not in st.session_state[ss_key]:
             st.session_state[ss_key] = st.session_state[ss_key] + [label]
 
     def _build_position(label: str, crv: pd.DataFrame) -> pd.Series:
-        # V1 Level (near-far pair) -- the merged former V1 Roll Yield / V2 Long
-        # Slope. V2 Z-score / V3 Carry-Momentum keep their original underlying
+        # V1 - Carry slope (near-far pair) -- the merged former V1 Roll Yield / V2 Long
+        # Slope. V2 - Z-score on carry slope / V3 - Carry momentum keep their original underlying
         # functions (carry_v3_position/carry_v4_position); only the label
         # prefix shown to the user was renumbered to close the V1-V3 gap.
+        # Labels: "V1 (F1-F3)"; "V2 (win=252)" / "V3 (N=20)" on the default
+        # pair; "V2 (F1-F13, win=252)" / "V3 (F1-F13, N=20)" on any other pair.
+        parts = [x.strip() for x in label[label.index("(") + 1: label.rindex(")")].split(",")]
         if label.startswith("V1"):
-            pair = label[label.index("(") + 1: label.index(")")]
-            a, b = pair.split("-")
+            a, b = parts[0].split("-")
             return carry_v1_position(crv, a, b, shift_n=shift_n)
+        a, b = parts[0].split("-") if len(parts) == 2 else (near_default, far_default)
+        value = int(parts[-1].split("=")[1])
         if label.startswith("V2"):
-            win = int(label.split("=")[1].rstrip(")"))
-            return carry_v3_position(crv, win, shift_n=shift_n, near=near_default, far=far_default)
+            return carry_v3_position(crv, value, shift_n=shift_n, near=a, far=b)
         if label.startswith("V3"):
-            n = int(label.split("=")[1].rstrip(")"))
-            return carry_v4_position(crv, n, shift_n=shift_n, near=near_default, far=far_default)
+            return carry_v4_position(crv, value, shift_n=shift_n, near=a, far=b)
         return pd.Series(dtype=float)
 
     chosen = st.multiselect(
@@ -724,9 +939,9 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     with c2:
         metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
     with c3:
-        metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+        metric_card(ann_label(), _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
     with c4:
-        metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+        metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
 
@@ -736,14 +951,14 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     # far-month the product's own curve data actually has (e.g. F27 for
     # Copper, F15 for Gold) -- not the F15 cap used elsewhere for the Value
     # tab's contract dropdown. "Horizon (days)" defaults to N/A (the plain
-    # V1 Level signal); typing a day-count reveals the Mode radio to
-    # reinterpret that same number as either V3 Carry-Momentum or V2
+    # V1 - Carry slope signal); typing a day-count reveals the Mode radio to
+    # reinterpret that same number as either V3 - Carry momentum or V2
     # Z-score, so one grid covers all three variants. Has its OWN
     # independent year-range slider -- not linked to the Performance Metrics
     # slider above or the equity curve's "Time period" slider below. ────────
     st.markdown(f"**Sharpe Heatmap: Contract Pair × Carry Signal**")
-    st.caption('"N/A" -> V1 Level signal (long in backwardation, short in contango). Enter a whole '
-               "number of days to reinterpret that same horizon as V3 Carry-Momentum or V2 Z-score.")
+    st.caption('"N/A" -> V1 - Carry slope signal (long in backwardation, short in contango). Enter a whole '
+               "number of days to reinterpret that same horizon as V3 - Carry momentum or V2 - Z-score on carry slope.")
     hcol1, hcol2 = st.columns([1, 1.4])
     with hcol1:
         days_raw = st.text_input("Horizon (days)", value="N/A", key=f"{key_prefix}_car_hm_days")
@@ -754,13 +969,13 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
         try:
             parsed = int(days_clean)
             if parsed <= 0:
-                st.warning("Horizon must be a positive whole number of days; showing the V1 Level "
+                st.warning("Horizon must be a positive whole number of days; showing the V1 - Carry slope "
                            "signal instead.")
             else:
                 hm_days = parsed
         except ValueError:
-            st.warning('Enter a whole number of days, or "N/A" for the V1 Level signal; showing '
-                       "V1 Level for now.")
+            st.warning('Enter a whole number of days, or "N/A" for the V1 - Carry slope signal; showing '
+                       "V1 - Carry slope for now.")
     if hm_days is not None:
         with hcol2:
             mode_label = st.radio("Interpret as", [V3_LABEL, V2_LABEL], horizontal=True,
@@ -772,9 +987,13 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     # `all_contracts` (every real-data contract, F1 already dropped above if
     # skip_front_contract) was computed earlier, shared with the "Add a
     # Carry Variant" Near/Far pickers above.
-    hm_df = carry_heatmap(curve, tuple(all_contracts), hm_days, hm_mode, f1r, f1c,
-                          f"{car_hm_yr[0]}-01-01", f"{car_hm_yr[1]}-12-31", shift_n)
-    if not hm_df.empty and hm_df["sharpe"].notna().any():
+    hm_df = (carry_heatmap(curve, tuple(all_contracts), hm_days, hm_mode, f1r, f1c,
+                           f"{car_hm_yr[0]}-01-01", f"{car_hm_yr[1]}-12-31", shift_n, is_geometric())
+             if _heatmap_gate(f"{key_prefix}_car_hm", (car_hm_yr, hm_days, hm_mode, shift_n, is_geometric(),
+                                                        tuple(all_contracts)), f1r, f1c) else None)
+    if hm_df is None:
+        pass
+    elif not hm_df.empty and hm_df["sharpe"].notna().any():
         pivot = hm_df.pivot(index="near", columns="far", values="sharpe").reindex(
             index=all_contracts, columns=all_contracts)
         fig_hm = go.Figure(data=go.Heatmap(
@@ -783,11 +1002,11 @@ def render_carry_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
             hovertemplate="Near: %{y}<br>Far: %{x}<br>Sharpe: %{z:.3f}<extra></extra>",
         ))
         if hm_days is None:
-            signal_desc = "V1 Level"
+            signal_desc = "V1 - Carry slope"
         elif hm_mode == "Momentum":
-            signal_desc = f"V3 Carry-Momentum ({hm_days}d)"
+            signal_desc = f"V3 - Carry momentum ({hm_days}d)"
         else:
-            signal_desc = f"V2 Z-score ({hm_days}d)"
+            signal_desc = f"V2 - Z-score on carry slope ({hm_days}d)"
         fig_hm.update_layout(**CHART_LAYOUT, height=560,
                              title=dict(text=f"{product}: Carry Sharpe by Contract Pair ({signal_desc})",
                                         font=dict(size=13)),
@@ -840,7 +1059,7 @@ def _resolve_lookback_days(lb_label: str, lookback_map: dict[str, int]) -> int:
 @st.cache_data(show_spinner="Computing value Sharpe heatmap...")
 def value_heatmap(curve: pd.DataFrame, contracts: tuple[str, ...], lookback_items: tuple[tuple[str, int], ...],
                    threshold: float, f1r: pd.Series, f1c: pd.Series, start: str, end: str,
-                   shift_n: int) -> pd.DataFrame:
+                   shift_n: int, geo: bool = False) -> pd.DataFrame:
     """Gross Sharpe for every (contract, lookback) combination, over [start, end],
     at a fixed threshold (selected above the heatmap, not a grid axis -- the
     deviation signal always needs some threshold to fire, unlike Carry's
@@ -1007,9 +1226,9 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     with c2:
         metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
     with c3:
-        metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+        metric_card(ann_label(), _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
     with c4:
-        metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+        metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
     with c5:
         metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
 
@@ -1039,9 +1258,13 @@ def render_value_tab(curve: pd.DataFrame, f1r: pd.Series, f1c: pd.Series, produc
     val_hm_yr = st.slider("Year range for heatmap", yr0, yr1, (yr0, yr1), key=f"{key_prefix}_val_hm_yr")
 
     lookback_items = tuple(lookback_map.items())
-    hm_df = value_heatmap(curve, tuple(all_contracts), lookback_items, hm_thr, f1r, f1c,
-                          f"{val_hm_yr[0]}-01-01", f"{val_hm_yr[1]}-12-31", shift_n)
-    if not hm_df.empty and hm_df["sharpe"].notna().any():
+    hm_df = (value_heatmap(curve, tuple(all_contracts), lookback_items, hm_thr, f1r, f1c,
+                           f"{val_hm_yr[0]}-01-01", f"{val_hm_yr[1]}-12-31", shift_n, is_geometric())
+             if _heatmap_gate(f"{key_prefix}_val_hm", (val_hm_yr, hm_thr, shift_n, is_geometric(), lookback_items,
+                                                        tuple(all_contracts)), f1r, f1c) else None)
+    if hm_df is None:
+        pass
+    elif not hm_df.empty and hm_df["sharpe"].notna().any():
         lb_order = list(lookback_map.keys())
         pivot = hm_df.pivot(index="contract", columns="lookback", values="sharpe").reindex(
             index=all_contracts, columns=lb_order)
@@ -1124,23 +1347,23 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
             with c2:
                 metric_card("Net Sharpe", _fmt_metric(m["net"], "{:+.2f}"))
             with c3:
-                metric_card("Ann PnL (Net)", _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {unit_label}")
+                metric_card(ann_label(), _fmt_metric(m["ann"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
             with c4:
-                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {unit_label}")
+                metric_card("Max DD (Net)", _fmt_metric(m["mdd"], "{:+,.2f}"), unit=f" {pnl_unit(unit_label)}")
             with c5:
                 metric_card("% Flat", _fmt_metric(m["flat_pct"], "{:.0f}"), unit="%")
         else:
             table_rows = [{
                 "Strategy": label,
                 "Gross Sharpe": m["gross"], "Net Sharpe": m["net"],
-                f"Ann PnL Net ({unit_label})": m["ann"], f"Max DD Net ({unit_label})": m["mdd"],
+                f"{ann_label()} ({pnl_unit(unit_label)})": m["ann"], f"Max DD (Net) ({pnl_unit(unit_label)})": m["mdd"],
                 "% Flat": m["flat_pct"],
             } for label, m in metrics_by_label.items()]
             mdf = pd.DataFrame(table_rows).set_index("Strategy")
             st.dataframe(
                 mdf.style.format({
                     "Gross Sharpe": "{:+.2f}", "Net Sharpe": "{:+.2f}",
-                    f"Ann PnL Net ({unit_label})": "{:+,.2f}", f"Max DD Net ({unit_label})": "{:+,.2f}",
+                    f"{ann_label()} ({pnl_unit(unit_label)})": "{:+,.2f}", f"Max DD (Net) ({pnl_unit(unit_label)})": "{:+,.2f}",
                     "% Flat": "{:.0f}",
                 }),
                 use_container_width=True,
@@ -1158,7 +1381,7 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     # stay warmed up on full history; only the displayed/summed window
     # narrows), independent of any "Year range for performance metrics"
     # slider elsewhere on this tab. ──────────────────────────────────────────
-    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}): Net of TC**")
+    st.markdown(f"**{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} (Equity Curve, {pnl_unit(unit_label)}): Net of TC**")
     start, end = _time_window_slider(f1r, key_prefix)
     pnl_by_label = {label: net_pnl for label, (gross_pnl, net_pnl) in pnl_cache.items()}
     _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix, unit_label)
@@ -1240,7 +1463,7 @@ def _plot_equity_curve_from_pnl(pnl_by_label: dict[str, pd.Series], start: pd.Ti
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    layout = dict(CHART_LAYOUT, height=380, yaxis_title=f"Cumulative PnL ({unit_label})")
+    layout = dict(CHART_LAYOUT, height=380, yaxis_title=f"{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} ({pnl_unit(unit_label)})")
     if vol_series is not None:
         vol_w = vol_series[(vol_series.index >= start) & (vol_series.index <= end)]
         fig_eq.add_trace(go.Scatter(
@@ -1280,7 +1503,7 @@ def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.
     its own time-period slider (default = full history) directly above the
     chart -- narrowing it re-baselines the curve to 0 at that start date,
     independent of the 'Year range for performance metrics' slider above."""
-    st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}): Net of TC**")
+    st.markdown(f"**{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} (Equity Curve, {pnl_unit(unit_label)}): Net of TC**")
     options = list(positions.keys())
     _sync_multiselect_new_options(f"{key_prefix}_equity_select", options)
     chosen = st.multiselect("Strategies to show", options=options,
@@ -1439,7 +1662,7 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
             positions = {label: all_positions[label] for label in chosen}
 
             st.divider()
-            st.markdown(f"**Cumulative PnL (Equity Curve, {unit_label}): Net of TC**")
+            st.markdown(f"**{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} (Equity Curve, {pnl_unit(unit_label)}): Net of TC**")
             start, end = _time_window_slider(f1r, key_prefix + "_cmp")
             show_vol_overlay = st.checkbox(
                 f"Superimpose Volatility ({vol_window_label} window, from the chart above)",

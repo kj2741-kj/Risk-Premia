@@ -7,10 +7,10 @@ research/configs/metals.py / precious.py's structure.
 
 Signal form and most parameters are identical to Metals/Precious Metals:
   - Momentum: 3-way MA-crossover composite, (1,20)/(5,60)/(20,250).
-  - Carry: V1(Level)+V2(Z-score) composite, TWO tenor pairs (per user's
+  - Carry: V1 (Carry slope) + V2 (Z-score on carry slope) composite, TWO tenor pairs (per user's
     explicit choice: Energy keeps the Metals-style two-tier structure rather
     than Bogorad's single F4-F15, which is used for NGL instead).
-  - Carry-Momentum: same horizon=20, kept separate from the Carry composite.
+  - Carry momentum: same horizon=20, kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes) / 5yr lookback / +-10% threshold.
 
@@ -51,6 +51,7 @@ import sys
 import numpy as np
 import pandas as pd
 
+from imputed_tenors import apply_imputed   # research/imputed_tenors.py (same folder tree as engine.py on sys.path)
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _RESEARCH_DIR = os.path.dirname(_THIS_DIR)
 _REPO_ROOT = os.path.dirname(_RESEARCH_DIR)
@@ -58,7 +59,7 @@ _SCRIPTS_DIR = os.path.join(_REPO_ROOT, "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from rolling_continuous import (ENERGY_CALENDAR_FILE, ENERGY_CONFIG,  # noqa: E402
+from rolling_continuous import (apply_data_fixes, ENERGY_CALENDAR_FILE, ENERGY_CONFIG,  # noqa: E402
                                  ENERGY_FUTURES_FILE, get_metal_rolling_f1,
                                  reanchor_f1_continuous)
 from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio  # noqa: E402
@@ -72,7 +73,7 @@ METAL_CODES = {"WTI": "CL", "Brent": "CO", "RBOB": "XB", "HeatingOil": "HO",
 
 SHEET_NAMES = {"WTI": "WTI Crude (NYMEX)", "Brent": "Brent Crude (ICE)",
                "RBOB": "RBOB Gasoline (NYMEX)", "HeatingOil": "Heating Oil ULSD (NYMEX)",
-               "NatGas": "Nat Gas Henry Hub (NYMEX)", "SingaporeGasoil": "Singapore Gasoil (ICE)",
+               "NatGas": "Nat Gas Henry Hub (NYMEX)", "SingaporeGasoil": "Low Sulphur Gasoil (ICE Europe)",
                "FuelOil": "Fuel Oil 3.5pct Barges (ICE)"}
 
 CURVE_FILE = ENERGY_FUTURES_FILE
@@ -89,6 +90,19 @@ MOMENTUM_SHIFT_N = 1
 CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3"), ("F1", "F13")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
+
+# ── Roll rule (2026-10-11) ───────────────────────────────────────────────────
+# Every research number (run_regime_table.py, cross_asset_engine.py, Final_Research_Dashboard.html) rolls on the 5th trading day
+# of the month in which each contract's last trade date falls, not 5 trading days before it. See scripts/rolling_continuous.py
+# (ROLL_RULES). The Streamlit apps keep their own "Rolling Logic" selector and are unaffected.
+ROLL_RULE = "expiry_month_nth_td"
+ROLL_N = 5
+
+
+def carry_pairs(product: str) -> list[tuple[str, str]]:
+    """Carry / Carry-Momentum tenor pairs for one product (blended at signal level, sign-vote). Uniform across this asset class's
+    products: CARRY_TENOR_PAIRS."""
+    return list(CARRY_TENOR_PAIRS)
 
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
@@ -158,6 +172,9 @@ def load_curve(product: str) -> pd.DataFrame:
             spread_21 = brent.loc[d21, "F1"] - curve.loc[d21, "F1"]
             avg_spread = (spread_17 + spread_21) / 2
             curve.loc[anomaly, "F1"] = brent.loc[anomaly, "F1"] - avg_spread
+    curve = apply_data_fixes(curve, SHEET_NAMES[product], "F1")   # source-data fixes, see rolling_continuous.DATA_FIXES
+    if product == "HeatingOil":
+        curve = apply_imputed(curve, "HEATING_OIL")   # F13 missing 2012-04-02..27 (first ULSD-grade month not yet listed), same-grade fill, see imputed_tenors.py
     return curve
 
 
@@ -168,7 +185,8 @@ def load_f1_series(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown Energy product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1(METAL_CODES[product], futures_file=CURVE_FILE,
-                               calendar_file=CALENDAR_FILE, config=ENERGY_CONFIG, verbose=False)
+                               calendar_file=CALENDAR_FILE, config=ENERGY_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     return reanchor_f1_continuous(df)
 
@@ -179,9 +197,16 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown Energy product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1_ratio(METAL_CODES[product], futures_file=CURVE_FILE,
-                                     calendar_file=CALENDAR_FILE, config=ENERGY_CONFIG, verbose=False)
+                                     calendar_file=CALENDAR_FILE, config=ENERGY_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     df = reanchor_f1_continuous_ratio(df)
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)
     df["log_price"] = np.log(price)
+    if product == "WTI":
+        # 2026-10-11: Momentum reads F1_raw, which still held the -37.63 print of 2020-04-20. Use the same imputed value load_curve() gives
+        # Carry and Value. Only the signal input changes; the continuous series (already on the second contract that day) is untouched.
+        anomaly = pd.Timestamp("2020-04-20")
+        if anomaly in df.index:
+            df.loc[anomaly, "F1_raw"] = load_curve("WTI").loc[anomaly, "F1"]
     return df

@@ -326,6 +326,63 @@ def transaction_cost(pos, f1r, tc_bps: int, phase=None):
     return tc
 
 
+RETURN_BASIS_OPTIONS = ["Arithmetic ($ PnL)", "Geometric (% return)"]
+RETURN_BASIS_KEY = "return_basis"
+
+
+def return_basis_selector() -> None:
+    """Sidebar radio (call once per app.py, inside `with st.sidebar`). The choice lives in
+    st.session_state[RETURN_BASIS_KEY]; every metric/equity helper reads it through is_geometric()."""
+    st.radio("Return basis", RETURN_BASIS_OPTIONS, index=1, key=RETURN_BASIS_KEY,
+             help="Arithmetic: position x dollar change of F1_continuous, equity = cumulative sum, "
+                  "in the product's native unit. Geometric: position x ratio-adjusted daily log return, "
+                  "compounded (equity = exp(cumsum) - 1, in %), the same convention the Portfolio tab uses.")
+
+
+def is_geometric() -> bool:
+    return st.session_state.get(RETURN_BASIS_KEY, RETURN_BASIS_OPTIONS[1]) == RETURN_BASIS_OPTIONS[1]
+
+
+GEO_INPUTS_KEY = "_geo_inputs"
+
+
+def register_geo_inputs(f1_df) -> None:
+    """Call once per app.py right after F1_continuous is built. Stores the full-history F2_raw and Phase
+    so the geometric basis can use the exact ratio return log(1 + dF1c / price of the contract held at
+    t-1) (F1_raw on F1_Tracking days, F2_raw on roll / F2_Tracking / bridge days) in every tab, heatmap
+    and equity curve without threading f2r through each renderer."""
+    st.session_state[GEO_INPUTS_KEY] = (f1_df["F2_raw"], f1_df["Phase"])
+
+
+def geo_log_returns(f1r, f1c, phase=None):
+    """Daily log returns of the ratio-stitched continuous series (research/engine.py::ratio_log_returns),
+    exact when register_geo_inputs() ran, F1_raw(t-1)-denominator fallback otherwise."""
+    from engine import ratio_log_returns
+    reg = st.session_state.get(GEO_INPUTS_KEY)
+    if reg is not None:
+        f2r_full, phase_full = reg
+        return ratio_log_returns(f1c, f1r, f2r_full.reindex(f1c.index), phase_full.reindex(f1c.index))
+    return ratio_log_returns(f1c, f1r, None, phase)
+
+
+def geometric_daily_returns(pos, f1r, f1c, tc_bps: int, phase=None):
+    """Gross and net daily LOG returns of `pos` on the ratio-stitched series rebuilt from the dashboard's
+    additive F1_continuous (see geo_log_returns), with the bps-only TC of log_return_daily(). Same
+    convention as the Portfolio tab."""
+    from engine import log_return_daily
+    log_price = geo_log_returns(f1r, f1c, phase).fillna(0.0).cumsum()
+    return log_return_daily(pos.reindex(f1c.index).fillna(0.0), log_price, tc_bps, phase)
+
+
+def pnl_unit(unit_label: str) -> str:
+    """Unit shown next to Ann/MDD/equity values: '%' in geometric mode, the native unit otherwise."""
+    return "%" if is_geometric() else unit_label
+
+
+def ann_label() -> str:
+    return "Ann Return (Net)" if is_geometric() else "Ann PnL (Net)"
+
+
 def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
     """Active-day gross/net Sharpe, annualized $PnL, max-DD ($) for a position series.
     PnL on F1_continuous; TC on F1_raw. All metrics in native dollar/unit terms (e.g.
@@ -342,6 +399,19 @@ def pos_metrics_generic(pos, f1r, f1c, tc_bps: int = 5, phase=None) -> dict:
     before-costs reference point. Pass `phase` to also charge roll-day TC
     (see transaction_cost())."""
     pos = pos.reindex(f1c.index).fillna(0.0)
+    if is_geometric():
+        gp, net = geometric_daily_returns(pos, f1r, f1c, tc_bps, phase)
+
+        def _sg(r):
+            a = r[pos != 0].dropna()
+            return float(a.mean() / a.std(ddof=1) * np.sqrt(252)) if len(a) > 20 and a.std(ddof=1) > 0 else np.nan
+
+        value = np.exp(net.fillna(0).cumsum())
+        log_ann = net.dropna().mean() * 252 if net.notna().any() else np.nan
+        return dict(gross=_sg(gp), net=_sg(net),
+                    ann=float((np.exp(log_ann) - 1) * 100) if pd.notna(log_ann) else np.nan,
+                    mdd=float((value / value.cummax() - 1).min() * 100), nact=int((pos != 0).sum()),
+                    flat_pct=float(100 * (pos == 0).sum() / len(pos)) if len(pos) else np.nan)
     gp = pos * f1c.diff()
     tc = transaction_cost(pos, f1r, tc_bps, phase)
     net = gp - tc

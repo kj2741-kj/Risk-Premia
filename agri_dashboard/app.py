@@ -1,34 +1,25 @@
 """
 Agriculture Dashboard - Stage 2
 ==================================
-Standalone Streamlit app, its own separate deployment. Corn, Wheat, Oats,
-Rough Rice, Soybean, Soybean Oil, Soybean Meal, Coffee, Cocoa, Orange
-Juice, Cotton No.2, Feeder Cattle, Live Cattle, Lean Hogs. Momentum /
-Carry / Value only, same format as the Metals/Energy/Precious Metals
-Stage 2 rebuilds -- reuses the identical shared engine (common_engine.py)
-so all 5 dashboards behave identically.
+Standalone Streamlit app, its own separate deployment. Six products only
+(Corn, Wheat, Soybean, Soybean Oil, Coffee C, Sugar No.11), the Agriculture
+book in Analysis/Final_Research_Dashboard.html. Momentum / Carry / Value /
+Comparison tabs plus a Portfolio tab, same format as the Metals, Energy,
+Precious Metals and NGL dashboards -- reuses the identical shared engine
+(common_engine.py, dashboard_portfolio_tab.py).
 
-Data source: data/Prices_0924/ (2026-09-24 Bloomberg pull) -- separate,
-newer vintage than the other 4 asset classes' data/06-30/ files.
+Data source: data/Prices_0924/ (2026-09-24 Bloomberg pull). Roll calendar:
+Agri_Rolling_Calendar_bloomberg_matched.xlsx (contract months Bloomberg's
+generic F1..Fn actually uses; F1 rebuilt from it matches Bloomberg 100%).
+This also supplies a clean Sugar calendar, so Sugar is back in.
 
-NOTE: Sugar No.11 (ICE) is in the source price data but excluded here --
-no usable expiry-calendar coverage. The Prices_0924 calendar source
-(Expiry_Calendars_Updated_2.xlsx) has confirmed corrupted Sugar contract
-dates (off-cycle month codes duplicate a real contract's date; 16 recent
-contracts share an identical stale date) -- excluded pending a clean
-re-pull, not just a dashboard-display choice. See
-scripts/rolling_continuous.py's AGRI_CONFIG comment and the
-project_agri_expiry_calendar_source_errors memory.
-
-NO PORTFOLIO TAB YET: Carry tenor pairs are not locked for this asset
-class (user's explicit decision, 2026-09-29 -- Agri's 14 products range
-from F1-F6 to F1-F10 depth, unlike Metals' uniform F1-F27, so no single
-pair can be copied from another asset class). The Portfolio tab needs a
-fixed Carry/CarryMom sleeve definition to combine across products, which
-doesn't exist yet -- adding it now would mean either crashing on an empty
-tenor-pair list or silently guessing one. Momentum/Carry/Value/Comparison
-tabs below are fully interactive (tenor/lookback pickers live in the UI)
-and do not depend on this locked decision at all.
+Carry tenor pair: F1-F2 is the default (the pair locked in the final
+dashboard, "no long pair defined yet"). It is only a default: the Carry tab
+and the Portfolio tab both let the user pick any (Near, Far) pair for V1, V2
+and V3. The other nine products of the original 14-product build (Oats,
+Rough Rice, Soybean Meal, Cocoa, Orange Juice, Cotton, Feeder/Live Cattle,
+Lean Hogs) are dropped from this dashboard; their calendar and data still
+exist in scripts/rolling_continuous.py's AGRI_CONFIG.
 """
 
 import os
@@ -41,13 +32,45 @@ sys.path.insert(0, _REPO_ROOT)
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research"))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
+# 2026-10-31: the Streamlit apps read the latest merged data (29-Oct pull on top of the 24-Sep history), not data/Prices_0924. scripts/rolling_continuous.py reads this env var;
+# the research scripts leave it unset and keep their own data folders.
+os.environ.setdefault("RP_PRICES_DIR", "Prices_1029_merged")
 
-from common_shared import inject_css, section_header
+def _refresh_repo_modules(root=_REPO_ROOT):
+    """Streamlit Cloud keeps imported modules alive across a git pull and reloads only files inside the app's own folder, so a push that
+    changes a shared module (common_engine, research/*, scripts/*) breaks the running app until someone reboots it. Drop the repo's
+    modules when any of their files changed since the last run (and on the first run of a process); the imports below then read the
+    current code."""
+    current = {}
+    for name, mod in list(sys.modules.items()):
+        f = getattr(mod, "__file__", None)
+        if f and name != "__main__" and os.path.abspath(f).startswith(root + os.sep):
+            try:
+                current[name] = os.stat(f).st_mtime_ns
+            except OSError:
+                pass
+    previous = getattr(sys, "_rp_module_stamps", None)
+    if previous is None or any(previous.get(n, s) != s for n, s in current.items()):
+        for name in current:
+            sys.modules.pop(name, None)
+        sys._rp_module_stamps = dict(current)
+    else:
+        sys._rp_module_stamps = {**current, **previous}
+
+
+_refresh_repo_modules()
+
+
+from common_shared import inject_css, section_header, return_basis_selector, register_geo_inputs
 from common_curve_loader import load_curve_simple
-from common_engine import render_momentum_tab, render_carry_tab, render_value_tab, render_comparison_tab
+from common_engine import (render_momentum_tab, render_carry_tab, render_value_tab, render_skewness_tab,
+                           render_comparison_tab)
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
-                                 AGRI_CONFIG, AGRI_FUTURES_FILE, AGRI_CALENDAR_FILE)
+                                 AGRI_BBG_CONFIG as AGRI_CONFIG, AGRI_FUTURES_FILE,
+                                 AGRI_CALENDAR_FILE_BBG as AGRI_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
+from dashboard_portfolio_tab import render_portfolio_tab
+import agri as agri_research_cfg
 
 st.set_page_config(
     page_title="Agriculture Risk Premia - Stage 2",
@@ -60,15 +83,15 @@ inject_css()
 # unit_label: the product's natural pricing unit, used only for the
 # TC-per-flip $ display in the sidebar -- has no effect on the Sharpe/PnL math.
 PRODUCT_UNITS = {
-    "C": "¢/bu", "W": "¢/bu", "O": "¢/bu", "RR": "$/cwt", "S": "¢/bu",
-    "BO": "¢/lb", "SM": "$/ton", "KC": "¢/lb", "CC": "$/MT", "JO": "¢/lb",
-    "CT": "¢/lb", "FC": "¢/lb", "LC": "¢/lb", "LH": "¢/lb",
+    "C": "¢/bu", "W": "¢/bu", "S": "¢/bu", "BO": "¢/lb", "KC": "¢/lb", "SB": "¢/lb",
 }
-PRODUCT_ORDER = ["C", "W", "O", "RR", "S", "BO", "SM", "KC", "CC", "JO", "CT", "FC", "LC", "LH"]
+PRODUCT_ORDER = ["C", "W", "S", "BO", "KC", "SB"]
 
 with st.sidebar:
     st.markdown('<p class="main-title">🌾 Agriculture Dashboard</p>', unsafe_allow_html=True)
-    st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-subtitle">Stage 2 — Momentum, Carry, Value, Skewness</p>', unsafe_allow_html=True)
+    st.divider()
+    return_basis_selector()
     st.divider()
     product_code = st.radio(
         "Product", PRODUCT_ORDER, key="agri_product_choice",
@@ -78,15 +101,12 @@ with st.sidebar:
     st.markdown("**Rolling Configuration**")
     roll_method = st.selectbox(
         "Rolling Logic",
-        ["N days before last trading day", "Nth trading day of the month"],
-        index=0, key="agri_roll_method",
+        ["N days before last trading day", "Nth trading day of the expiry month"],
+        index=1, key="agri_roll_method",   # default: Nth trading day of the expiry month (same roll as the research numbers), 2026-10-11
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="agri_roll_n")
-    st.caption("Sugar No.11 (ICE) is excluded — confirmed corrupted expiry-calendar data in the "
-               "2026-09-24 source pull, not a usable roll calendar. No Portfolio tab yet: Carry tenor "
-               "pairs aren't locked for this asset class (pending, per-product depth varies F1-F6 to "
-               "F1-F10). Momentum/Carry/Value/Comparison below are unaffected — same "
-               "Momentum/Carry/Value format as the Metals, Energy, Precious Metals, and NGL dashboards.")
+    st.caption("Six products, Bloomberg-matched roll calendar. Carry defaults to the F1-F2 pair; "
+               "the Carry and Portfolio tabs let you pick any other (Near, Far) pair.")
 
 cfg = AGRI_CONFIG[product_code]
 unit = PRODUCT_UNITS[product_code]
@@ -105,6 +125,7 @@ if f1_df.empty:
 f1_df = reanchor_f1_continuous(f1_df[f1_df.index.year >= 2006])
 f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
 phase = f1_df["Phase"]
+register_geo_inputs(f1_df)
 
 curve = load_curve_simple(AGRI_FUTURES_FILE, cfg["price_sheet"])
 curve = curve[curve.index.year >= 2006]
@@ -113,8 +134,8 @@ st.markdown(f'<p class="main-title">🌾 Agriculture Risk Premia — {cfg["name"
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
-tab_mom, tab_carry, tab_val, tab_compare = st.tabs(
-    ["⚡ Momentum", "📐 Carry", "📏 Value", "🔀 Comparison"])
+tab_mom, tab_carry, tab_val, tab_skew, tab_compare, tab_portfolio = st.tabs(
+    ["⚡ Momentum", "📐 Carry", "📏 Value", "📉 Skewness", "🔀 Comparison", "🧮 Portfolio"])
 
 key_prefix = f"agri_{product_code}"
 
@@ -129,7 +150,18 @@ with tab_val:
     value_positions = render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix,
                                         contracts=contracts, phase=phase)
 
+with tab_skew:
+    skew_positions = render_skewness_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,
+                                       f2r=f1_df["F2_raw"])
+
 with tab_compare:
     render_comparison_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,
                            strategy_groups={"Momentum": mom_positions, "Carry": carry_positions,
-                                            "Value": value_positions})
+                                            "Value": value_positions, "Skewness": skew_positions})
+
+with tab_portfolio:
+    st.caption("Combines the 6 Agriculture products (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar) "
+               "into one asset-class-level portfolio, independent of the sidebar's Product selection above, "
+               "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. Carry and Carry momentum default "
+               "to the F1-F2 pair; change Near/Far in Portfolio Construction below to use another tenor.")
+    render_portfolio_tab(agri_research_cfg, key_prefix="agri_portfolio")

@@ -1,5 +1,7 @@
 # Risk Premia — Multi-Asset Momentum/Carry/Value Research
 
+> **Portfolio construction rules (2026-10-10): Carry = V2 (z-score on carry slope) only, blended across the short and long tenor pairs; Momentum = default 3-crossover composite, at every level. See [`Readme Portfolio construction 10 Oct.md`](<Readme Portfolio construction 10 Oct.md>) for the definition, tenors per asset class and status. The code still builds the older V1+V2 composite until that rule is implemented.**
+
 ## What's here
 
 Two layers:
@@ -20,16 +22,21 @@ Two layers:
 | `run_regime_table.py` | Canonical full-sample + regime-conditional IR table builder — run this, not ad hoc scripts, for reportable numbers. |
 | `generate_tradebooks_logret.py` | Formula-driven Excel tradebooks (one workbook per strategy, one sheet per product) for auditing the engine. Asset class selected via `TRADEBOOK_ASSET_CLASS` env var. Outputs are gitignored (large, regeneratable) — see below. |
 
+## Engine update (2026-10-11)
+
+Read `ENGINE_CHANGELOG.md` first for the dated, file-by-file log. Summary: all five asset classes read the 2026-09-24 price files in `data/Prices_0924` (data through 2026-09-23; NGL via the label-corrected workbook); research numbers roll on the 5th trading day of each contract's expiry month (`ROLL_RULE` in `research/configs/*.py`; the original "N days before last trade date" rule is still the default of the roll builders and of the Streamlit apps); Carry and Carry-Momentum in `research/run_regime_table.py` follow the 10 Oct rule (V2-only, sign-vote across tenor pairs); Precious and Agriculture use a short F1-F2 pair plus a per-product long pair (`carry_pairs(product)` in their configs). The Status section below predates this update where they differ.
+
 ## Status (as of 2026-08-03)
 
 **IMPORTANT for anyone (human or AI agent) reading this repo: the engine's `configs/*.py` PRODUCTS lists and what the LIVE DASHBOARDS actually show/compute are deliberately different as of 2026-08-03.** See "Dashboard-only product exclusions" below before assuming a product that appears in a config file is also in the dashboard/Portfolio tab, or vice versa.
 
 All 4 asset classes have a locked ex-ante strategy set and a full-sample + regime-conditional result. Value's anchor contract is **F3** everywhere (changed from F8 2026-08-03, applied uniformly):
 
-- **Metals** (Copper/Aluminium/Lead/Zinc): Momentum, Carry V1+V2 (F1-F3 and F1-F13), Carry-Momentum (V3), Value (F3). Unchanged since 2026-07-24. FDR (q=0.10) on the 49-cell grid: **0 survivors**.
+- **Metals** (Copper/Aluminium/Lead/Zinc): Momentum, Carry V1+V2 (carry slope + z-score on carry slope) (F1-F3 and F1-F13), Carry momentum (V3), Value (F3). Unchanged since 2026-07-24. FDR (q=0.10) on the 49-cell grid: **0 survivors**.
 - **Precious Metals** (Gold/Silver/Copper-COMEX/Platinum/Palladium): Carry tenor is **F1-F3** (changed 2026-08-03 from F1-F2 — user's explicit decision, overriding a real-volume liquidity finding that Platinum/Palladium F3 liquidity is weak, 87.0%/68.5% days traded; see `configs/precious.py`'s docstring for the full caveat).
 - **Energy** (engine PRODUCTS: WTI/Brent/RBOB/HeatingOil/NatGas/SingaporeGasoil/FuelOil — **dashboard shows only the first 5**, see below): Carry F1-F3 + **F1-F13** (changed 2026-08-03 from F1-F12, to match Metals). Fuel Oil has no F13 column at all and is still in this file's PRODUCTS list, so its Carry(F1-F13)/CarryMom(F1-F13) leg is silently flat/zero in `run_regime_table.py`'s reports (no crash, just a disclosed dilution) — irrelevant to the dashboard since Fuel Oil isn't shown there. WTI's 2020-04-20 negative print patched (single-cell impute).
 - **NGL** (engine PRODUCTS: Ethane/Propane/Butane/Isobutane/Ethylene/Propylene — **dashboard shows only the first 4**, see below): Carry is now **two tiers** as of 2026-08-03 — F2-F4 (short, new) and F2-F14 (changed from Bogorad's original F4-F15, for a 12- rather than 11-month span). Neither pair has been re-verified for liquidity/seasonality since; see `configs/ngl.py`'s docstring for the specific caveat (F2 reintroduces near-tenor heating-season seasonality that F4 was originally chosen to avoid).
+- **Agriculture** (updated 2026-10-11): six products only (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar No.11), the book in `Analysis/Final_Research_Dashboard.html`, on `Agri_Rolling_Calendar_bloomberg_matched.xlsx` (config: `AGRI_BBG_CONFIG` in `scripts/rolling_continuous.py`). Carry default is **F1-F2**, customisable in the Streamlit Carry and Portfolio tabs. The Streamlit Agri dashboard now has a Portfolio tab. Reproduces the final dashboard's Agri rows exactly (Momentum -0.148, Carry V2 -0.328, CarryMom -0.107, Value -0.020, EW PORT -0.284). In the cross-asset hub as a fifth selectable asset class (`ALL_ASSET_CLASSES` in `research/cross_asset_engine.py`); the validated four-class reference forms (`ASSET_CLASSES`) are unchanged.
 - **StatArb** (Energy/NGL only — Metals/Precious tested and genuinely null): 8 cross-commodity spreads, none of which reference Singapore Gasoil, Fuel Oil, Ethylene, or Propylene. FDR (q=0.10) on 64 valid cells: **2 survivors** — EW StatArb(8) full-sample (p=0.00052, the standout) and one isolated regime cell. **This is the first FDR-robust result in the project.** Not yet rerun since the 2026-08-03 tenor changes above (StatArb's own tenors are unaffected, but hasn't been re-verified).
 
 ### Dashboard-only product exclusions (2026-08-03) — read this before touching products lists
@@ -57,3 +64,7 @@ Not started at all: correlation/least-correlated-combination test across the 4 a
 - Parameters are locked **ex ante** (convention / economic reasoning / liquidity data), never by scanning for the best in-sample Sharpe — see each `configs/*.py` for the specific justification per asset class.
 - `tradebooks_logret/`, `tradebooks_logret_energy/`, `tradebooks_logret_ngl/` (once built) are **gitignored** — large (multi-MB per workbook), fully regeneratable from `generate_tradebooks_logret.py`. Same convention as the existing `tradebooks/` folder.
 - `scratch/` is gitignored — throwaway/debug scripts and images, not part of the pipeline.
+
+## Cross-asset hub Carry (2026-10-11)
+
+`research/cross_asset_engine.py` now builds Carry as **V2 (z-score on carry slope) only** by default, the 10 Oct rule, with each asset class's config tenor pairs blended at signal level. With the hub's Carry settings left at default, the engine reproduces `Analysis/Final_Research_Dashboard.html` exactly: all six per-class tabs and all four combined-book rows, in both the NatGas and ex-NatGas versions. The older V1+V2 composite is still available as `CarrySpec(variants=("V1","V2"))`. The hub's Cross-Asset tab has a Carry settings panel (signals, z-window, Carry momentum horizon, one or two tenor pairs per asset class); anything other than the default is labelled CUSTOM. The per-asset-class dashboards' Portfolio tabs still build the V1+V2 reference Carry until the rule is implemented there.

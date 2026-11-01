@@ -5,7 +5,7 @@ Two parts. Reference Strategies: the six locked, officially reported
 strategy configurations (Momentum, Carry F1-F3, Carry F1-F13, CarryMom
 F1-F3, CarryMom F1-F13, Value), shown read-only as a comparison baseline.
 Portfolio Construction: a single draft spanning all four strategy families
-(Momentum, Carry, Carry-Momentum, Value), each off by default. Toggling a
+(Momentum, Carry, Carry momentum, Value), each off by default. Toggling a
 family on reveals its own editable leg list; leaving a family off excludes
 it entirely. One Add Portfolio button combines whichever families are
 toggled on -- equal-weighted at the return level if more than one -- into
@@ -66,21 +66,27 @@ for _p in (_REPO_ROOT, _RESEARCH_DIR, _RESEARCH_CONFIGS_DIR):
 from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E402
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
-                     raw_signal_carrymom, raw_signal_momentum, raw_signal_value)
+                     raw_signal_carrymom, raw_signal_momentum, raw_signal_skewness, raw_signal_value)
+from carry_zsum import carry_slope_change, carry_z, combined_carry_signal, combined_carrymom_signal, summed_signal  # noqa: E402  (2026-10-13: V2 legs are combined by summing z-scores, see research/carry_zsum.py)
 from risk_parity import rolling_erc_combine  # noqa: E402
 from drp import rolling_drp_combine  # noqa: E402
 
 COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"]
 
 FAR_NEAR_OPTIONS = [f"F{i}" for i in range(1, 16)]
-CARRY_TYPES = ["V1 Level", "V2 Z-score", "V3 Carry-Momentum"]
+CARRY_TYPES = ["V1 - Carry slope", "V2 - Z-score on carry slope", "V3 - Carry momentum"]
+V2_TYPE = "V2 - Z-score on carry slope"
 
-FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value"]
-FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value"}
+FAMILY_ORDER = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
+FAMILY_TITLE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry momentum", "Value": "Value",
+                "Skewness": "Skewness"}
+# Skewness (added 2026-10-12, Fernandez-Perez, Fuertes and Miffre 2021 Table 1, time-series form): window and lag
+# are the research settings (Analysis/Skewness_Research.html); a config may override via SKEWNESS_WINDOW / SKEWNESS_SHIFT_N.
+SKEWNESS_WINDOW_DEFAULT = 252
 # "Value": 1, changed from 2 -- user's decision 2026-08-04: shift_n=1 is now the locked
 # default for every strategy family, project-wide. See research/configs/metals.py's
 # VALUE_SHIFT_N comment for the full rationale.
-DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 1}
+DEFAULT_SHIFT_N = {"Momentum": 1, "Carry": 1, "CarryMom": 1, "Value": 1, "Skewness": 1}
 
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
            "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
@@ -132,12 +138,14 @@ def _new_leg(family: str, near: str = "F1", far: str = "F3") -> dict:
     if family == "Momentum":
         return {"leg_id": leg_id, "fast": 5, "slow": 60}
     if family == "Carry":
-        return {"leg_id": leg_id, "type": "V1 Level", "near": near, "far": far,
+        return {"leg_id": leg_id, "type": "V2 - Z-score on carry slope", "near": near, "far": far,
                 "zwindow": 252, "horizon": 20}
     if family == "CarryMom":
         return {"leg_id": leg_id, "near": near, "far": far, "horizon": 20}
     if family == "Value":
         return {"leg_id": leg_id, "contract": "F3", "lookback": 1260, "threshold": 0.10}
+    if family == "Skewness":
+        return {"leg_id": leg_id, "window": SKEWNESS_WINDOW_DEFAULT}
     raise ValueError(f"Unknown family {family!r}")
 
 
@@ -154,10 +162,9 @@ def _build_reference_strategies(cfg) -> list[dict]:
     for near, far in cfg.CARRY_TENOR_PAIRS:
         instances.append({
             "id": f"carry_{near}{far}", "family": "Carry", "label": f"Carry ({near}-{far})",
+            # 2026-10-13: V2 is the default and the reference Carry is V2 only (as in the dashboards since 10 Oct); the tenor pairs are combined by summing z-scores
             "legs": [
-                {"leg_id": uuid.uuid4().hex[:8], "type": "V1 Level", "near": near, "far": far,
-                 "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
-                {"leg_id": uuid.uuid4().hex[:8], "type": "V2 Z-score", "near": near, "far": far,
+                {"leg_id": uuid.uuid4().hex[:8], "type": "V2 - Z-score on carry slope", "near": near, "far": far,
                  "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
             ],
             "shift_n": cfg.CARRY_SHIFT_N, "combine_method": "equal_weight",
@@ -174,6 +181,11 @@ def _build_reference_strategies(cfg) -> list[dict]:
         "legs": [{"leg_id": uuid.uuid4().hex[:8], "contract": cfg.VALUE_CONTRACT,
                   "lookback": cfg.VALUE_LOOKBACK_DAYS, "threshold": cfg.VALUE_THRESHOLD}],
         "shift_n": cfg.VALUE_SHIFT_N, "combine_method": "equal_weight",
+    })
+    instances.append({
+        "id": "skew", "family": "Skewness", "label": "Skewness",
+        "legs": [{"leg_id": uuid.uuid4().hex[:8], "window": getattr(cfg, "SKEWNESS_WINDOW", SKEWNESS_WINDOW_DEFAULT)}],
+        "shift_n": getattr(cfg, "SKEWNESS_SHIFT_N", DEFAULT_SHIFT_N["Skewness"]), "combine_method": "equal_weight",
     })
     return instances
 
@@ -194,20 +206,18 @@ def _reference_leg_seed(cfg, family: str) -> list[dict]:
     pre-fill a draft sleeve the moment it is switched on -- so toggling a
     family on and clicking Add Portfolio with no further edits reproduces
     that family's own reference strategy exactly, directly answering "can I
-    just add from the reference strategies". Carry and Carry-Momentum use
+    just add from the reference strategies". Carry and Carry momentum use
     the FIRST locked tenor pair (matching "Carry (F1-F3)"/"CarryMom
     (F1-F3)"); a second tenor variant, where the asset class has one, stays
     available as its own reference row for comparison, not as a second
     slot within one portfolio -- a portfolio has at most one Carry sleeve
-    and one Carry-Momentum sleeve at a time, by design."""
+    and one Carry momentum sleeve at a time, by design."""
     if family == "Momentum":
         return [{"leg_id": uuid.uuid4().hex[:8], "fast": f, "slow": s} for f, s in cfg.MOMENTUM_PAIRS]
     near, far = cfg.CARRY_TENOR_PAIRS[0] if getattr(cfg, "CARRY_TENOR_PAIRS", None) else ("F1", "F3")
     if family == "Carry":
         return [
-            {"leg_id": uuid.uuid4().hex[:8], "type": "V1 Level", "near": near, "far": far,
-             "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
-            {"leg_id": uuid.uuid4().hex[:8], "type": "V2 Z-score", "near": near, "far": far,
+            {"leg_id": uuid.uuid4().hex[:8], "type": "V2 - Z-score on carry slope", "near": near, "far": far,
              "zwindow": cfg.CARRY_ZSCORE_WINDOW, "horizon": cfg.CARRY_MOMENTUM_HORIZON},
         ]
     if family == "CarryMom":
@@ -216,12 +226,15 @@ def _reference_leg_seed(cfg, family: str) -> list[dict]:
     if family == "Value":
         return [{"leg_id": uuid.uuid4().hex[:8], "contract": cfg.VALUE_CONTRACT,
                  "lookback": cfg.VALUE_LOOKBACK_DAYS, "threshold": cfg.VALUE_THRESHOLD}]
+    if family == "Skewness":
+        return [{"leg_id": uuid.uuid4().hex[:8], "window": getattr(cfg, "SKEWNESS_WINDOW", SKEWNESS_WINDOW_DEFAULT)}]
     raise ValueError(f"Unknown family {family!r}")
 
 
 def _reference_shift_n(cfg, family: str) -> int:
     return {"Momentum": cfg.MOMENTUM_SHIFT_N, "Carry": cfg.CARRY_SHIFT_N,
-            "CarryMom": cfg.CARRY_MOMENTUM_SHIFT_N, "Value": cfg.VALUE_SHIFT_N}[family]
+            "CarryMom": cfg.CARRY_MOMENTUM_SHIFT_N, "Value": cfg.VALUE_SHIFT_N,
+            "Skewness": getattr(cfg, "SKEWNESS_SHIFT_N", DEFAULT_SHIFT_N["Skewness"])}[family]
 
 
 def _blank_draft() -> dict:
@@ -251,12 +264,12 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
         near, far = leg.get("near"), leg.get("far")
         if near is None or far is None:
             return pd.Series(dtype=float)
-        leg_type = leg.get("type", "V1 Level")
-        if leg_type == "V1 Level":
+        leg_type = leg.get("type", "V1 - Carry slope")
+        if leg_type == "V1 - Carry slope":
             return raw_signal_carry_v1(curve, near, far)
-        if leg_type == "V2 Z-score":
+        if leg_type == "V2 - Z-score on carry slope":
             return raw_signal_carry_v2(curve, near, far, int(leg.get("zwindow") or 252))
-        if leg_type == "V3 Carry-Momentum":
+        if leg_type == "V3 - Carry momentum":
             horizon = leg.get("horizon")
             if horizon is None:
                 return pd.Series(dtype=float)
@@ -272,7 +285,20 @@ def _leg_raw_signal(family: str, leg: dict, product_data: dict) -> pd.Series:
         if contract is None or lookback is None or threshold is None:
             return pd.Series(dtype=float)
         return raw_signal_value(curve, contract, int(lookback), float(threshold))
+    if family == "Skewness":
+        window = leg.get("window")
+        if window is None:
+            return pd.Series(dtype=float)
+        return raw_signal_skewness(product_data["log_price"], int(window))
     raise ValueError(f"Unknown family {family!r}")
+
+
+def _leg_z(leg: dict, product_data: dict) -> pd.Series:
+    """Raw (unsigned) V2 z-score of one Carry leg, for combining several V2 legs by SUMMING z-scores (2026-10-13). Empty if the leg is not a complete V2 leg."""
+    near, far = leg.get("near"), leg.get("far")
+    if leg.get("type") != V2_TYPE or near is None or far is None:
+        return pd.Series(dtype=float)
+    return carry_z(product_data["curve"], near, far, int(leg.get("zwindow") or 252))
 
 
 def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Series:
@@ -285,8 +311,25 @@ def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Serie
     not average two tenor pairs' already-shifted PnL series)."""
     if not instance["legs"]:
         return pd.Series(dtype=float)
-    raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in instance["legs"]]
-    raws = [r for r in raws if not r.empty]
+    legs = instance["legs"]
+    v2_legs = [leg for leg in legs if instance["family"] == "Carry" and leg.get("type") == V2_TYPE]
+    if len(v2_legs) >= 2:
+        # Two or more V2 legs in one Carry sleeve: SUM their z-scores into ONE combined V2 signal (sign of the sum, last signal kept if a z-score is
+        # missing). V1 / V3 legs stay sign legs and are averaged with it as before.
+        zs = [z for z in (_leg_z(leg, product_data) for leg in v2_legs) if not z.empty]
+        raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in legs if leg not in v2_legs]
+        raws = [r for r in raws if not r.empty]
+        if zs:
+            raws.append(summed_signal(zs, product_data["log_price"].index))
+    elif instance["family"] == "CarryMom" and len(legs) >= 2:
+        # Two or more Carry-momentum legs in one sleeve: SUM their raw slope changes into ONE signal (sign of the sum, last signal kept if a value is missing).
+        parts = [carry_slope_change(product_data["curve"], leg["near"], leg["far"], int(leg["horizon"]))
+                 for leg in legs if leg.get("near") is not None and leg.get("far") is not None and leg.get("horizon") is not None]
+        parts = [p_ for p_ in parts if not p_.empty]
+        raws = [summed_signal(parts, product_data["log_price"].index)] if parts else []
+    else:
+        raws = [_leg_raw_signal(instance["family"], leg, product_data) for leg in legs]
+        raws = [r for r in raws if not r.empty]
     if not raws:
         return pd.Series(dtype=float)
     return raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
@@ -318,6 +361,12 @@ def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd
     return gross_agg, net_agg
 
 
+def _per_product_pairs(cfg) -> bool:
+    """True for Precious Metals and Agriculture (2026-10-13): their Carry / Carry-Momentum use the short pair F1-F2 plus a long pair that differs by product
+    (cfg.CARRY_LONG_FAR_BY_PRODUCT, e.g. Gold F1-F7, Corn F1-F6), as in the Final dashboard; cfg.carry_pairs(product) gives each product's list."""
+    return hasattr(cfg, "carry_pairs") and bool(getattr(cfg, "CARRY_LONG_FAR_BY_PRODUCT", None))
+
+
 def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict],
                                     data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
     """Signal-level Combined Carry / Combined CarryMom (Dimil's construction,
@@ -332,12 +381,53 @@ def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict]
     (F1-F13)"), each contributing one raw composite signal per product."""
     shift_n = cfg.CARRY_SHIFT_N if family == "Carry" else cfg.CARRY_MOMENTUM_SHIFT_N
     grosses, nets = [], []
-    for product_data in data.values():
-        raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
-        raws = [r for r in raws if not r.empty]
-        if not raws:
-            continue
-        combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
+    for product, product_data in data.items():
+        if _per_product_pairs(cfg):
+            # Precious Metals / Agriculture: each product's own tenor pairs (short F1-F2 plus its long pair), summed z-scores for Carry, summed slope changes for CarryMom
+            pairs_p = [(str(n_), str(f_)) for n_, f_ in cfg.carry_pairs(product)]
+            idx = product_data["log_price"].index
+            if family == "Carry":
+                combo, _, _ = combined_carry_signal(product_data["curve"], pairs_p, cfg.CARRY_ZSCORE_WINDOW, ("V2",), idx)
+            else:
+                combo, _ = combined_carrymom_signal(product_data["curve"], pairs_p, cfg.CARRY_MOMENTUM_HORIZON, idx)
+            if combo.empty:
+                continue
+        elif family == "Carry":
+            # 2026-10-13: V1 legs of all tenor pairs form ONE signal (sign-vote across the pairs, as before); the V2 legs form ONE signal by SUMMING their
+            # z-scores across the pairs; the two (plus any other leg type, as one group) are averaged with equal weight, so V1 and V2 keep their 50/50 balance.
+            v1, v2z, other = [], [], []
+            for inst in tenor_instances:
+                for leg in inst["legs"]:
+                    t = leg.get("type", "V1 - Carry slope")
+                    if t == V2_TYPE:
+                        z = _leg_z(leg, product_data)
+                        if not z.empty:
+                            v2z.append(z)
+                    else:
+                        r_ = _leg_raw_signal("Carry", leg, product_data)
+                        if not r_.empty:
+                            (v1 if t == "V1 - Carry slope" else other).append(r_)
+            groups = [g_[0] if len(g_) == 1 else combine_positions(g_, "equal_weight") for g_ in (v1, other) if g_]
+            if v2z:
+                groups.append(summed_signal(v2z, product_data["log_price"].index))
+            if not groups:
+                continue
+            combo = groups[0] if len(groups) == 1 else combine_positions(groups, "equal_weight")
+        elif family == "CarryMom":
+            # 2026-10-13: the tenor pairs' raw slope changes are SUMMED, then the sign (last signal kept if a value is missing)
+            parts = [carry_slope_change(product_data["curve"], leg["near"], leg["far"], int(leg["horizon"]))
+                     for inst in tenor_instances for leg in inst["legs"]
+                     if leg.get("near") is not None and leg.get("far") is not None and leg.get("horizon") is not None]
+            parts = [p_ for p_ in parts if not p_.empty]
+            if not parts:
+                continue
+            combo = summed_signal(parts, product_data["log_price"].index)
+        else:
+            raws = [_instance_product_raw_signal(inst, product_data) for inst in tenor_instances]
+            raws = [r for r in raws if not r.empty]
+            if not raws:
+                continue
+            combo = raws[0] if len(raws) == 1 else combine_positions(raws, "equal_weight")
         pos = exec_shift(combo, shift_n).fillna(0)
         g, n = log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
         if not n.empty:
@@ -375,7 +465,7 @@ def _compute_reference_returns(_cfg, cfg_name: str, tc_bps: int,
     return gross, net
 
 
-def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int) -> dict:
+def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int, geometric: bool = True) -> dict:
     """Sharpe, annualized return, vol, and max drawdown over [yr_start, yr_end],
     in the same shape as common_engine.py's pos_metrics_generic() so the
     metric cards read the same way as the standalone tabs. Once returns are
@@ -391,6 +481,10 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
         SIMPLE returns, not log-return figures -- see research/
         run_regime_table.py::_metrics for the full derivation of both."""
         if len(s) > 20 and s.std(ddof=1) > 0:
+            if not geometric:
+                # Arithmetic basis: mean simple daily return x 252, no compounding
+                r = np.expm1(s)
+                return float(r.mean() * 252 * 100), float(r.std(ddof=1) * np.sqrt(252) * 100)
             log_ann = float(s.mean() * 252)
             ann = float((np.exp(log_ann) - 1) * 100)
             vol = float(np.expm1(s).std(ddof=1) * np.sqrt(252) * 100)
@@ -407,9 +501,14 @@ def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int
     ann, vol = _true_ann_vol(n)
     # True value-based drawdown, not log-space peak-to-trough -- see
     # research/run_regime_table.py::_metrics for the full derivation.
-    cum = n.cumsum()
-    value = np.exp(cum)
-    mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
+    if geometric:
+        cum = n.cumsum()
+        value = np.exp(cum)
+        mdd = float((value / value.cummax() - 1).min() * 100) if len(cum) else np.nan
+    else:
+        # Arithmetic basis: additive equity (cumulative sum of simple returns), drawdown in % points
+        cum = np.expm1(n).cumsum()
+        mdd = float((cum - cum.cummax()).min() * 100) if len(cum) else np.nan
     return dict(gross=_sharpe(gross_ann, gross_vol), net=_sharpe(ann, vol), ann=ann, vol=vol, mdd=mdd)
 
 
@@ -423,18 +522,20 @@ def _describe_leg(family: str, leg: dict) -> str:
     if family == "Momentum":
         return f"MA crossover, fast={leg.get('fast')}, slow={leg.get('slow')}"
     if family == "Carry":
-        leg_type = leg.get("type", "V1 Level")
+        leg_type = leg.get("type", "V1 - Carry slope")
         text = f"{leg_type} ({leg.get('near')}-{leg.get('far')})"
-        if leg_type == "V2 Z-score":
+        if leg_type == "V2 - Z-score on carry slope":
             text += f", z-window={leg.get('zwindow')}"
-        elif leg_type == "V3 Carry-Momentum":
+        elif leg_type == "V3 - Carry momentum":
             text += f", horizon={leg.get('horizon')}"
         return text
     if family == "CarryMom":
-        return f"Carry-Momentum ({leg.get('near')}-{leg.get('far')}), horizon={leg.get('horizon')}"
+        return f"Carry momentum ({leg.get('near')}-{leg.get('far')}), horizon={leg.get('horizon')}"
     if family == "Value":
         return (f"contract={leg.get('contract')}, lookback={leg.get('lookback')}d, "
                 f"threshold=+-{leg.get('threshold')}")
+    if family == "Skewness":
+        return f"Minus rolling skewness of daily log returns, window={leg.get('window')}d (long if negative skew)"
     return str(leg)
 
 
@@ -446,13 +547,15 @@ def _render_reference_strategy(instance: dict) -> None:
         st.caption(f"Execution lag (shift_n): {instance['shift_n']}  |  Combine legs via: Equal Weight")
 
 
-def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str]], note: str) -> None:
+def _render_combined_reference_card(label: str, tenor_pairs: list[tuple[str, str]], note: str, extra: str = "") -> None:
     """Read-only card for a Combined Carry / Combined CarryMom reference row --
     equal-weight of the per-tenor-pair legs it's built from."""
     with st.expander(label, expanded=False):
         for near, far in tenor_pairs:
             st.markdown(f"- {note} ({near}-{far})")
-        st.caption("Combine tenor pairs via: Equal Weight")
+        if extra:
+            st.markdown(f"- plus each product's long pair: {extra}")
+        st.caption("Combine tenor pairs via: sum of z-scores, then the sign" if "z-score" in note else "Combine tenor pairs via: sum of slope changes, then the sign" if "slope changes" in note else "Combine tenor pairs via: Equal Weight")
 
 
 # Leg rendering (shared by every editable leg list -- currently only the
@@ -482,7 +585,7 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
         i = 0
         with cols[i]:
             leg_type = st.selectbox("Type", CARRY_TYPES,
-                                     index=_safe_index(CARRY_TYPES, leg.get("type", "V1 Level")),
+                                     index=_safe_index(CARRY_TYPES, leg.get("type", V2_TYPE)),
                                      key=f"{key_prefix}_type")
             leg["type"] = leg_type
         i += 1
@@ -500,16 +603,16 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
                                            key=f"{key_prefix}_far")
             i += 1
         with cols[i]:
-            if leg_type == "V2 Z-score":
+            if leg_type == "V2 - Z-score on carry slope":
                 leg["zwindow"] = st.number_input("Z-Window", min_value=20, max_value=756,
                                                   value=int(leg.get("zwindow") or 252), step=1,
                                                   key=f"{key_prefix}_zwindow")
-            elif leg_type == "V3 Carry-Momentum":
+            elif leg_type == "V3 - Carry momentum":
                 leg["horizon"] = st.number_input("Horizon", min_value=1, max_value=252,
                                                   value=int(leg.get("horizon") or 20), step=1,
                                                   key=f"{key_prefix}_horizon")
             else:
-                st.caption("No additional parameter for V1 Level.")
+                st.caption("No additional parameter for V1 - Carry slope.")
         i += 1
         with cols[i]:
             st.write("")
@@ -556,6 +659,16 @@ def _render_leg(family: str, leg: dict, key_prefix: str,
                                                 value=float(leg.get("threshold", 0.10)), step=0.01,
                                                 format="%.2f", key=f"{key_prefix}_threshold")
         with c4:
+            st.write("")
+            return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
+
+    if family == "Skewness":
+        c1, c2 = st.columns([4, 1])
+        with c1:
+            leg["window"] = st.number_input("Window (days)", min_value=20, max_value=1000,
+                                             value=int(leg.get("window", SKEWNESS_WINDOW_DEFAULT)), step=1,
+                                             key=f"{key_prefix}_window")
+        with c2:
             st.write("")
             return st.button("Remove", key=f"{key_prefix}_rm", use_container_width=True)
 
@@ -766,11 +879,12 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                "comparison. Read-only; use Portfolio Construction below to combine them: "
                "switching a family on there pre-fills it with these exact same parameters.")
 
-    has_multi_tenor = len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2
+    per_product_pairs = _per_product_pairs(cfg)
+    has_multi_tenor = len(getattr(cfg, "CARRY_TENOR_PAIRS", [])) >= 2 or per_product_pairs
     separate_tenor_carry = False
-    if has_multi_tenor:
+    if has_multi_tenor and not per_product_pairs:
         separate_tenor_carry = st.checkbox(
-            "Treat Carry / Carry-Momentum tenor pairs as separate strategies",
+            "Treat Carry / Carry momentum tenor pairs as separate strategies",
             value=False, key=f"{key_prefix}_pf_separate_tenor",
             help="Off (default): this asset class's two Carry tenor pairs are equal-weighted "
                  "into one Combined Carry row, and the two CarryMom tenor pairs into one "
@@ -781,6 +895,9 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                  "below, the strategy pickers further down, and the reference-strategy "
                  "portfolio aggregate.")
 
+    if per_product_pairs:
+        st.caption(getattr(cfg, "CARRY_CAPTION", None) or "Carry and Carry momentum for this asset class combine the short pair F1-F2 with a long pair that differs by product ("
+                   + ", ".join(f"{p_} F1-{f_}" for p_, f_ in cfg.CARRY_LONG_FAR_BY_PRODUCT.items()) + "), as in the Final dashboard.")
     reference_strategies = _build_reference_strategies(cfg)
     if separate_tenor_carry or not has_multi_tenor:
         for instance in reference_strategies:
@@ -788,9 +905,11 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     else:
         by_id = {inst["id"]: inst for inst in reference_strategies}
         _render_reference_strategy(by_id["mom"])
-        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V1+V2 composite")
-        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry-Momentum")
+        _long = ", ".join(f"{p_} F1-{f_}" for p_, f_ in getattr(cfg, "CARRY_LONG_FAR_BY_PRODUCT", {}).items()) if per_product_pairs else ""
+        _render_combined_reference_card("Combined Carry", cfg.CARRY_TENOR_PAIRS, "Carry V2 (z-scores summed across the pairs)", _long)
+        _render_combined_reference_card("Combined CarryMom", cfg.CARRY_TENOR_PAIRS, "Carry momentum (slope changes summed across the pairs)", _long)
         _render_reference_strategy(by_id["value"])
+        _render_reference_strategy(by_id["skew"])
 
     section_header("Portfolio construction")
     st.caption("Switch on whichever strategy families belong in this portfolio. Each one "
@@ -901,6 +1020,9 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                                "Combined CarryMom": ccm_gross, "Value": raw_gross["Value"]}
             instance_net = {"Momentum": raw_net["Momentum"], "Combined Carry": cc_net,
                              "Combined CarryMom": ccm_net, "Value": raw_net["Value"]}
+            if "Skewness" in raw_net:
+                instance_gross["Skewness"] = raw_gross["Skewness"]
+                instance_net["Skewness"] = raw_net["Skewness"]
         else:
             instance_gross, instance_net = dict(raw_gross), dict(raw_net)
     else:
@@ -922,11 +1044,23 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         # pointing at the SAME row across a combine_method switch, so the
         # existing selection just updates in place.
         agg_label = "Portfolio (all reference strategies)"
-        agg_gross, agg_net = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
+        # Skewness (added 2026-10-12) is kept OUT of the original aggregate so that row still reproduces
+        # the four-strategy numbers reported before; a separate row below adds it as a fifth sleeve.
+        core_gross = {k: v for k, v in instance_gross.items() if k != "Skewness"}
+        core_net = {k: v for k, v in instance_net.items() if k != "Skewness"}
+        agg_gross, agg_net = _combine_sleeves(core_gross, core_net, combine_method, vol_window,
                                                tilt=return_tilt)
+        skew_agg = None
+        if "Skewness" in instance_net:
+            skew_agg = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
+                                         tilt=return_tilt)
         instance_gross[agg_label] = agg_gross
         instance_net[agg_label] = agg_net
-        st.caption(f"\"{agg_label}\" below is currently combined via **{combine_method}** "
+        agg5_label = "Portfolio (all reference strategies + Skewness)"
+        if skew_agg is not None:
+            instance_gross[agg5_label], instance_net[agg5_label] = skew_agg
+        st.caption(f"\"{agg_label}\" (Momentum, Carry, Carry momentum, Value) and \"{agg5_label}\" "
+                   f"(the same four plus Skewness) below are currently combined via **{combine_method}** "
                    f"(change it with the \"Combine strategies via\" dropdown above).")
 
     for p in portfolios:
@@ -986,7 +1120,12 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
     shown = [s for s in applied["shown"] if s in metric_labels] or metric_labels
 
     section_header("Performance metrics")
-    m = _window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end)
+    basis = st.radio("Return basis", ["Geometric (% return)", "Arithmetic (% return)"], horizontal=True,
+                     key=f"{key_prefix}_pf_basis",
+                     help="Geometric (default, the locked portfolio convention): compounded, equity = exp(cumsum of "
+                          "log returns) - 1. Arithmetic: simple daily returns summed, no compounding.")
+    geometric = basis.startswith("Geometric")
+    m = _window_metrics(instance_gross[metric_strategy], instance_net[metric_strategy], yr_start, yr_end, geometric)
     mc1, mc2, mc3, mc4, mc5 = st.columns(5)
     with mc1:
         metric_card("Gross Sharpe", _fmt(m["gross"], "{:+.2f}"))
@@ -1013,12 +1152,12 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             continue
         # True cumulative %, not log-return % -- see research/run_regime_table.py::_metrics for
         # the full derivation. Matches the metric cards above (ann/mdd already true %).
-        eq = (np.exp(window.cumsum()) - 1) * 100
+        eq = (np.exp(window.cumsum()) - 1) * 100 if geometric else np.expm1(window).cumsum() * 100
         fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
                                   line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
         if len(window) > 20 and window.std(ddof=1) > 0:
             log_ret = float(window.mean() * 252)
-            ret = (np.exp(log_ret) - 1) * 100
+            ret = (np.exp(log_ret) - 1) * 100 if geometric else float(np.expm1(window).mean() * 252 * 100)
             # True annualized volatility of simple returns, not the log-return
             # distribution's spread -- see research/run_regime_table.py::
             # _metrics for the full derivation.

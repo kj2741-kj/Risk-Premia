@@ -11,9 +11,9 @@ Signal form and parameter CONVENTIONS are identical to Metals (per user's
 explicit "ex-ante is same as discussed" instruction) EXCEPT the Carry tenor,
 which was re-derived from real data, not assumed:
   - Momentum: 3-way MA-crossover composite, same (1,20)/(5,60)/(20,250) pairs.
-  - Carry: V1(Level)+V2(Z-score) composite, tenor pair F1-F3 ONLY (changed
+  - Carry: V1 (Carry slope) + V2 (Z-score on carry slope) composite, tenor pair F1-F3 ONLY (changed
     from F1-F2 2026-08-03, see below).
-  - Carry-Momentum: same horizon=20, kept separate from the Carry composite.
+  - Carry momentum: same horizon=20, kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes) / 5yr lookback / +-10% threshold.
   - StatArb: NOT used -- already tested and excluded for Precious Metals
@@ -73,7 +73,10 @@ from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_
 
 ASSET_CLASS = "Precious Metals"
 
-PRODUCTS = ["Gold", "Silver", "Copper_COMEX", "Platinum", "Palladium"]
+# Copper_COMEX removed from the research product list 2026-10-10 (user's decision), matching the
+# dashboard, which has excluded it since 2026-08-05. Its entries in METAL_CODES / SHEET_NAMES below
+# are kept so it can be re-added by editing this list only.
+PRODUCTS = ["Gold", "Silver", "Platinum", "Palladium"]
 
 METAL_CODES = {"Gold": "GC", "Silver": "SI", "Copper_COMEX": "HG", "Platinum": "PL", "Palladium": "PA"}
 
@@ -93,9 +96,33 @@ ANALYSIS_START = "2006-01-01"
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F3")]
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]   # short pair; was F1-F3 until 2026-10-11 (see CARRY_LONG_FAR_BY_PRODUCT)
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
+
+# ── Roll rule (2026-10-11) ───────────────────────────────────────────────────
+# Every research number (run_regime_table.py, cross_asset_engine.py, Final_Research_Dashboard.html) rolls on the 5th trading day
+# of the month in which each contract's last trade date falls, not 5 trading days before it. See scripts/rolling_continuous.py
+# (ROLL_RULES). The Streamlit apps keep their own "Rolling Logic" selector and are unaffected.
+ROLL_RULE = "expiry_month_nth_td"
+ROLL_N = 5
+
+# Two tenor pairs per product (2026-10-11, user's decision): a short pair F1-F2 (2 to 3 months between legs) for all products, plus
+# a long pair about 12 months out whose far leg depends on each metal's contract cycle (Gold six months a year, Silver five,
+# Platinum and Palladium four). CARRY_TENOR_PAIRS holds the uniform SHORT pair (also what the Streamlit app shows); the long pairs
+# come from carry_pairs(product). Previously a single F1-F3 pair. Platinum/Palladium F5 has data only from 2010-02 (the monthly
+# single-contract files have no earlier prices either), and Gold F7 / Platinum F5 / Palladium F5 sit beyond the range the real-volume
+# liquidity study found fully liquid (see the docstring above).
+CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"Gold": "F7", "Silver": "F6", "Platinum": "F5", "Palladium": "F5"}
+
+
+def carry_pairs(product: str) -> list[tuple[str, str]]:
+    """Short pair(s) from CARRY_TENOR_PAIRS plus the product's long pair (F1 to its far leg), if one is defined."""
+    pairs = list(CARRY_TENOR_PAIRS)
+    far = CARRY_LONG_FAR_BY_PRODUCT.get(product)
+    if far is not None and ("F1", far) not in pairs:
+        pairs.append(("F1", far))
+    return pairs
 
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
@@ -136,7 +163,8 @@ def load_f1_series(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown Precious Metals product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1(METAL_CODES[product], futures_file=CURVE_FILE,
-                               calendar_file=CALENDAR_FILE, config=PRECIOUS_CONFIG, verbose=False)
+                               calendar_file=CALENDAR_FILE, config=PRECIOUS_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     return reanchor_f1_continuous(df)
 
@@ -148,7 +176,8 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown Precious Metals product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1_ratio(METAL_CODES[product], futures_file=CURVE_FILE,
-                                     calendar_file=CALENDAR_FILE, config=PRECIOUS_CONFIG, verbose=False)
+                                     calendar_file=CALENDAR_FILE, config=PRECIOUS_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     df = reanchor_f1_continuous_ratio(df)
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)

@@ -1,9 +1,12 @@
 """
 research/configs/agri.py
 ===========================
-Ex-ante config for the Agriculture asset class (Corn, Wheat, Oats, Rough
-Rice, Soybean, Soybean Oil, Soybean Meal, Coffee, Cocoa, Orange Juice,
-Cotton No.2, Feeder Cattle, Live Cattle, Lean Hogs). Built 2026-09-29,
+Ex-ante config for the Agriculture asset class. UPDATED 2026-10-11 to six
+products (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar No.11), the book in
+Analysis/Final_Research_Dashboard.html, on the Bloomberg-matched roll calendar
+(Agri_Rolling_Calendar_bloomberg_matched.xlsx, which also supplies a clean Sugar
+calendar). Carry default is F1-F2 (see below). The text below describes the
+original 14-product build of 2026-09-29 and is kept for history. Built 2026-09-29,
 mirroring research/configs/metals.py's structure -- same engine
 (rolling_continuous.get_metal_rolling_f1 / ratio_continuous, both reused
 unchanged, zero new roll-adjustment logic written for this asset class).
@@ -60,29 +63,28 @@ _SCRIPTS_DIR = os.path.join(_REPO_ROOT, "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from rolling_continuous import (AGRI_CALENDAR_FILE, AGRI_CONFIG,  # noqa: E402
+from rolling_continuous import (apply_data_fixes, AGRI_CALENDAR_FILE_BBG, AGRI_BBG_CONFIG as AGRI_CONFIG,  # noqa: E402
                                  AGRI_FUTURES_FILE, get_metal_rolling_f1,
                                  reanchor_f1_continuous)
 from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio  # noqa: E402
 
 ASSET_CLASS = "Agriculture"
 
-PRODUCTS = ["Corn", "Wheat", "Oats", "RoughRice", "Soybean", "SoybeanOil",
-            "SoybeanMeal", "Coffee", "Cocoa", "OrangeJuice", "Cotton",
-            "FeederCattle", "LiveCattle", "LeanHogs"]
-# Sugar No.11 deliberately absent -- see module docstring.
+# Six products only (user's decision 2026-10-11, matching Analysis/Final_Research_Dashboard.html's
+# Agriculture book). The other nine (Oats, Rough Rice, Soybean Meal, Cocoa, Orange Juice, Cotton,
+# Feeder Cattle, Live Cattle, Lean Hogs) are dropped from this config; their data and the original
+# 14-product AGRI_CONFIG / Agri_Rolling_Calendar.xlsx still exist in scripts/rolling_continuous.py.
+PRODUCTS = ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]
 
 AGRI_CODES = {
-    "Corn": "C", "Wheat": "W", "Oats": "O", "RoughRice": "RR",
-    "Soybean": "S", "SoybeanOil": "BO", "SoybeanMeal": "SM",
-    "Coffee": "KC", "Cocoa": "CC", "OrangeJuice": "JO", "Cotton": "CT",
-    "FeederCattle": "FC", "LiveCattle": "LC", "LeanHogs": "LH",
+    "Corn": "C", "Wheat": "W", "Soybean": "S", "SoybeanOil": "BO",
+    "Coffee": "KC", "Sugar": "SB",
 }
 
 SHEET_NAMES = {product: AGRI_CONFIG[code]["price_sheet"] for product, code in AGRI_CODES.items()}
 
 CURVE_FILE = AGRI_FUTURES_FILE
-CALENDAR_FILE = AGRI_CALENDAR_FILE
+CALENDAR_FILE = AGRI_CALENDAR_FILE_BBG  # Bloomberg-matched, 6 products incl. Sugar
 
 # Standardized analysis start (matches Metals/Energy/Precious's own 2026-07-23
 # decision to use 2006 uniformly rather than each file's true earliest date --
@@ -96,15 +98,36 @@ ANALYSIS_START = "2006-01-01"
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-# Carry: PENDING -- see module docstring. Left empty rather than guessed;
-# any code iterating this list (e.g. dashboard_portfolio_tab.py's Carry/
-# CarryMom sleeve) will see zero pairs and should skip those sleeves for
-# Agri, not silently compute against a wrong/borrowed tenor pair.
-CARRY_TENOR_PAIRS: list[tuple[str, str]] = []
+# Carry: F1-F2 only, the pair locked in Analysis/Final_Research_Dashboard.html ("Agriculture: F1-F2
+# only, no long pair defined yet"). Set 2026-10-11 as the DEFAULT; the Streamlit Carry and Portfolio
+# tabs let the user pick any other (near, far) pair. All six products have at least F8 of depth.
+CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 
-# Carry-Momentum (V3): kept as its own separate strategy, same as every
+# ── Roll rule (2026-10-11) ───────────────────────────────────────────────────
+# Every research number (run_regime_table.py, cross_asset_engine.py, Final_Research_Dashboard.html) rolls on the 5th trading day
+# of the month in which each contract's last trade date falls, not 5 trading days before it. See scripts/rolling_continuous.py
+# (ROLL_RULES). The Streamlit apps keep their own "Rolling Logic" selector and are unaffected.
+ROLL_RULE = "expiry_month_nth_td"
+ROLL_N = 5
+
+# Two tenor pairs per product (2026-10-11, user's decision): short F1-F2 plus a long pair about 12 months out. The far leg depends on
+# each product's contract cycle: Corn/Wheat/Coffee five contracts a year (F6), Soybean seven (F8), Sugar four (F5), Soybean Oil eight
+# (F8 is only 10-11 months: its price file stops at F8). CARRY_TENOR_PAIRS holds the uniform SHORT pair (also what the Streamlit app
+# shows); the long pairs come from carry_pairs(product). Agriculture has had no liquidity study.
+CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"Corn": "F6", "Wheat": "F6", "Soybean": "F8", "SoybeanOil": "F8", "Coffee": "F6", "Sugar": "F5"}
+
+
+def carry_pairs(product: str) -> list[tuple[str, str]]:
+    """Short pair(s) from CARRY_TENOR_PAIRS plus the product's long pair (F1 to its far leg), if one is defined."""
+    pairs = list(CARRY_TENOR_PAIRS)
+    far = CARRY_LONG_FAR_BY_PRODUCT.get(product)
+    if far is not None and ("F1", far) not in pairs:
+        pairs.append(("F1", far))
+    return pairs
+
+# Carry momentum (V3): kept as its own separate strategy, same as every
 # other asset class -- horizon is asset-independent, tenor pair still
 # pending same as Carry above (CarryMom needs a (near, far) pair too).
 CARRY_MOMENTUM_HORIZON = 20
@@ -138,6 +161,7 @@ def load_curve(product: str) -> pd.DataFrame:
     cols = {f"F{t + 1}": pd.to_numeric(raw[t + 1], errors="coerce").values for t in range(n_tenors)}
     curve = pd.DataFrame(cols, index=dates.values)
     curve = curve[curve.index.notna()].sort_index()
+    curve = apply_data_fixes(curve, SHEET_NAMES[product], "F1")   # source-data fixes, see rolling_continuous.DATA_FIXES
     return curve.loc[ANALYSIS_START:]
 
 
@@ -149,7 +173,8 @@ def load_f1_series(product: str) -> pd.DataFrame:
     if product not in AGRI_CODES:
         raise ValueError(f"Unknown Agri product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1(AGRI_CODES[product], futures_file=CURVE_FILE,
-                               calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False)
+                               calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     return reanchor_f1_continuous(df)
 
@@ -163,7 +188,8 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     if product not in AGRI_CODES:
         raise ValueError(f"Unknown Agri product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1_ratio(AGRI_CODES[product], futures_file=CURVE_FILE,
-                                     calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False)
+                                     calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     df = reanchor_f1_continuous_ratio(df)
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)

@@ -7,7 +7,7 @@ research/configs/metals.py / precious.py / energy.py's structure.
 
 Signal form and most parameters are identical to the other asset classes:
   - Momentum: 3-way MA-crossover composite, (1,20)/(5,60)/(20,250).
-  - Carry: V1(Level)+V2(Z-score) composite, TWO tenor pairs as of 2026-08-03
+  - Carry: V1 (Carry slope) + V2 (Z-score on carry slope) composite, TWO tenor pairs as of 2026-08-03
     -- F2-F4 (short-term, added 2026-08-03 for consistency with Metals'/
     Energy's two-tier structure) and F2-F14 (changed from F4-F15 the same
     day, for a clean 12-month span -- F4-F15 was 11 months). Neither pair
@@ -22,7 +22,7 @@ Signal form and most parameters are identical to the other asset classes:
     F4-F15 quote-availability check (all 6 products well-quoted through
     F15, worst case Propylene 79.6%) has NOT been redone for either new
     pair -- treat both as provisional pending that re-check.
-  - Carry-Momentum: same horizon=20, same two tenor pairs (F2-F4, F2-F14),
+  - Carry momentum: same horizon=20, same two tenor pairs (F2-F4, F2-F14),
     kept separate from the Carry composite.
   - Value: F3 contract (changed from F8 2026-08-03, user's decision applied
     uniformly across all four asset classes, overriding this file's own
@@ -54,6 +54,7 @@ import sys
 import numpy as np
 import pandas as pd
 
+from imputed_tenors import apply_imputed   # research/imputed_tenors.py (same folder tree as engine.py on sys.path)
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _RESEARCH_DIR = os.path.dirname(_THIS_DIR)
 _REPO_ROOT = os.path.dirname(_RESEARCH_DIR)
@@ -94,6 +95,19 @@ CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F2", "F4"), ("F2", "F14")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
 
+# ── Roll rule (2026-10-11) ───────────────────────────────────────────────────
+# Every research number (run_regime_table.py, cross_asset_engine.py, Final_Research_Dashboard.html) rolls on the 5th trading day
+# of the month in which each contract's last trade date falls, not 5 trading days before it. See scripts/rolling_continuous.py
+# (ROLL_RULES). The Streamlit apps keep their own "Rolling Logic" selector and are unaffected.
+ROLL_RULE = "expiry_month_nth_td"
+ROLL_N = 5
+
+
+def carry_pairs(product: str) -> list[tuple[str, str]]:
+    """Carry / Carry-Momentum tenor pairs for one product (blended at signal level, sign-vote). Uniform across this asset class's
+    products: CARRY_TENOR_PAIRS."""
+    return list(CARRY_TENOR_PAIRS)
+
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
 
@@ -119,7 +133,10 @@ def load_curve(product: str) -> pd.DataFrame:
     cols = {f"F{t + 1}": pd.to_numeric(raw[t + 1], errors="coerce").values for t in range(n_tenors)}
     curve = pd.DataFrame(cols, index=dates.values)
     curve = curve[curve.index.notna()].sort_index()
-    return curve.loc[ANALYSIS_START:]
+    curve = curve.loc[ANALYSIS_START:]
+    if product == "Isobutane":
+        curve = apply_imputed(curve, "ISOBUTANE")   # F14 missing 2013-03-01..20, F14 = F13, see imputed_tenors.py
+    return curve
 
 
 def load_f1_series(product: str) -> pd.DataFrame:
@@ -129,7 +146,8 @@ def load_f1_series(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown NGL product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1(METAL_CODES[product], futures_file=CURVE_FILE,
-                               calendar_file=CALENDAR_FILE, config=NGL_CONFIG, verbose=False)
+                               calendar_file=CALENDAR_FILE, config=NGL_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     return reanchor_f1_continuous(df)
 
@@ -140,7 +158,8 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     if product not in METAL_CODES:
         raise ValueError(f"Unknown NGL product {product!r}; valid: {PRODUCTS}")
     df = get_metal_rolling_f1_ratio(METAL_CODES[product], futures_file=CURVE_FILE,
-                                     calendar_file=CALENDAR_FILE, config=NGL_CONFIG, verbose=False)
+                                     calendar_file=CALENDAR_FILE, config=NGL_CONFIG, verbose=False,
+                               roll_day=ROLL_N, roll_rule=ROLL_RULE)
     df = df.loc[ANALYSIS_START:]
     df = reanchor_f1_continuous_ratio(df)
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)

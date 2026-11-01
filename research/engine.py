@@ -27,11 +27,11 @@ re-checking against common_engine.py):
     look-ahead leakage, not the raw shift itself.
 
 Carry naming note (source of a real mismatch worth remembering): the
-dashboards' UI labels "V1 Level / V2 Z-score / V3 Carry-Momentum" map to code
+dashboards' UI labels "V1 - Carry slope / V2 - Z-score on carry slope / V3 - Carry momentum" map to code
 functions carry_v1_position / carry_v3_position / carry_v4_position
 respectively -- there is no carry_v2_position in the source, an old variant
 was apparently retired. Use carry_v3_position when the research plan says
-"the V2 Z-score anchor", not a function literally named v2.
+"the V2 Z-score on carry slope anchor", not a function literally named v2.
 """
 
 from __future__ import annotations
@@ -223,8 +223,17 @@ def exec_shift(sigbin: pd.Series, shift_n: int) -> pd.Series:
 # Copied from common_engine.py
 # ═══════════════════════════════════════════════════════════════
 
+MA_MIN_FRACTION = 0.9   # 2026-10-11: moving averages are computed once at least 90% of the window has prices, so one missing price no longer blanks them
+
+
+def _ma(price: pd.Series, window: int) -> pd.Series:
+    """Simple moving average over `window` observations, valid once at least MA_MIN_FRACTION of the window is present (a single missing price,
+    e.g. an exchange-holiday row, no longer disables the average for `window` days). Complete windows give exactly the plain rolling mean."""
+    return price.rolling(window, min_periods=max(1, int(np.ceil(MA_MIN_FRACTION * window)))).mean()
+
+
 def ma_crossover_position(f1r: pd.Series, fast: int, slow: int, shift_n: int = 1) -> pd.Series:
-    sig = np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
+    sig = np.sign(_ma(f1r, fast) - _ma(f1r, slow))
     return exec_shift(sig, shift_n).fillna(0)
 
 
@@ -247,14 +256,14 @@ def momentum_composite_position(f1r: pd.Series, pairs: tuple[tuple[int, int], ..
     n = len(pairs)
     total = None
     for fast, slow in pairs:
-        sig = np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
+        sig = np.sign(_ma(f1r, fast) - _ma(f1r, slow))
         total = sig if total is None else total + sig
     composite_sign = np.sign(total / n)
     return exec_shift(composite_sign, shift_n).fillna(0)
 
 
 # ═══════════════════════════════════════════════════════════════
-# CARRY: V1 LEVEL / V2 Z-SCORE (code name carry_v3) / V3 CARRY-MOMENTUM (code name carry_v4)
+# CARRY: V1 CARRY SLOPE / V2 Z-SCORE ON CARRY SLOPE (code name carry_v3) / V3 CARRY MOMENTUM (code name carry_v4)
 # Copied from common_engine.py -- see module docstring for the naming mismatch
 # ═══════════════════════════════════════════════════════════════
 
@@ -267,14 +276,14 @@ def _carry_base(curve: pd.DataFrame, a: str, b: str) -> pd.Series:
 
 
 def carry_v1_position(curve: pd.DataFrame, near: str = "F1", far: str = "F2", shift_n: int = 1) -> pd.Series:
-    """UI label: "V1 Level" -- sign of the raw (near-far)/near slope."""
+    """UI label: "V1 - Carry slope" -- sign of the raw (near-far)/near slope."""
     raw = _carry_base(curve, near, far)
     return exec_shift(np.sign(raw), shift_n).fillna(0)
 
 
 def carry_v3_position(curve: pd.DataFrame, window: int = 252, shift_n: int = 1,
                        near: str = "F1", far: str = "F2") -> pd.Series:
-    """UI label: "V2 Z-score" (win=252 default)."""
+    """UI label: "V2 - Z-score on carry slope" (win=252 default)."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
@@ -284,7 +293,7 @@ def carry_v3_position(curve: pd.DataFrame, window: int = 252, shift_n: int = 1,
 
 def carry_v4_position(curve: pd.DataFrame, horizon: int = 20, shift_n: int = 1,
                        near: str = "F1", far: str = "F2") -> pd.Series:
-    """UI label: "V3 Carry-Momentum" (N=20 default)."""
+    """UI label: "V3 - Carry momentum" (N=20 default)."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
@@ -296,7 +305,7 @@ def carry_v1v2_composite_position(curve: pd.DataFrame, near: str = "F1", far: st
                                    zscore_window: int = 252, shift_n: int = 1) -> pd.Series:
     """Ex-ante Carry anchor (locked 2026-07-23): average V1 (Level) and V2
     (Z-score) into one composite -- deliberately NOT including V3
-    (Carry-Momentum), which is a rate-of-change/momentum-on-carry construct,
+    (Carry momentum), which is a rate-of-change/momentum-on-carry construct,
     a genuinely different economic hypothesis from V1/V2's level-based signal,
     kept as its own separate strategy instead (see carry_v4_position).
     V1 and V2 are both derived from the same raw carry slope (V2 just
@@ -323,13 +332,16 @@ def carry_v1v2_composite_position(curve: pd.DataFrame, near: str = "F1", far: st
 # ═══════════════════════════════════════════════════════════════
 
 def value_v1_position(curve: pd.DataFrame, contract: str, lookback: int, threshold: float,
-                       shift_n: int = 2) -> pd.Series:
+                       shift_n: int = 2, min_periods: int | None = None) -> pd.Series:
+    """`min_periods` (default None = the original max(lookback // 2, min(lookback, 60))) is the number of F3 observations needed before the
+    moving average, and so the signal, becomes valid. The 2012-start variant uses 504 (two years); the main research uses the default."""
     if contract not in curve.columns:
         return pd.Series(dtype=float)
     fk = curve[contract].dropna()
     if len(fk) < max(lookback // 2, 60):
         return pd.Series(dtype=float)
-    ma = fk.rolling(lookback, min_periods=max(lookback // 2, min(lookback, 60))).mean()
+    mp = max(lookback // 2, min(lookback, 60)) if min_periods is None else min_periods
+    ma = fk.rolling(lookback, min_periods=mp).mean()
     dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan).dropna()
     sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                      index=dev.index)
@@ -378,17 +390,17 @@ def statarb_spread_position(spread: pd.Series, lookback: int, threshold: float,
 
 def raw_signal_momentum(f1r: pd.Series, fast: int, slow: int) -> pd.Series:
     """Raw, pre-shift MA-crossover sign. Same formula as ma_crossover_position."""
-    return np.sign(f1r.rolling(fast).mean() - f1r.rolling(slow).mean())
+    return np.sign(_ma(f1r, fast) - _ma(f1r, slow))
 
 
 def raw_signal_carry_v1(curve: pd.DataFrame, near: str = "F1", far: str = "F2") -> pd.Series:
-    """Raw, pre-shift V1 Level sign. Same formula as carry_v1_position."""
+    """Raw, pre-shift V1 Carry slope sign. Same formula as carry_v1_position."""
     return np.sign(_carry_base(curve, near, far))
 
 
 def raw_signal_carry_v2(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
                          window: int = 252) -> pd.Series:
-    """Raw, pre-shift V2 Z-score sign. Same formula as carry_v3_position."""
+    """Raw, pre-shift V2 Z-score on carry slope sign. Same formula as carry_v3_position."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
@@ -398,7 +410,7 @@ def raw_signal_carry_v2(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
 
 def raw_signal_carrymom(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
                          horizon: int = 20) -> pd.Series:
-    """Raw, pre-shift V3 Carry-Momentum sign. Same formula as carry_v4_position."""
+    """Raw, pre-shift V3 Carry momentum sign. Same formula as carry_v4_position."""
     base = _carry_base(curve, near, far)
     if base.empty:
         return pd.Series(dtype=float)
@@ -419,6 +431,42 @@ def raw_signal_value(curve: pd.DataFrame, contract: str, lookback: int, threshol
     sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                      index=dev.index)
     return sig.where(dev.notna())
+
+
+def raw_signal_skewness_from_returns(log_returns: pd.Series, window: int = 252) -> pd.Series:
+    """Raw, pre-shift Skewness sign from daily log returns (Fernandez-Perez, Fuertes and Miffre 2021,
+    Table 1, time-series form): minus the rolling skewness over `window` observations (full window
+    required). +1 when skewness is negative, -1 when positive, NaN during burn-in. pandas' rolling skew
+    is the bias-adjusted sample skewness; only its sign is used. Single source of truth for the signal:
+    the dashboards' Skewness tab and the Portfolio tab both call this."""
+    return np.sign(-log_returns.rolling(window).skew())
+
+
+def raw_signal_skewness(log_price: pd.Series, window: int = 252) -> pd.Series:
+    """Skewness signal from the roll-adjusted, ratio-stitched continuous log price (research series).
+    Same signal as scripts/final_dashboard/skewness_research.py. Roll jumps are not in the returns."""
+    return raw_signal_skewness_from_returns(log_price.diff(), window)
+
+
+def ratio_log_returns(f1c: pd.Series, f1r: pd.Series, f2r: pd.Series | None = None,
+                       phase: pd.Series | None = None) -> pd.Series:
+    """Daily log returns of the ratio-stitched continuous series, rebuilt from a dashboard's ADDITIVELY
+    stitched F1_continuous (a running sum of dollar changes, which is what the dollar-PnL tabs need).
+
+    Taking log(F1_continuous).diff() on the additive level is wrong: it divides the dollar change by the
+    ADJUSTED level instead of the price of the contract actually held, so returns are mis-scaled by
+    P_true/P_adjusted (several percent) and break down where the adjusted level is <= 0. The exact ratio
+    return is log(1 + dollar_change / price of the contract held at t-1): F1_raw(t-1) on F1_Tracking days,
+    F2_raw(t-1) on roll, F2_Tracking and bridge days. This reproduces research/ratio_continuous.py's
+    log returns to ~1e-15 (verified on Copper; see the Skewness integration notes). Without f2r/phase
+    the denominator falls back to F1_raw(t-1), exact on F1_Tracking days and within the F1-F2 basis otherwise."""
+    dc = f1c.diff()
+    den = f1r.shift(1)
+    if f2r is not None and phase is not None:
+        den = pd.Series(np.where(phase.reindex(f1c.index) == "F1_Tracking", f1r.shift(1), f2r.shift(1)),
+                         index=f1c.index)
+    ratio = 1.0 + dc / den.where(den > 0)
+    return np.log(ratio.where(ratio > 0))
 
 
 def combine_positions(raw_signals: list[pd.Series], method: str = "equal_weight",
@@ -463,7 +511,7 @@ def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
     'inverse_vol' reweights daily: each series' weight is 1 / its own trailing `vol_window`-day
     realized vol (rolling std of ITS OWN return history, recomputed every day), normalized so
     the weights sum to 1 across series on that day. This is a rolling, look-ahead-free scheme --
-    day t's weights use only returns strictly before t via pandas rolling's own window semantics
+    day t's weights use only returns up to t-1 (the rolling volatility is lagged one observation)
     -- as opposed to fixing weights once from full-sample vol, which would leak future
     information into the weights applied to the past. The tradeoff is a `vol_window`-day burn-in
     before any weight (and therefore the combined series) is defined, on top of each leg's own
@@ -553,7 +601,8 @@ def combine_returns(net_returns: list[pd.Series], method: str = "equal_weight",
         for s in net_returns[1:]:
             idx = idx.union(s.index)
         rets = pd.concat([s.reindex(idx) for s in net_returns], axis=1)
-        vol = rets.rolling(vol_window, min_periods=vol_window).std(ddof=1)
+        # 2026-10-11: weights are lagged one observation (shift(1)) so day t's weights use only returns up to t-1; before this the window included day t.
+        vol = rets.rolling(vol_window, min_periods=vol_window).std(ddof=1).shift(1)
         inv_vol = 1.0 / vol.replace(0.0, np.nan)
         w = inv_vol.div(inv_vol.sum(axis=1, skipna=False), axis=0)
         return (w * rets).sum(axis=1, skipna=False)

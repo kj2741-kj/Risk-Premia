@@ -108,11 +108,11 @@ def get_value(
     curve_scoped = curve[(curve.index >= range_start) & (curve.index <= range_end)]
 
     feature_combo_resolved = next(c for c in combos if _combo_label(c) == feature_label)
-    feature_pos_scoped = value_v1_position(
-        curve_scoped, feature_combo_resolved["contract"], _resolve_lookback_days(feature_combo_resolved["lookback"]),
+    feature_pos_full = value_v1_position(      # full history: a 5yr lookback is populated in a 2022+ range
+        curve, feature_combo_resolved["contract"], _resolve_lookback_days(feature_combo_resolved["lookback"]),
         feature_combo_resolved["threshold"], shift_n=shift_n,
     )
-    metrics = _clean_metrics(pos_metrics_generic(feature_pos_scoped, f1r_scoped, f1c_scoped, tc_bps, phase_scoped))
+    metrics = _clean_metrics(pos_metrics_generic(feature_pos_full, f1r, f1c, tc_bps, phase, window=(range_start, range_end)))
 
     eq_start, eq_end = f"{equity_year_start}-01-01", f"{equity_year_end}-12-31"
     fig_eq = go.Figure()

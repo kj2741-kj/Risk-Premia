@@ -179,6 +179,20 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
         </div>
       )}
 
+      {data?.metrics && (
+        <>
+          <div className="metric-row">
+            <MetricCard label="Gross IR (all days)" value={data.metrics.ir_gross ?? null} format={(v) => fmtSigned(v)} />
+            <MetricCard label="Net IR (all days)" value={data.metrics.ir_net ?? null} format={(v) => fmtSigned(v)} />
+            <MetricCard label="Ann Vol" value={data.metrics.vol ?? null} format={(v) => fmtSignedComma(v).replace("+", "")} unit={geometric ? " %" : ` ${data.unit_label}`} />
+          </div>
+          <p className="caption">
+            Sharpe above = active days only (days in a position). IR = annual return / annual vol over every day of the window, flat days as zero:
+            the figure the Final Research Dashboard shows per period. Signals are built on the full history and cut to the year range, as in the dashboard.
+          </p>
+        </>
+      )}
+
       <div className="section-header">Sharpe Heatmap: Contract × Lookback</div>
       <div className="control-row">
         <label>Threshold

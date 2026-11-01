@@ -113,8 +113,9 @@ def get_momentum(
     if len(f1r_scoped) < f_slow + 20:
         metrics = None
     else:
-        feature_pos = ma_crossover_position(f1r_scoped, f_fast, f_slow, shift_n=shift_n)
-        metrics = _clean_metrics(pos_metrics_generic(feature_pos, f1r_scoped, f1c_scoped, tc_bps, phase_scoped))
+        # signal on the full history, metrics cut to the year range (as common_engine.render_momentum_tab, aligned with the Final Research Dashboard)
+        feature_pos = ma_crossover_position(f1r, f_fast, f_slow, shift_n=shift_n)
+        metrics = _clean_metrics(pos_metrics_generic(feature_pos, f1r, f1c, tc_bps, phase, window=(range_start, range_end)))
 
     # ── Full-history positions for every active pair (equity curve / rolling
     # Sharpe / signal-position all read from this, unscoped by year range). ──

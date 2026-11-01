@@ -50,8 +50,9 @@ def get_skewness(
     f1c_s, phase_s = f1c.reindex(f1r_s.index), phase.reindex(f1r_s.index)
     metrics = None
     if len(f1r_s) >= 40:
-        feature_pos = skewness_position(lret, feature_window, shift_n).reindex(f1r_s.index).fillna(0)
-        metrics = _clean_metrics(pos_metrics_generic(feature_pos, f1r_s, f1c_s, tc_bps, phase_s))
+        feature_pos = skewness_position(lret, feature_window, shift_n)       # full history
+        metrics = _clean_metrics(pos_metrics_generic(feature_pos, f1r, f1c, tc_bps, phase,
+                                                     window=(pd.Timestamp(f"{metrics_year_start}-01-01"), pd.Timestamp(f"{metrics_year_end}-12-31"))))
 
     sweep = skewness_window_sweep(lret, f1c, f"{metrics_year_start}-01-01", f"{metrics_year_end}-12-31", shift_n,
                                   SWEEP_WINDOWS, is_geometric())

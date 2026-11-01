@@ -119,8 +119,8 @@ def get_carry(
     curve_scoped = curve[(curve.index >= range_start) & (curve.index <= range_end)]
 
     feature_v = next(v for v in variants if _variant_label(v) == feature_label)
-    feature_pos_scoped = _build_position(feature_v, curve_scoped, shift_n, near_default, far_default)
-    metrics = _clean_metrics(pos_metrics_generic(feature_pos_scoped, f1r_scoped, f1c_scoped, tc_bps, phase_scoped))
+    feature_pos_full = _build_position(feature_v, curve, shift_n, near_default, far_default)      # full-history curve, metrics cut to the year range
+    metrics = _clean_metrics(pos_metrics_generic(feature_pos_full, f1r, f1c, tc_bps, phase, window=(range_start, range_end)))
 
     eq_start, eq_end = f"{equity_year_start}-01-01", f"{equity_year_end}-12-31"
     fig_eq = go.Figure()

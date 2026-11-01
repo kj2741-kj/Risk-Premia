@@ -27,6 +27,9 @@ export interface Metrics {
   mdd: number | null;
   nact: number;
   flat_pct: number | null;
+  ir_gross?: number | null;
+  ir_net?: number | null;
+  vol?: number | null;
 }
 
 export interface SeriesJson {

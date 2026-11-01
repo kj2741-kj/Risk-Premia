@@ -14,6 +14,8 @@ from common_shared import CHART_LAYOUT, COLORS, is_geometric, pos_metrics_generi
 
 from cache import load_series, locked
 from config_registry import get_asset_config, get_product_code
+from plotly.subplots import make_subplots
+
 from services.momentum import _OVERLAY_COLORS, _clean_metrics, _fig_to_json, _series_to_json
 
 SWEEP_WINDOWS = tuple(range(40, 761, 20))
@@ -26,7 +28,7 @@ def get_skewness(
     tc_bps: int = 5, shift_n: int = 1,
     windows: list[int] | None = None,
     metrics_year_start: int | None = None, metrics_year_end: int | None = None,
-    feature_window: int | None = None,
+    feature_window: int | None = None, focus_window: int | None = None,
     equity_year_start: int | None = None, equity_year_end: int | None = None,
     rs_basis: str = "net",
 ) -> dict:
@@ -68,6 +70,9 @@ def get_skewness(
         b = sweep.loc[sweep["sharpe"].idxmax()]
         best = {"window": int(b["window"]), "sharpe": float(b["sharpe"])}
 
+    # the Signal & Position History follows the featured window unless another one is picked (as the Streamlit tab)
+    if focus_window not in windows:
+        focus_window = feature_window
     sk = lret.rolling(feature_window).skew()
     fig_sk = go.Figure()
     fig_sk.add_trace(go.Scatter(x=sk.index, y=sk.values, mode="lines", name=f"Skewness ({feature_window}d)",
@@ -90,7 +95,22 @@ def get_skewness(
     fig_rs.add_hline(y=0, line=dict(color="#555", width=1, dash="dot"))
     fig_rs.update_layout(**CHART_LAYOUT, height=320, yaxis_title="Rolling Sharpe")
 
+    focus_label = f"Skew({focus_window})"
+    pos_w = positions[focus_label].reindex(f1r.index).fillna(0)
+    fig_sig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.65, 0.35], vertical_spacing=0.04)
+    fig_sig.add_trace(go.Scatter(x=f1r.index, y=f1r.values, name="F1 Price", line=dict(color=COLORS["primary"], width=1.5),
+                                 hovertemplate="%{x|%b %d, %Y}<br>F1: %{y:,.2f}<extra></extra>"), row=1, col=1)
+    fig_sig.add_trace(go.Bar(x=pos_w.index, y=pos_w.where(pos_w > 0, 0.0).values, name="Long (+1)", marker_color="#00E676",
+                             hovertemplate="%{x|%b %d, %Y}<br>Long<extra></extra>"), row=2, col=1)
+    fig_sig.add_trace(go.Bar(x=pos_w.index, y=pos_w.where(pos_w < 0, 0.0).values, name="Short (-1)", marker_color="#FF1744",
+                             hovertemplate="%{x|%b %d, %Y}<br>Short<extra></extra>"), row=2, col=1)
+    fig_sig.update_layout(**CHART_LAYOUT, height=500, barmode="overlay", title=dict(text=f"{focus_label}: Price & Position", font=dict(size=13)),
+                          hovermode="x unified", showlegend=True)
+    fig_sig.update_yaxes(title_text="F1 Price", row=1, col=1)
+    fig_sig.update_yaxes(title_text="Position", tickvals=[-1, 0, 1], ticktext=["Short", "Flat", "Long"], row=2, col=1)
+
     return {
+        "focus_window": focus_window, "signal_position_fig": _fig_to_json(fig_sig),
         "year_range": {"min": yr0, "max": yr1}, "unit_label": unit_label,
         "default_windows": list(SKEWNESS_DEFAULT_WINDOWS), "windows": windows, "feature_window": feature_window,
         "metrics": metrics,

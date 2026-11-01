@@ -43,6 +43,10 @@ export interface MomentumResponse {
   active_pairs: [number, number][];
   feature_pair: [number, number];
   focus_pair: [number, number];
+  avg_label: string | null;
+  avg_pairs: [number, number][];
+  feature_is_avg: boolean;
+  focus_is_avg: boolean;
   metrics: Metrics | null;
   equity_curve_fig: PlotlyFigure;
   rolling_sharpe_fig: PlotlyFigure;
@@ -69,6 +73,9 @@ export interface MomentumParams {
   equityYearEnd?: number;
   focusPair?: [number, number];
   rsBasis?: "net" | "gross";
+  avgPairs?: [number, number][];
+  featureAvg?: boolean;
+  focusAvg?: boolean;
 }
 
 function pairsToQuery(pairs?: [number, number][]) {
@@ -109,6 +116,10 @@ export async function fetchMomentum(
     q.set("focus_slow", String(p.focusPair[1]));
   }
   if (p.rsBasis) q.set("rs_basis", p.rsBasis);
+  const avgQ = pairsToQuery(p.avgPairs);
+  if (avgQ) q.set("avg_pairs", avgQ);
+  if (p.featureAvg) q.set("feature_avg", "true");
+  if (p.focusAvg) q.set("focus_avg", "true");
 
   return getJson(`${API_BASE}/api/${assetClass}/${product}/momentum?${q.toString()}`);
 }
@@ -536,6 +547,8 @@ export interface SkewnessResponse {
   default_windows: number[];
   windows: number[];
   feature_window: number;
+  focus_window: number;
+  signal_position_fig: PlotlyFigure | null;
   metrics: Metrics | null;
   sweep_fig: PlotlyFigure | null;
   sweep_best: { window: number; sharpe: number } | null;
@@ -552,6 +565,7 @@ export interface SkewnessParams {
   metricsYearStart?: number;
   metricsYearEnd?: number;
   featureWindow?: number;
+  focusWindow?: number;
   equityYearStart?: number;
   equityYearEnd?: number;
   rsBasis?: "net" | "gross";
@@ -566,6 +580,7 @@ export async function fetchSkewness(assetClass: string, product: string, p: Skew
   if (p.metricsYearStart) q.set("metrics_year_start", String(p.metricsYearStart));
   if (p.metricsYearEnd) q.set("metrics_year_end", String(p.metricsYearEnd));
   if (p.featureWindow) q.set("feature_window", String(p.featureWindow));
+  if (p.focusWindow) q.set("focus_window", String(p.focusWindow));
   if (p.equityYearStart) q.set("equity_year_start", String(p.equityYearStart));
   if (p.equityYearEnd) q.set("equity_year_end", String(p.equityYearEnd));
   if (p.rsBasis) q.set("rs_basis", p.rsBasis);

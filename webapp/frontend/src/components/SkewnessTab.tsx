@@ -29,13 +29,14 @@ export default function SkewnessTab({ assetClass, product, onPositionsChange }: 
   const [metricsYearStart, setMetricsYearStart] = useState<number | undefined>(undefined);
   const [metricsYearEnd, setMetricsYearEnd] = useState<number | undefined>(undefined);
   const [featureWindow, setFeatureWindow] = useState<number | undefined>(undefined);
+  const [focusWindow, setFocusWindow] = useState<number | undefined>(undefined);   // undefined = follow the featured window
   const [equityYearStart, setEquityYearStart] = useState<number | undefined>(undefined);
   const [equityYearEnd, setEquityYearEnd] = useState<number | undefined>(undefined);
   const [rsBasis, setRsBasis] = useState<"net" | "gross">("net");
 
   const params = useMemo(
-    () => ({ tcBps, shiftN, windows, metricsYearStart, metricsYearEnd, featureWindow, equityYearStart, equityYearEnd, rsBasis }),
-    [tcBps, shiftN, windows, metricsYearStart, metricsYearEnd, featureWindow, equityYearStart, equityYearEnd, rsBasis],
+    () => ({ tcBps, shiftN, windows, metricsYearStart, metricsYearEnd, featureWindow, focusWindow, equityYearStart, equityYearEnd, rsBasis }),
+    [tcBps, shiftN, windows, metricsYearStart, metricsYearEnd, featureWindow, focusWindow, equityYearStart, equityYearEnd, rsBasis],
   );
   const debounced = useDebouncedValue(params, 400);
   const { data, isLoading, error } = useQuery({
@@ -100,7 +101,7 @@ export default function SkewnessTab({ assetClass, product, onPositionsChange }: 
             <input type="number" min={yr.min} max={yr.max} value={metricsYearEnd ?? yr.max} onChange={(e) => setMetricsYearEnd(Number(e.target.value))} />
           </label>
           <label>Strategy to feature
-            <select value={data?.feature_window ?? ""} onChange={(e) => setFeatureWindow(Number(e.target.value))}>
+            <select value={data?.feature_window ?? ""} onChange={(e) => { setFeatureWindow(Number(e.target.value)); setFocusWindow(undefined); }}>
               {active.map((w) => <option key={w} value={w}>Skew({w})</option>)}
             </select>
           </label>
@@ -166,6 +167,16 @@ export default function SkewnessTab({ assetClass, product, onPositionsChange }: 
             <label><input type="radio" checked={rsBasis === "net"} onChange={() => setRsBasis("net")} /> Net of TC</label>
           </div>
           <PlotlyChart fig={data.rolling_sharpe_fig} height={320} />
+
+          <div className="section-header">Signal & Position History</div>
+          <div className="control-row">
+            <label>Strategy to display
+              <select value={data.focus_window} onChange={(e) => setFocusWindow(Number(e.target.value))}>
+                {active.map((w) => <option key={w} value={w}>Skew({w})</option>)}
+              </select>
+            </label>
+          </div>
+          <PlotlyChart fig={data.signal_position_fig} height={500} />
         </>
       )}
     </div>

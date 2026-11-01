@@ -5,6 +5,7 @@ import { fetchMomentum, fetchMomentumHeatmap, type SeriesJson } from "../lib/api
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 import PlotlyChart from "./PlotlyChart";
 import MetricCard from "./MetricCard";
+import CheckPills from "./CheckPills";
 import { fmtSigned, fmtSignedComma } from "../lib/fmt";
 
 const TC_OPTIONS = [0, 5, 10, 20];
@@ -41,6 +42,17 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
   const [equityYearEnd, setEquityYearEnd] = useState<number | undefined>(undefined);
   const [focusPair, setFocusPair] = useState<[number, number]>([1, 20]);
   const [rsBasis, setRsBasis] = useState<"net" | "gross">("net");
+  // Custom average of selected strategies (equal-weight vote of their signals; the dashboard's composite for any set of pairs)
+  const [useAvg, setUseAvg] = useState(false);
+  const [avgSel, setAvgSel] = useState<string[] | null>(null);   // labels; null = all active pairs
+  const [featureAvg, setFeatureAvg] = useState(false);
+  const [focusAvg, setFocusAvg] = useState(false);
+  const avgPairs = useMemo(() => {
+    const sel = avgSel ?? activePairs.map(pairLabel);
+    return useAvg ? activePairs.filter((p) => sel.includes(pairLabel(p))) : [];
+  }, [useAvg, avgSel, activePairs]);
+  const avgOn = useAvg && avgPairs.length >= 2;
+  const avgLabel = avgOn ? `Avg(${avgPairs.map(pairLabel).join("+")})` : "";
 
   // Which pair is initially "featured" is asset/product-specific (e.g. NGL's
   // per-product momentum_default_feature) -- don't send a hardcoded guess
@@ -57,9 +69,10 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
       tcBps, shiftN, pairs: activePairs,
       metricsYearStart, metricsYearEnd, featurePair: seeded ? featurePair : undefined,
       equityYearStart, equityYearEnd, focusPair: seeded ? focusPair : undefined, rsBasis,
+      avgPairs: avgOn ? avgPairs : undefined, featureAvg: avgOn && featureAvg, focusAvg: avgOn && focusAvg,
     }),
     [tcBps, shiftN, activePairs, metricsYearStart, metricsYearEnd, featurePair, seeded,
-     equityYearStart, equityYearEnd, focusPair, rsBasis],
+     equityYearStart, equityYearEnd, focusPair, rsBasis, avgOn, avgPairs, featureAvg, focusAvg],
   );
   const debouncedParams = useDebouncedValue(params, 400);
 
@@ -152,6 +165,19 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
         ))}
       </div>
 
+      <label style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: 8, textTransform: "none", margin: "6px 0" }}
+        title="Adds one more strategy whose signal is the sign of the average of the selected MA crossovers' signals (an equal-weight vote). With the three defaults MA(1,20), MA(5,60) and MA(20,250) it is exactly the Momentum composite of the Final Research Dashboard.">
+        <input type="checkbox" checked={useAvg} onChange={(e) => { setUseAvg(e.target.checked); if (!e.target.checked) { setFeatureAvg(false); setFocusAvg(false); } }} />
+        Add a custom average of selected strategies
+      </label>
+      {useAvg && (
+        <>
+          <CheckPills label="Strategies to average (at least two)" options={activePairs.map(pairLabel)}
+            selected={avgSel ?? activePairs.map(pairLabel)} onChange={setAvgSel} />
+          {!avgOn && <p className="caption">Pick at least two strategies to average.</p>}
+        </>
+      )}
+
       {yr && (
         <div className="control-row">
           <label>Metrics year start
@@ -163,12 +189,14 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
               onChange={(e) => setMetricsYearEnd(Number(e.target.value))} />
           </label>
           <label>Strategy to feature
-            <select value={pairLabel(featurePair)}
+            <select value={avgOn && featureAvg ? avgLabel : pairLabel(featurePair)}
               onChange={(e) => {
+                if (avgOn && e.target.value === avgLabel) { setFeatureAvg(true); setFocusAvg(true); return; }
                 const p = activePairs.find((x) => pairLabel(x) === e.target.value);
-                if (p) setFeaturePair(p);
+                if (p) { setFeatureAvg(false); setFocusAvg(false); setFeaturePair(p); setFocusPair(p); }   // the Signal & Position chart follows the featured strategy
               }}>
               {activePairs.map((p) => <option key={pairLabel(p)}>{pairLabel(p)}</option>)}
+              {avgOn && <option key={avgLabel}>{avgLabel}</option>}
             </select>
           </label>
         </div>
@@ -253,12 +281,14 @@ export default function MomentumTab({ assetClass, product, onPositionsChange }: 
           <div className="section-header">Signal & Position History</div>
           <div className="control-row">
             <label>Strategy to display
-              <select value={pairLabel(focusPair)}
+              <select value={avgOn && focusAvg ? avgLabel : pairLabel(focusPair)}
                 onChange={(e) => {
+                  if (avgOn && e.target.value === avgLabel) { setFocusAvg(true); return; }
                   const p = activePairs.find((x) => pairLabel(x) === e.target.value);
-                  if (p) setFocusPair(p);
+                  if (p) { setFocusAvg(false); setFocusPair(p); }
                 }}>
                 {activePairs.map((p) => <option key={pairLabel(p)}>{pairLabel(p)}</option>)}
+                {avgOn && <option key={avgLabel}>{avgLabel}</option>}
               </select>
             </label>
           </div>

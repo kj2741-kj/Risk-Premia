@@ -49,6 +49,9 @@ def momentum(
     focus_fast: int | None = None,
     focus_slow: int | None = None,
     rs_basis: str = Query("net", pattern="^(net|gross)$"),
+    avg_pairs: str | None = Query(None, description="custom average: e.g. 1:20,5:60,20:250"),
+    feature_avg: bool = False,
+    focus_avg: bool = False,
 ):
     try:
         return momentum_service.get_momentum(
@@ -60,6 +63,7 @@ def momentum(
             equity_year_start=equity_year_start, equity_year_end=equity_year_end,
             focus_pair=(focus_fast, focus_slow) if focus_fast and focus_slow else None,
             rs_basis=rs_basis,
+            avg_pairs=_parse_pairs(avg_pairs), feature_avg=feature_avg, focus_avg=focus_avg,
         )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -101,6 +105,7 @@ def skewness(
     metrics_year_start: int | None = None,
     metrics_year_end: int | None = None,
     feature_window: int | None = None,
+    focus_window: int | None = None,
     equity_year_start: int | None = None,
     equity_year_end: int | None = None,
     rs_basis: str = Query("net", pattern="^(net|gross)$"),
@@ -111,7 +116,7 @@ def skewness(
             geometric=geometric, roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
             windows=[int(w) for w in windows.split(",")] if windows else None,
             metrics_year_start=metrics_year_start, metrics_year_end=metrics_year_end,
-            feature_window=feature_window, equity_year_start=equity_year_start, equity_year_end=equity_year_end,
+            feature_window=feature_window, focus_window=focus_window, equity_year_start=equity_year_start, equity_year_end=equity_year_end,
             rs_basis=rs_basis,
         )
     except KeyError as exc:

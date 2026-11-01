@@ -19,7 +19,7 @@ import plotly.graph_objects as go
 import plotly.io as pio
 from plotly.subplots import make_subplots
 
-from common_engine import daily_returns, equity_curve, ma_crossover_position, momentum_heatmap, rolling_sharpe
+from common_engine import daily_returns, equity_curve, ma_average_position, ma_crossover_position, momentum_heatmap, rolling_sharpe
 from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic
 
 from cache import load_series, locked
@@ -73,12 +73,18 @@ def get_momentum(
     equity_year_start: int | None = None, equity_year_end: int | None = None,
     focus_pair: tuple[int, int] | None = None,
     rs_basis: str = "net",
+    avg_pairs: list[tuple[int, int]] | None = None, feature_avg: bool = False, focus_avg: bool = False,
 ) -> dict:
     f1r, f1c, phase, _curve = _load(asset_class, product, roll_method, roll_n)
     ac = get_asset_config(asset_class)
     unit_label = ac["products"][product]["unit"]
 
     pairs = pairs or list(DEFAULT_PAIRS)
+    # Custom average (as render_momentum_tab): one extra strategy, the sign of the mean of the selected pairs' signals (the dashboard's composite for any set of pairs)
+    avg_pairs = [tuple(p_) for p_ in (avg_pairs or [])]
+    use_avg = len(avg_pairs) >= 2
+    avg_label = ("Avg(" + "+".join(f"MA({f},{s_})" for f, s_ in avg_pairs) + ")") if use_avg else ""
+    feature_is_avg, focus_is_avg = use_avg and feature_avg, use_avg and focus_avg
     yr0, yr1 = int(f1r.index[0].year), int(f1r.index[-1].year)
     metrics_year_start = metrics_year_start or yr0
     metrics_year_end = metrics_year_end or yr1
@@ -110,16 +116,21 @@ def get_momentum(
     phase_scoped = phase.reindex(f1r_scoped.index)
 
     f_fast, f_slow = feature_pair
+    if feature_is_avg:
+        f_slow = max(s_ for _f, s_ in avg_pairs)
     if len(f1r_scoped) < f_slow + 20:
         metrics = None
     else:
         # signal on the full history, metrics cut to the year range (as common_engine.render_momentum_tab, aligned with the Final Research Dashboard)
-        feature_pos = ma_crossover_position(f1r, f_fast, f_slow, shift_n=shift_n)
+        feature_pos = (ma_average_position(f1r, avg_pairs, shift_n=shift_n) if feature_is_avg
+                       else ma_crossover_position(f1r, f_fast, f_slow, shift_n=shift_n))
         metrics = _clean_metrics(pos_metrics_generic(feature_pos, f1r, f1c, tc_bps, phase, window=(range_start, range_end)))
 
     # ── Full-history positions for every active pair (equity curve / rolling
     # Sharpe / signal-position all read from this, unscoped by year range). ──
     positions = {f"MA({f},{s})": ma_crossover_position(f1r, f, s, shift_n=shift_n) for f, s in pairs}
+    if use_avg:
+        positions[avg_label] = ma_average_position(f1r, avg_pairs, shift_n=shift_n)
 
     # ── Cumulative PnL (Equity Curve): net PnL computed on full history,
     # THEN sliced to [equity_year_start, equity_year_end] and re-cumsummed --
@@ -147,7 +158,7 @@ def get_momentum(
     fig_rs.update_layout(**CHART_LAYOUT, height=320, yaxis_title="Rolling Sharpe")
 
     # ── Signal & Position History: single focused strategy ────────────────
-    focus_label = f"MA({focus_pair[0]},{focus_pair[1]})"
+    focus_label = avg_label if focus_is_avg else f"MA({focus_pair[0]},{focus_pair[1]})"
     pos_w = positions[focus_label].reindex(f1r.index).fillna(0)
     pos_long = pos_w.where(pos_w > 0, 0.0)
     pos_short = pos_w.where(pos_w < 0, 0.0)
@@ -178,6 +189,8 @@ def get_momentum(
         "active_pairs": [list(p) for p in pairs],
         "feature_pair": list(feature_pair),
         "focus_pair": list(focus_pair),
+        "avg_label": avg_label or None, "avg_pairs": [list(p_) for p_ in avg_pairs] if use_avg else [],
+        "feature_is_avg": bool(feature_is_avg), "focus_is_avg": bool(focus_is_avg),
         "metrics": metrics,
         "equity_curve_fig": _fig_to_json(fig_eq),
         "rolling_sharpe_fig": _fig_to_json(fig_rs),

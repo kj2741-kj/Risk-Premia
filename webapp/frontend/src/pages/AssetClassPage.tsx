@@ -5,7 +5,8 @@ import ValueTab from "../components/ValueTab";
 import SkewnessTab from "../components/SkewnessTab";
 import ComparisonTab from "../components/ComparisonTab";
 import PortfolioTab from "../components/PortfolioTab";
-import type { SeriesJson } from "../lib/api";
+import { setReturnBasis, type SeriesJson } from "../lib/api";
+import { BasisContext } from "../lib/basis";
 
 const TABS = ["Momentum", "Carry", "Value", "Skewness", "Comparison", "Portfolio"] as const;
 type Tab = (typeof TABS)[number];
@@ -19,6 +20,8 @@ interface AssetClassPageProps {
 
 export default function AssetClassPage({ assetClass, label, products, hidePortfolio }: AssetClassPageProps) {
   const [product, setProduct] = useState(products[0]);
+  const [geometric, setGeometric] = useState(true);   // Streamlit default: Geometric (% return)
+  setReturnBasis(geometric);
   const [tab, setTab] = useState<Tab>("Momentum");
   const [groups, setGroups] = useState<Record<string, Record<string, SeriesJson>>>({
     Momentum: {}, Carry: {}, Value: {}, Skewness: {},
@@ -45,6 +48,7 @@ export default function AssetClassPage({ assetClass, label, products, hidePortfo
   }, []);
 
   return (
+    <BasisContext.Provider value={{ geometric, setGeometric }}>
     <div className="page">
       <h1>{label} Risk Premia</h1>
       <div className="control-row">
@@ -53,6 +57,17 @@ export default function AssetClassPage({ assetClass, label, products, hidePortfo
           <select value={product} onChange={(e) => changeProduct(e.target.value)}>
             {products.map((p) => <option key={p}>{p}</option>)}
           </select>
+        </label>
+        <label title="Arithmetic: position x dollar change of F1_continuous, equity = cumulative sum, in the product's native unit. Geometric: position x ratio-adjusted daily log return, compounded (equity = exp(cumsum) - 1, in %), the same convention the Portfolio tab uses. Applies to Momentum, Carry, Value, Skewness and Comparison.">
+          Return basis
+          <span style={{ display: "flex", gap: 14, textTransform: "none" }}>
+            <label style={{ flexDirection: "row", alignItems: "center", gap: 6, textTransform: "none" }}>
+              <input type="radio" checked={!geometric} onChange={() => setGeometric(false)} /> Arithmetic ($ PnL)
+            </label>
+            <label style={{ flexDirection: "row", alignItems: "center", gap: 6, textTransform: "none" }}>
+              <input type="radio" checked={geometric} onChange={() => setGeometric(true)} /> Geometric (% return)
+            </label>
+          </span>
         </label>
       </div>
 
@@ -99,5 +114,6 @@ export default function AssetClassPage({ assetClass, label, products, hidePortfo
         </div>
       )}
     </div>
+    </BasisContext.Provider>
   );
 }

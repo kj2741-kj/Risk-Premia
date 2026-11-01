@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useBasis } from "../lib/basis";
 import { useQuery } from "@tanstack/react-query";
 import { fetchComparison, type SeriesJson } from "../lib/api";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -14,6 +15,7 @@ interface ComparisonTabProps {
 }
 
 export default function ComparisonTab({ assetClass, product, groups }: ComparisonTabProps) {
+  const { geometric } = useBasis();
   const [volWindowLabel, setVolWindowLabel] = useState("63d (1qtr)");
   const [tcBps, setTcBps] = useState(5);
   const [chosen, setChosen] = useState<string[] | undefined>(undefined);
@@ -31,7 +33,7 @@ export default function ComparisonTab({ assetClass, product, groups }: Compariso
   const debouncedParams = useDebouncedValue(params, 400);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["comparison", assetClass, product, debouncedParams],
+    queryKey: ["comparison", assetClass, product, debouncedParams, geometric],
     queryFn: () => fetchComparison(assetClass, product, debouncedParams),
     enabled: hasGroups,
     placeholderData: (prev) => prev,
@@ -92,7 +94,7 @@ export default function ComparisonTab({ assetClass, product, groups }: Compariso
         })}
       </div>
 
-      <div className="section-header">Cumulative Return (Equity Curve, %): Net of TC</div>
+      <div className="section-header">{geometric ? "Cumulative Return (Equity Curve, %)" : `Cumulative PnL (Equity Curve, ${data?.unit_label ?? ""})`}: Net of TC</div>
       <div className="control-row">
         <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
           onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

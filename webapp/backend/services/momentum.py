@@ -23,7 +23,7 @@ from common_engine import daily_returns, equity_curve, ma_crossover_position, mo
 from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic
 
 from cache import load_series, locked
-from common_shared import register_geo_inputs
+from common_shared import is_geometric, register_geo_inputs
 from config_registry import get_asset_config, get_product_code
 
 _OVERLAY_COLORS = [COLORS["primary"], COLORS["green"], COLORS["secondary"],
@@ -132,7 +132,7 @@ def get_momentum(
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)" if is_geometric() else f"Cumulative PnL ({unit_label})")
 
     # ── Rolling Sharpe (252-Day) ──────────────────────────────────────────
     fig_rs = go.Figure()
@@ -201,7 +201,7 @@ def get_momentum_heatmap(
     # own hasher handles the f1r/f1c Series args correctly, so this call is
     # already cached; no separate cache layer needed here (see cache.py's
     # module docstring for why that's *not* true of the load_series step above).
-    hm_df = momentum_heatmap(f1r, f1c, max_window, f"{year_start}-01-01", f"{year_end}-12-31", shift_n, tc_bps)
+    hm_df = momentum_heatmap(f1r, f1c, max_window, f"{year_start}-01-01", f"{year_end}-12-31", shift_n, tc_bps, is_geometric())
     if hm_df.empty or not hm_df["sharpe"].notna().any():
         return {"fig": None, "plot_config": {"scrollZoom": True}, "best": None}
 

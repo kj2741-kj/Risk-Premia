@@ -14,11 +14,13 @@ import contextlib
 import functools
 import threading
 
+import streamlit as st
+
 import common_curve_loader
 import rolling_continuous
 import rolling_continuous_5td
 
-from common_shared import register_geo_inputs
+from common_shared import RETURN_BASIS_KEY, RETURN_BASIS_OPTIONS, register_geo_inputs
 from config_registry import get_asset_config, get_product_source
 
 
@@ -68,9 +70,13 @@ def engine_lock(f1_df):
 
 
 def locked(fn):
-    """Run a service function under the engine lock (see engine_lock): one request at a time touches the shared engine state."""
+    """Run a service function under the engine lock (see engine_lock) with the request's return basis applied.
+
+    The shared engine reads the return basis (Arithmetic $ PnL / Geometric % return) from st.session_state, as the Streamlit sidebar radio
+    sets it. `geometric` (default True, Streamlit's default) is taken off the call here and written to that state for the duration of it."""
     @functools.wraps(fn)
-    def wrapper(*a, **k):
+    def wrapper(*a, geometric: bool = True, **k):
         with _ENGINE_LOCK:
+            st.session_state[RETURN_BASIS_KEY] = RETURN_BASIS_OPTIONS[1] if geometric else RETURN_BASIS_OPTIONS[0]
             return fn(*a, **k)
     return wrapper

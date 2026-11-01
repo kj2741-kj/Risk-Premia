@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useBasis } from "../lib/basis";
 import { useQuery } from "@tanstack/react-query";
 import { fetchSkewness, type SeriesJson } from "../lib/api";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -20,6 +21,7 @@ interface SkewnessTabProps {
 }
 
 export default function SkewnessTab({ assetClass, product, onPositionsChange }: SkewnessTabProps) {
+  const { geometric } = useBasis();
   const [tcBps, setTcBps] = useState(5);
   const [shiftN, setShiftN] = useState(1);
   const [windows, setWindows] = useState<number[] | undefined>(undefined);
@@ -37,7 +39,7 @@ export default function SkewnessTab({ assetClass, product, onPositionsChange }: 
   );
   const debounced = useDebouncedValue(params, 400);
   const { data, isLoading, error } = useQuery({
-    queryKey: ["skewness", assetClass, product, debounced],
+    queryKey: ["skewness", assetClass, product, debounced, geometric],
     queryFn: () => fetchSkewness(assetClass, product, debounced),
     placeholderData: (prev) => prev,
   });
@@ -112,8 +114,8 @@ export default function SkewnessTab({ assetClass, product, onPositionsChange }: 
         <div className="metric-row">
           <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => fmtSigned(v)} />
           <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => fmtSigned(v)} />
-          <MetricCard label="Ann Return (Net)" value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit=" %" />
-          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit=" %" />
+          <MetricCard label={geometric ? "Ann Return (Net)" : "Ann PnL (Net)"} value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit={geometric ? " %" : ` ${data.unit_label}`} />
+          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit={geometric ? " %" : ` ${data.unit_label}`} />
           <MetricCard label="% Flat" value={data.metrics.flat_pct} format={(v) => v.toFixed(0)} unit="%" />
         </div>
       )}
@@ -137,7 +139,7 @@ export default function SkewnessTab({ assetClass, product, onPositionsChange }: 
           <p className="caption">The signal is long where this line is below zero and short where it is above zero.</p>
           <PlotlyChart fig={data.rolling_skew_fig} height={300} />
 
-          <div className="section-header">Cumulative Return (Equity Curve, %): Net of TC</div>
+          <div className="section-header">{geometric ? "Cumulative Return (Equity Curve, %)" : `Cumulative PnL (Equity Curve, ${data?.unit_label ?? ""})`}: Net of TC</div>
           <div className="control-row">
             <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""} onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>
             <label>Equity year end <input type="number" value={equityYearEnd ?? yr?.max ?? ""} onChange={(e) => setEquityYearEnd(Number(e.target.value))} /></label>

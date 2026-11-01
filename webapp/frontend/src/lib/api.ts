@@ -1,5 +1,11 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+// Return basis of the page (Streamlit sidebar radio: Arithmetic $ PnL / Geometric % return). Set by AssetClassPage before any tab fetches.
+let RETURN_GEOMETRIC = true;
+export function setReturnBasis(geometric: boolean): void {
+  RETURN_GEOMETRIC = geometric;
+}
+
 export const reportUrl = (slug: string): string => `${API_BASE}/api/reports/${slug}`;
 
 // Fire-and-forget: hits the backend the instant the app loads, so a
@@ -80,6 +86,7 @@ export async function fetchMomentum(
   p: MomentumParams = {},
 ): Promise<MomentumResponse> {
   const q = new URLSearchParams();
+  q.set("geometric", String(RETURN_GEOMETRIC));
   if (p.rollMethod) q.set("roll_method", p.rollMethod);
   if (p.rollN) q.set("roll_n", String(p.rollN));
   if (p.tcBps !== undefined) q.set("tc_bps", String(p.tcBps));
@@ -155,7 +162,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 
 export async function fetchCarry(assetClass: string, product: string, p: CarryParams = {}): Promise<CarryResponse> {
   return postJson(`${API_BASE}/api/${assetClass}/${product}/carry`, {
-    tc_bps: p.tcBps, shift_n: p.shiftN, variants: p.variants,
+    geometric: RETURN_GEOMETRIC, tc_bps: p.tcBps, shift_n: p.shiftN, variants: p.variants,
     metrics_year_start: p.metricsYearStart, metrics_year_end: p.metricsYearEnd,
     feature_variant: p.featureVariant,
     equity_year_start: p.equityYearStart, equity_year_end: p.equityYearEnd,
@@ -174,6 +181,7 @@ export async function fetchCarryHeatmap(
        yearStart?: number; yearEnd?: number } = {},
 ): Promise<CarryHeatmapResponse> {
   const q = new URLSearchParams();
+  q.set("geometric", String(RETURN_GEOMETRIC));
   if (p.tcBps !== undefined) q.set("tc_bps", String(p.tcBps));
   if (p.shiftN !== undefined) q.set("shift_n", String(p.shiftN));
   if (p.days !== undefined) q.set("days", String(p.days));
@@ -221,7 +229,7 @@ export interface ValueParams {
 
 export async function fetchValue(assetClass: string, product: string, p: ValueParams = {}): Promise<ValueResponse> {
   return postJson(`${API_BASE}/api/${assetClass}/${product}/value`, {
-    tc_bps: p.tcBps, shift_n: p.shiftN, combos: p.combos,
+    geometric: RETURN_GEOMETRIC, tc_bps: p.tcBps, shift_n: p.shiftN, combos: p.combos,
     metrics_year_start: p.metricsYearStart, metrics_year_end: p.metricsYearEnd,
     feature_combo: p.featureCombo,
     equity_year_start: p.equityYearStart, equity_year_end: p.equityYearEnd,
@@ -239,6 +247,7 @@ export async function fetchValueHeatmap(
   p: { tcBps?: number; shiftN?: number; threshold?: number; yearStart?: number; yearEnd?: number } = {},
 ): Promise<ValueHeatmapResponse> {
   const q = new URLSearchParams();
+  q.set("geometric", String(RETURN_GEOMETRIC));
   if (p.tcBps !== undefined) q.set("tc_bps", String(p.tcBps));
   if (p.shiftN !== undefined) q.set("shift_n", String(p.shiftN));
   if (p.threshold !== undefined) q.set("threshold", String(p.threshold));
@@ -273,7 +282,7 @@ export async function fetchComparison(
   assetClass: string, product: string, p: ComparisonParams,
 ): Promise<ComparisonResponse> {
   return postJson(`${API_BASE}/api/${assetClass}/${product}/comparison`, {
-    groups: p.groups, tc_bps: p.tcBps, vol_window_label: p.volWindowLabel, chosen: p.chosen,
+    geometric: RETURN_GEOMETRIC, groups: p.groups, tc_bps: p.tcBps, vol_window_label: p.volWindowLabel, chosen: p.chosen,
     equity_year_start: p.equityYearStart, equity_year_end: p.equityYearEnd,
     rs_basis: p.rsBasis, show_vol_overlay: p.showVolOverlay,
   });
@@ -286,6 +295,7 @@ export async function fetchMomentumHeatmap(
        yearStart?: number; yearEnd?: number; maxWindow?: number } = {},
 ): Promise<MomentumHeatmapResponse> {
   const q = new URLSearchParams();
+  q.set("geometric", String(RETURN_GEOMETRIC));
   if (p.rollMethod) q.set("roll_method", p.rollMethod);
   if (p.rollN) q.set("roll_n", String(p.rollN));
   if (p.tcBps !== undefined) q.set("tc_bps", String(p.tcBps));
@@ -428,6 +438,7 @@ export interface FundamentalParams {
 
 export async function fetchFundamental(commodity: string, p: FundamentalParams = {}): Promise<GhrResponse> {
   const q = new URLSearchParams();
+  q.set("geometric", String(RETURN_GEOMETRIC));
   if (p.basisSource) q.set("basis_source", p.basisSource);
   if (p.start) q.set("start", p.start);
   if (p.end) q.set("end", p.end);
@@ -545,6 +556,7 @@ export interface SkewnessParams {
 
 export async function fetchSkewness(assetClass: string, product: string, p: SkewnessParams = {}): Promise<SkewnessResponse> {
   const q = new URLSearchParams();
+  q.set("geometric", String(RETURN_GEOMETRIC));
   if (p.tcBps !== undefined) q.set("tc_bps", String(p.tcBps));
   if (p.shiftN !== undefined) q.set("shift_n", String(p.shiftN));
   if (p.windows?.length) q.set("windows", p.windows.join(","));

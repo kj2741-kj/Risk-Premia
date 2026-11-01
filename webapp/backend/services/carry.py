@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 from common_shared import CHART_LAYOUT, COLORS, pos_metrics_generic
 
 from cache import load_series, locked
-from common_shared import register_geo_inputs
+from common_shared import is_geometric, register_geo_inputs
 from config_registry import get_asset_config, get_product_code
 from services.momentum import _clean_metrics, _fig_to_json, _series_to_json  # reuse, no reimplementation
 
@@ -130,7 +130,7 @@ def get_carry(
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
+    fig_eq.update_layout(**CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)" if is_geometric() else f"Cumulative PnL ({unit_label})")
 
     fig_rs = go.Figure()
     for i, (label, pos) in enumerate(positions.items()):
@@ -187,7 +187,7 @@ def get_carry_heatmap(
     all_contracts = _all_contracts(curve, skip_front_contract)
 
     hm_df = carry_heatmap(curve, tuple(all_contracts), days, mode, f1r, f1c,
-                           f"{year_start}-01-01", f"{year_end}-12-31", shift_n)
+                           f"{year_start}-01-01", f"{year_end}-12-31", shift_n, is_geometric())
     if hm_df.empty or not hm_df["sharpe"].notna().any():
         return {"fig": None, "best": None}
 

@@ -15,7 +15,7 @@ from common_engine import daily_returns, equity_curve, rolling_price_vol, rollin
 from common_shared import CHART_LAYOUT, COLORS
 
 from cache import load_series, locked
-from common_shared import register_geo_inputs
+from common_shared import is_geometric, register_geo_inputs
 from config_registry import get_asset_config, get_product_code
 from services.momentum import _fig_to_json
 
@@ -82,7 +82,7 @@ def get_comparison(
         eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    layout = dict(CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")
+    layout = dict(CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)" if is_geometric() else f"Cumulative PnL ({unit_label})")
     if show_vol_overlay:
         vol_w = vol[(vol.index >= eq_start) & (vol.index <= eq_end)]
         fig_eq.add_trace(go.Scatter(x=vol_w.index, y=vol_w.values, mode="lines",

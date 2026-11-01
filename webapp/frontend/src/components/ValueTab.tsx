@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useBasis } from "../lib/basis";
 import { useQuery } from "@tanstack/react-query";
 import { fetchValue, fetchValueHeatmap, type SeriesJson, type ValueCombo } from "../lib/api";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -25,6 +26,7 @@ interface ValueTabProps {
 }
 
 export default function ValueTab({ assetClass, product, onPositionsChange }: ValueTabProps) {
+  const { geometric } = useBasis();
   const [tcBps, setTcBps] = useState(5);
   const [shiftN, setShiftN] = useState(1);
   // Starts empty rather than hardcoded F8/5yr/10% -- the correct default
@@ -65,7 +67,7 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
   const debouncedParams = useDebouncedValue(params, 400);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["value", assetClass, product, debouncedParams],
+    queryKey: ["value", assetClass, product, debouncedParams, geometric],
     queryFn: () => fetchValue(assetClass, product, debouncedParams),
     placeholderData: (prev) => prev,
   });
@@ -89,7 +91,7 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
   const [hmYearEnd, setHmYearEnd] = useState<number>();
   const [hmCommitted, setHmCommitted] = useState({ tcBps, shiftN, threshold: hmThreshold, yearStart: hmYearStart, yearEnd: hmYearEnd });
   const heatmapQuery = useQuery({
-    queryKey: ["value-heatmap", assetClass, product, hmCommitted],
+    queryKey: ["value-heatmap", assetClass, product, hmCommitted, geometric],
     queryFn: () => fetchValueHeatmap(assetClass, product, hmCommitted),
   });
 
@@ -171,8 +173,8 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
         <div className="metric-row">
           <MetricCard label="Gross Sharpe" value={data.metrics.gross} format={(v) => fmtSigned(v)} />
           <MetricCard label="Net Sharpe" value={data.metrics.net} format={(v) => fmtSigned(v)} />
-          <MetricCard label="Ann Return (Net)" value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit=" %" />
-          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit=" %" />
+          <MetricCard label={geometric ? "Ann Return (Net)" : "Ann PnL (Net)"} value={data.metrics.ann} format={(v) => fmtSignedComma(v)} unit={geometric ? " %" : ` ${data.unit_label}`} />
+          <MetricCard label="Max DD (Net)" value={data.metrics.mdd} format={(v) => fmtSignedComma(v)} unit={geometric ? " %" : ` ${data.unit_label}`} />
           <MetricCard label="% Flat" value={data.metrics.flat_pct} format={(v) => v.toFixed(0)} unit="%" />
         </div>
       )}
@@ -207,7 +209,7 @@ export default function ValueTab({ assetClass, product, onPositionsChange }: Val
 
       {data && (
         <>
-          <div className="section-header">Cumulative Return (Equity Curve, %): Net of TC</div>
+          <div className="section-header">{geometric ? "Cumulative Return (Equity Curve, %)" : `Cumulative PnL (Equity Curve, ${data?.unit_label ?? ""})`}: Net of TC</div>
           <div className="control-row">
             <label>Equity year start <input type="number" value={equityYearStart ?? yr?.min ?? ""}
               onChange={(e) => setEquityYearStart(Number(e.target.value))} /></label>

@@ -38,6 +38,7 @@ def momentum(
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
+    geometric: bool = Query(True),
     pairs: str | None = Query(None, description="e.g. 1:20,5:60,20:250"),
     metrics_year_start: int | None = None,
     metrics_year_end: int | None = None,
@@ -52,7 +53,7 @@ def momentum(
     try:
         return momentum_service.get_momentum(
             asset_class, product,
-            roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
+            geometric=geometric, roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
             pairs=_parse_pairs(pairs),
             metrics_year_start=metrics_year_start, metrics_year_end=metrics_year_end,
             feature_pair=(feature_fast, feature_slow) if feature_fast and feature_slow else None,
@@ -71,6 +72,7 @@ def momentum_heatmap_endpoint(
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
+    geometric: bool = Query(True),
     year_start: int | None = None,
     year_end: int | None = None,
     max_window: int = Query(250, ge=10, le=500),
@@ -78,7 +80,7 @@ def momentum_heatmap_endpoint(
     try:
         return momentum_service.get_momentum_heatmap(
             asset_class, product,
-            roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
+            geometric=geometric, roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
             year_start=year_start, year_end=year_end, max_window=max_window,
         )
     except KeyError as exc:
@@ -94,6 +96,7 @@ def skewness(
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
+    geometric: bool = Query(True),
     windows: str | None = Query(None, description="e.g. 126,252,504"),
     metrics_year_start: int | None = None,
     metrics_year_end: int | None = None,
@@ -105,7 +108,7 @@ def skewness(
     try:
         return skewness_service.get_skewness(
             asset_class, product,
-            roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
+            geometric=geometric, roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
             windows=[int(w) for w in windows.split(",")] if windows else None,
             metrics_year_start=metrics_year_start, metrics_year_end=metrics_year_end,
             feature_window=feature_window, equity_year_start=equity_year_start, equity_year_end=equity_year_end,
@@ -128,6 +131,7 @@ class CarryVariant(BaseModel):
 class CarryRequest(BaseModel):
     roll_method: str = "5td"
     roll_n: int = 5
+    geometric: bool = True
     tc_bps: int = 5
     shift_n: int = 1
     variants: list[CarryVariant] | None = None
@@ -145,7 +149,7 @@ def carry(asset_class: str, product: str, body: CarryRequest):
     try:
         return carry_service.get_carry(
             asset_class, product,
-            roll_method=body.roll_method, roll_n=body.roll_n, tc_bps=body.tc_bps, shift_n=body.shift_n,
+            geometric=body.geometric, roll_method=body.roll_method, roll_n=body.roll_n, tc_bps=body.tc_bps, shift_n=body.shift_n,
             variants=[v.model_dump(exclude_none=True) for v in body.variants] if body.variants else None,
             skip_front_contract=_skip_front_contract(asset_class, product),
             metrics_year_start=body.metrics_year_start, metrics_year_end=body.metrics_year_end,
@@ -165,6 +169,7 @@ def carry_heatmap_endpoint(
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
+    geometric: bool = Query(True),
     days: int | None = None,
     mode: str | None = Query(None, pattern="^(Momentum|Zscore)$"),
     year_start: int | None = None,
@@ -173,7 +178,7 @@ def carry_heatmap_endpoint(
     try:
         return carry_service.get_carry_heatmap(
             asset_class, product,
-            roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
+            geometric=geometric, roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
             skip_front_contract=_skip_front_contract(asset_class, product),
             days=days, mode=mode, year_start=year_start, year_end=year_end,
         )
@@ -192,6 +197,7 @@ class ValueCombo(BaseModel):
 class ValueRequest(BaseModel):
     roll_method: str = "5td"
     roll_n: int = 5
+    geometric: bool = True
     tc_bps: int = 5
     shift_n: int = 1
     combos: list[ValueCombo] | None = None
@@ -209,7 +215,7 @@ def value(asset_class: str, product: str, body: ValueRequest):
     try:
         return value_service.get_value(
             asset_class, product,
-            roll_method=body.roll_method, roll_n=body.roll_n, tc_bps=body.tc_bps, shift_n=body.shift_n,
+            geometric=body.geometric, roll_method=body.roll_method, roll_n=body.roll_n, tc_bps=body.tc_bps, shift_n=body.shift_n,
             combos=[c.model_dump() for c in body.combos] if body.combos else None,
             skip_front_contract=_skip_front_contract(asset_class, product),
             metrics_year_start=body.metrics_year_start, metrics_year_end=body.metrics_year_end,
@@ -229,6 +235,7 @@ def value_heatmap_endpoint(
     roll_n: int = Query(5, ge=1, le=10),
     tc_bps: int = Query(5),
     shift_n: int = Query(1, ge=0, le=2),
+    geometric: bool = Query(True),
     threshold: float = Query(0.10),
     year_start: int | None = None,
     year_end: int | None = None,
@@ -236,7 +243,7 @@ def value_heatmap_endpoint(
     try:
         return value_service.get_value_heatmap(
             asset_class, product,
-            roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
+            geometric=geometric, roll_method=roll_method, roll_n=roll_n, tc_bps=tc_bps, shift_n=shift_n,
             skip_front_contract=_skip_front_contract(asset_class, product),
             threshold=threshold, year_start=year_start, year_end=year_end,
         )
@@ -254,6 +261,7 @@ class SeriesIn(BaseModel):
 class ComparisonRequest(BaseModel):
     roll_method: str = "5td"
     roll_n: int = 5
+    geometric: bool = True
     groups: dict[str, dict[str, SeriesIn]]
     tc_bps: int = 5
     vol_window_label: str = "63d (1qtr)"
@@ -269,7 +277,7 @@ def comparison(asset_class: str, product: str, body: ComparisonRequest):
     try:
         return comparison_service.get_comparison(
             asset_class, product,
-            roll_method=body.roll_method, roll_n=body.roll_n,
+            geometric=body.geometric, roll_method=body.roll_method, roll_n=body.roll_n,
             groups={g: {label: s.model_dump() for label, s in series.items()} for g, series in body.groups.items()},
             tc_bps=body.tc_bps, vol_window_label=body.vol_window_label, chosen=body.chosen,
             equity_year_start=body.equity_year_start, equity_year_end=body.equity_year_end,

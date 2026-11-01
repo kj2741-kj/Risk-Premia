@@ -1,0 +1,79 @@
+{
+ "fig_ngl_combined.png": {
+  "Momentum": 5475.05824552673,
+  "Carry": 3881.9916465448787,
+  "Carry-Momentum": 1225.3549881801955,
+  "Value": 137.78101748928066,
+  "Skewness": 128.51699892794667,
+  "EW Portfolio": 856.586144488967,
+  "Inverse Vol": 707.3608105983731
+ },
+ "fig_cross_combined.png": {
+  "Momentum": 234.68936542873053,
+  "Carry": 297.941805843999,
+  "Carry-Momentum": 211.7798926981208,
+  "Value": 99.82212596111326,
+  "Skewness": 134.72994836705527,
+  "EW Portfolio": 181.90310307807218,
+  "Inverse Vol": 189.0794781989853
+ },
+ "figA_ngl_Momentum.png": {
+  "Ethane": 8994.651330485452,
+  "Propane": 2571.889568863744,
+  "Butane": 13321.874204529655,
+  "Isobutane": 2915.768208718024,
+  "EW (All Products)": 5475.05824552673
+ },
+ "figA_ngl_Carry.png": {
+  "Ethane": 497.54474431393413,
+  "Propane": 8917.045026591824,
+  "Butane": 6453.374356571132,
+  "Isobutane": 7931.921809321871,
+  "EW (All Products)": 3881.9916465448787
+ },
+ "figA_ngl_CarryMom.png": {
+  "Ethane": 271.27026579351707,
+  "Propane": 5740.334564242167,
+  "Butane": 1220.1499274425414,
+  "Isobutane": 1186.5747316114887,
+  "EW (All Products)": 1225.3549881801955
+ },
+ "figA_ngl_Value.png": {
+  "Ethane": 54.02925725301111,
+  "Propane": 102.63317829073786,
+  "Butane": 311.85608836660043,
+  "Isobutane": 208.3946416053855,
+  "EW (All Products)": 137.78101748928066
+ },
+ "figA_ngl_Skewness.png": {
+  "Ethane": 512.4666497134665,
+  "Propane": 63.09972996141462,
+  "Butane": 66.49598647616864,
+  "Isobutane": 126.86848701217161,
+  "EW (All Products)": 128.51699892794667
+ },
+ "figA_pairs_EW.png": {
+  "Metals-Energy": 185.68477417041916,
+  "Metals-Precious Metals": 85.84468891068894,
+  "Metals-NGL": 287.6044214179706,
+  "Metals-Agriculture": 92.3730094852458,
+  "Energy-Precious Metals": 165.0705710372961,
+  "Energy-NGL": 553.033934641056,
+  "Energy-Agriculture": 177.6238648849538,
+  "Precious Metals-NGL": 255.6753847396421,
+  "Precious Metals-Agriculture": 82.11801690411401,
+  "NGL-Agriculture": 275.11899733564206
+ },
+ "figA_pairs_IV.png": {
+  "Metals-Energy": 149.41670508974482,
+  "Metals-Precious Metals": 92.02779350497462,
+  "Metals-NGL": 181.64187180061506,
+  "Metals-Agriculture": 95.30194204581419,
+  "Energy-Precious Metals": 142.16097537896405,
+  "Energy-NGL": 510.27257147540615,
+  "Energy-Agriculture": 134.00485328128292,
+  "Precious Metals-NGL": 176.88350793081358,
+  "Precious Metals-Agriculture": 77.25373893687451,
+  "NGL-Agriculture": 172.41177826716918
+ }
+}

@@ -9,6 +9,8 @@ classes instead of duplicating route code per asset class.
 
 import rolling_continuous as rc
 import emissions as _em
+import precious as _pr_cfg
+import agri as _ag_cfg
 
 METALS = {
     "asset_class": "metals",
@@ -97,7 +99,7 @@ PRECIOUS = {
     "carry_default_near": None,
     "carry_default_far": None,
     "carry_default_feature_label": None,
-    "value_default_combo": None,
+    "value_default_combo": {"contract": _pr_cfg.VALUE_CONTRACT, "lookback": "5yr", "threshold": _pr_cfg.VALUE_THRESHOLD},   # F2, as research/configs/precious.py
 }
 
 # NGL swaps are monthly-averaging instruments where the nominal F1 can be a
@@ -161,6 +163,7 @@ AGRI = {
         "Sugar No.11": {"code": "SB", "unit": "¢/lb"},
     },
     **_DEFAULTS,
+    "value_default_combo": {"contract": _ag_cfg.VALUE_CONTRACT, "lookback": "5yr", "threshold": _ag_cfg.VALUE_THRESHOLD},   # F2, as research/configs/agri.py
 }
 
 REGISTRY: dict[str, dict] = {

@@ -147,7 +147,8 @@ with tab_carry:
 with tab_val:
     contracts = [c for c in curve.columns if c.startswith("F") and c[1:].isdigit() and int(c[1:]) <= 15]
     value_positions = render_value_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix,
-                                        contracts=contracts, phase=phase)
+                                        contracts=contracts, phase=phase,
+                                        default_active_combo=(precious_research_cfg.VALUE_CONTRACT, "5yr", precious_research_cfg.VALUE_THRESHOLD))   # 2026-11-01: F2 for Precious/Agriculture, as the research config
 
 with tab_skew:
     skew_positions = render_skewness_tab(f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,

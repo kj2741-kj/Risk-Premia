@@ -11,7 +11,7 @@ divergent code path for rebuilding the same signals.
 import pandas as pd
 import plotly.graph_objects as go
 
-from common_engine import daily_returns, rolling_price_vol, rolling_sharpe
+from common_engine import daily_returns, equity_curve, rolling_price_vol, rolling_sharpe
 from common_shared import CHART_LAYOUT, COLORS
 
 from cache import load_series, locked
@@ -79,7 +79,7 @@ def get_comparison(
         pos = all_positions[label]
         _, net_pnl = daily_returns(pos, f1r, f1c, tc_bps, phase)
         pnl_w = net_pnl[(net_pnl.index >= eq_start) & (net_pnl.index <= eq_end)]
-        eq = pnl_w.fillna(0).cumsum()
+        eq = equity_curve(pnl_w)
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
     layout = dict(CHART_LAYOUT, height=380, yaxis_title="Cumulative Return (%)")

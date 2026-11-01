@@ -127,7 +127,7 @@ def carry_pairs(product: str) -> list[tuple[str, str]]:
 CARRY_MOMENTUM_HORIZON = 20
 CARRY_MOMENTUM_SHIFT_N = 1
 
-VALUE_CONTRACT = "F3"
+VALUE_CONTRACT = "F2"   # 2026-11-01 (user decision): F2, not F3, for Precious/Agriculture (sparse contract cycles, F3 can be 4-6 months out). Value on F1/F2/F3 was tested on Prices_0930: IR about zero at all three, no meaningful difference.
 VALUE_LOOKBACK_DAYS = 1260
 VALUE_THRESHOLD = 0.10
 VALUE_SHIFT_N = 1  # changed from 2, user's decision 2026-08-04: shift_n=1 (Lag-1) is now the

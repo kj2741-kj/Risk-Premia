@@ -135,7 +135,7 @@ CARRY_MOMENTUM_SHIFT_N = 1
 
 # Value: F3 contract / 5yr lookback / +-10% threshold / shift_n=1 --
 # identical to all 4 existing asset classes, asset-independent convention.
-VALUE_CONTRACT = "F3"
+VALUE_CONTRACT = "F2"   # 2026-11-01 (user decision): F2, not F3, for Precious/Agriculture (sparse contract cycles, F3 can be 4-6 months out). Value on F1/F2/F3 was tested on Prices_0930: IR about zero at all three, no meaningful difference.
 VALUE_LOOKBACK_DAYS = 1260  # ~5yr trading days
 VALUE_THRESHOLD = 0.10
 VALUE_SHIFT_N = 1

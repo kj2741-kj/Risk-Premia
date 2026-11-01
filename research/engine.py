@@ -417,7 +417,7 @@ def raw_signal_carrymom(curve: pd.DataFrame, near: str = "F1", far: str = "F2",
     return np.sign(base - base.shift(horizon))
 
 
-def raw_signal_value(curve: pd.DataFrame, contract: str, lookback: int, threshold: float) -> pd.Series:
+def raw_signal_value(curve: pd.DataFrame, contract: str, lookback: int, threshold: float, min_periods: int | None = None) -> pd.Series:
     """Raw, pre-shift Value MA-reversion sign. Same formula as value_v1_position: NaN during
     the moving average's own burn-in window, zero inside the threshold band, plus or minus one
     outside it."""
@@ -426,7 +426,8 @@ def raw_signal_value(curve: pd.DataFrame, contract: str, lookback: int, threshol
     fk = curve[contract].dropna()
     if len(fk) < max(lookback // 2, 60):
         return pd.Series(dtype=float)
-    ma = fk.rolling(lookback, min_periods=max(lookback // 2, min(lookback, 60))).mean()
+    mp = max(lookback // 2, min(lookback, 60)) if min_periods is None else min_periods
+    ma = fk.rolling(lookback, min_periods=mp).mean()
     dev = ((fk - ma) / ma.replace(0, np.nan)).replace([np.inf, -np.inf], np.nan)
     sig = pd.Series(np.where(dev.values < -threshold, 1.0, np.where(dev.values > threshold, -1.0, 0.0)),
                      index=dev.index)

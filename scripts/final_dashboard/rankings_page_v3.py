@@ -16,9 +16,9 @@ from engine import combine_returns
 from run_regime_table import _metrics
 
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
-BUCKETS = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Power, Emissions and Nat Gas", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture"}
+BUCKETS = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture"}
 PRODUCTS = [("metals", "metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]] + [("petroleum", "energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]] \
-    + [("pen", "energy", "NatGas"), ("pen", "emissions", "TTF"), ("pen", "emissions", "EUA")] + [("ngl", "ngl", p) for p in ["Ethane", "Propane", "Butane", "Isobutane"]] \
+    + [("pen", "energy", "NatGas"), ("pen", "emissions", "TTF"), ("pen", "emissions", "UKGas"), ("pen", "emissions", "EUA")] + [("ngl", "ngl", p) for p in ["Ethane", "Propane", "Butane", "Isobutane"]] \
     + [("precious", "precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]] + [("agri", "agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]]
 CLASSES = list(BUCKETS.items())
 import os
@@ -57,7 +57,7 @@ h1{font-size:23px;margin:0 0 4px}h2{font-size:17px;margin:26px 0 6px}.note{color
 th{background:var(--card)}th.srt{cursor:pointer;user-select:none}th.srt:hover{text-decoration:underline}td:first-child,th:first-child{text-align:left}td.nm i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
 svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}.axis{stroke:var(--line)}
 </style></head><body><div class="wrap"><h1>Commodity and asset-class rankings by Sharpe ratio</h1>
-<p class="note">Sharpe ratio here is annualised return divided by annualised volatility (no risk-free rate), net of costs, as in the dashboards. Colour = sector (bucket: Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture). Basis: the 2012-start dashboard (see its Notes tab for the data end date). Ranks are 1 = best. Mini-portfolios blend a commodity's five sleeves by Equal Weight (EW-5) or Inverse Vol (IV-5, 63-day, lagged one day).</p>
+<p class="note">Sharpe ratio here is annualised return divided by annualised volatility (no risk-free rate), net of costs, as in the dashboards. Colour = sector (bucket: Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture). Basis: the 2012-start dashboard (see its Notes tab for the data end date). Ranks are 1 = best. Mini-portfolios blend a commodity's five sleeves by Equal Weight (EW-5) or Inverse Vol (IV-5, 63-day, lagged one day).</p>
 <div class="ctl"><label>Period <select id="period"></select></label></div>
 <div class="leg" id="leg"></div>
 <h2>1. Buckets (sector portfolios)</h2><p class="note">Equal-weighted across each bucket's commodities, from the dashboard tabs. Click any column heading to sort (click again to reverse); the table starts sorted by the EW PORT. The small number is the rank among the six rows for that column.</p><div class="ts" id="cheat"></div>
@@ -65,7 +65,7 @@ svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}
 <h2>3. Bar charts by risk premium</h2><div class="ctl"><label>Risk premium <select id="prem"></select></label></div><h3>Buckets</h3><div id="cbars"></div><h3>Commodities</h3><div id="bars"></div>
 </div><script>
 const DATA=__DATA__;
-const SECT=["Metals","Petroleum","Power, Emissions and Nat Gas","NGL","Precious","Agriculture"],COL={"Metals":"var(--c0)","Petroleum":"var(--c1)","Power, Emissions and Nat Gas":"var(--c5)","NGL":"var(--c3)","Precious":"var(--c2)","Agriculture":"var(--c4)"};
+const SECT=["Metals","Petroleum","Gas and Emissions","NGL","Precious","Agriculture"],COL={"Metals":"var(--c0)","Petroleum":"var(--c1)","Gas and Emissions":"var(--c5)","NGL":"var(--c3)","Precious":"var(--c2)","Agriculture":"var(--c4)"};
 const PREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Momentum (V3)"],["Value","Value"],["Skewness","Skewness"],["EW-5","Mini-portfolio EW (5 sleeves)"],["IV-5","Mini-portfolio Inverse Vol (5 sleeves)"]];
 const CPREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Momentum (V3)"],["Value","Value"],["Skewness","Skewness"],["EW PORT","EW PORT (5 sleeves)"],["Inverse Vol","Inverse Vol (5 sleeves)"]];
 const $=id=>document.getElementById(id),f2=v=>v==null?"n/a":v.toFixed(2);

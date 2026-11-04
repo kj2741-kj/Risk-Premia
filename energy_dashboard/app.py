@@ -2,7 +2,7 @@
 Petroleum Dashboard - Stage 2   (this folder keeps its old name, energy_dashboard/, so the Streamlit Cloud deployment and its URL do not change)
 ============================
 Standalone Streamlit app, its own separate deployment. WTI Crude, Brent Crude, RBOB Gasoline, Heating Oil ULSD: the Petroleum bucket (2026-10-31). Henry Hub moved to the
-Power, Emissions and Nat Gas dashboard (pen_dashboard/); Singapore Gasoil and Fuel Oil stay out of every dashboard. Momentum / Carry / Value / Skewness, same
+Gas and Emissions dashboard (pen_dashboard/); Singapore Gasoil and Fuel Oil stay out of every dashboard. Momentum / Carry / Value / Skewness, same
 format as the Metals Stage 2 rebuild -- reuses the identical shared
 engine (common_engine.py) so both dashboards behave identically.
 
@@ -81,7 +81,7 @@ inject_css()
 PRODUCT_UNITS = {
     "CL": "/bbl", "CO": "/bbl", "XB": "/gal", "HO": "/gal",
 }
-PRODUCT_ORDER = ["CL", "CO", "XB", "HO"]       # Nat Gas (NG) moved to the Power, Emissions and Nat Gas dashboard on 2026-10-31
+PRODUCT_ORDER = ["CL", "CO", "XB", "HO"]       # Nat Gas (NG) moved to the Gas and Emissions dashboard on 2026-10-31
 ENERGY_PORTFOLIO_EXCLUDED = ()                  # petroleum.PRODUCTS already holds only these four
 
 with st.sidebar:
@@ -102,7 +102,7 @@ with st.sidebar:
         index=1, key="energy_roll_method",   # default: Nth trading day of the expiry month (same roll as the research numbers), 2026-10-11
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="energy_roll_n")
-    st.caption("Petroleum bucket: WTI, Brent, RBOB Gasoline, Heating Oil. Henry Hub natural gas moved to the Power, Emissions and Nat Gas "
+    st.caption("Petroleum bucket: WTI, Brent, RBOB Gasoline, Heating Oil. Henry Hub natural gas moved to the Gas and Emissions "
                "dashboard on 2026-10-31. GO (ICE Gasoil London), SJ (Jet Kerosene) and NFY (Naphtha) have no usable expiry-calendar "
                "coverage; Singapore Gasoil and Fuel Oil are excluded from every dashboard (both remain in the underlying research "
                "config). Same Momentum/Carry/Value/Skewness format as the Metals and Precious Metals dashboards.")

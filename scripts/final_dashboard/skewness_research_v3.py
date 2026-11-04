@@ -1,5 +1,5 @@
 """Skewness style (Fernandez-Perez, Fuertes and Miffre 2021, Table 1), time-series version, as a fifth sleeve -> Analysis/Skewness_Research_<tag>.html (2026-10-31 rebuild).
-Rebuilt for the new buckets (Metals, Petroleum, Power / Emissions / Nat Gas, NGL, Precious, Agriculture) and the tag's data (0930: cut at 2026-09-30, 1029: latest data), from
+Rebuilt for the new buckets (Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture) and the tag's data (0930: cut at 2026-09-30, 1029: latest data), from
 outputs/final_dashboard_<tag>/products_nets.pkl, which already holds the Skewness sleeve of every product (compute_products_v3.py: minus the sign of the 252-observation rolling
 skewness of the continuous series' daily log returns, +1 if negative, -1 if positive, the same two-day execution lag, 5 bps costs with the roll-day charge, 504-observation Value).
 Aggregation exactly as the Final dashboard: products equal-weighted on common dates inside a bucket, sleeves combined by EW and Inverse Vol (63 days, lagged one day).
@@ -102,7 +102,7 @@ method = ("<p>Per product, each day: signal = minus the skewness of the continuo
           "is negative, -1 when positive (Fernandez-Perez, Fuertes and Miffre 2021, Table 1: the Skewness style is long negatively skewed contracts). Same engine as the "
           "other sleeves: two-day execution lag, 5 bps round-trip costs plus the roll-day charge, roll-adjusted continuous series, 5th-trading-day-of-expiry-month roll. "
           f"Products equal-weighted within the bucket; portfolios by Equal Weight or Inverse Vol (trailing 63 days, lagged one day). Basis: the 2012-start dashboard "
-          f"(Value needs 504 observations), reported from 1 Jan 2012 to {CFG['long']} in three periods. Buckets: Metals, Petroleum, Power / Emissions / Nat Gas (Henry Hub, TTF, EUA), "
+          f"(Value needs 504 observations), reported from 1 Jan 2012 to {CFG['long']} in three periods. Buckets: Metals, Petroleum, Gas and Emissions (Henry Hub, TTF, UK Gas, EUA), "
           "NGL, Precious, Agriculture. The paper's own version is cross-sectional (long/short sort across "
           "contracts, held a month); this is the time-series version used by all our sleeves, so numbers are not comparable with the paper's.</p>")
 html = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Skewness Research</title>"

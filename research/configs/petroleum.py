@@ -1,7 +1,7 @@
 """
 research/configs/petroleum.py
 ===============================
-Petroleum bucket (2026-10-31): WTI, Brent, RBOB Gasoline, Heating Oil. This is the old Energy asset class without Henry Hub (NatGas moved to the Power, Emissions and Nat Gas
+Petroleum bucket (2026-10-31): WTI, Brent, RBOB Gasoline, Heating Oil. This is the old Energy asset class without Henry Hub (NatGas moved to the Gas and Emissions
 bucket, research/configs/pen.py) and without Singapore Gasoil / Fuel Oil (dashboard exclusions, as before). A thin wrapper: every parameter, loader, data file and calendar is
 configs/energy.py's, unchanged, so the numbers of these four products are exactly the Energy numbers; only the product list and the asset-class label differ.
 configs/energy.py itself is left as it was (StatArb and the earlier research read it).

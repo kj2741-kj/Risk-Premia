@@ -1,7 +1,7 @@
 """Analysis stage of the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_<tag>/final_v3.json (tag from env FD_TAG, default 0930; see fd_config.py)
 Input: products_nets.pkl (compute_products_v3.py). Reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column.
 Data through the tag's cutoff (0930: 2026-09-30, 1029: 2026-10-29). Methods: EW and Inverse Vol (63d trailing vol) only, as before.
-Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Power / Emissions / Nat Gas (NatGas, TTF, EUA), NGL, Precious, Agriculture.
+Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Gas and Emissions (NatGas, TTF, UKGas, EUA), NGL, Precious, Agriculture.
 The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all six buckets.
 Run from the repo root after compute_products_v3.py."""
 import json

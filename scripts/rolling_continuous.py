@@ -183,6 +183,9 @@ EMISSIONS_CONFIG = {
            "f1_col": 1, "f2_col": 2, "data_start_row": 2},
     "TZT": {"name": "TTF Natural Gas (ICE Endex)", "price_sheet": "TTF Natural Gas (ICE Endex)", "calendar_sheet": "TZT - TTF Gas (ICE Endex)",
             "f1_col": 1, "f2_col": 2, "data_start_row": 2},
+    # UK Gas (ICE NBP, pence per therm), added 2026-11-04; calendar DERIVED from the ICE rule (scripts/new_products.py), not a Bloomberg field.
+    "FN": {"name": "UK Gas NBP (ICE)", "price_sheet": "UK Gas NBP (ICE)", "calendar_sheet": "FN - UK Gas NBP (ICE)",
+           "f1_col": 1, "f2_col": 2, "data_start_row": 2},
 }
 
 METALS_CONFIG: dict[str, dict] = {

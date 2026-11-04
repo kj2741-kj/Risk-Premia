@@ -1,16 +1,18 @@
 """
-Power, Emissions and Nat Gas Dashboard - Stage 2   (new 2026-10-31)
+Gas and Emissions Dashboard - Stage 2
 ============================
-Standalone Streamlit app, its own separate deployment (main file: pen_dashboard/app.py). The PEN bucket of the research dashboard: Henry Hub natural gas (NYMEX), TTF natural gas
-(ICE Endex, European) and EUA carbon allowances (ICE Endex). The other power products are not in yet. Momentum / Carry / Value / Skewness / Comparison / Portfolio, same format as the
+Standalone Streamlit app, its own separate deployment (main file: pen_dashboard/app.py). The Gas and Emissions bucket of the research dashboard: Henry Hub natural gas (NYMEX), TTF natural gas
+(ICE Endex, European), UK Gas (ICE NBP) and EUA carbon allowances (ICE Endex). Momentum / Carry / Value / Skewness / Comparison / Portfolio, same format as the
 Petroleum, Metals, Precious Metals, NGL and Agriculture dashboards -- reuses the identical shared engine (common_engine.py).
 
 Each product keeps its own data file, roll calendar and start date:
   * Henry Hub (NG):  Energy_Futures_Updated.xlsx + expiry_calendars_20260701.xlsx, from 2006.
   * TTF (TZT):       Emissions_Futures_Updated.xlsx + Emissions_Expiry_Calendars.xlsx (Bloomberg expiry history), from 2006. Monthly contracts, last trade two business days
                      before the delivery month.
+  * UK Gas (FN):     same files, from 2006, pence per therm. Monthly contracts, last trade two business days before the delivery month (ICE rule; the dates are DERIVED, the
+                     Bloomberg drop has no expiry data, and reproduce the Bloomberg generic roll on every contract).
   * EUA (MO):        same files, from 2008-04-01 (the first EU ETS Phase II day; the earlier generic series is Phase I contracts at 0.01-0.07 EUR). Quarterly contracts.
-The Portfolio tab and the cross-asset hub use Carry F1-F2 + F1-F13 for TTF, F1-F2 + F1-F5 for EUA and F1-F3 + F1-F13 for Henry Hub (research/configs/pen.py).
+The Portfolio tab and the cross-asset hub use Carry F1-F2 + F1-F13 for TTF and UK Gas, F1-F2 + F1-F5 for EUA and F1-F3 + F1-F13 for Henry Hub (research/configs/pen.py).
 """
 
 import os
@@ -61,11 +63,11 @@ from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
                                  EMISSIONS_CONFIG, EMISSIONS_FUTURES_FILE, EMISSIONS_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 from dashboard_portfolio_tab import render_portfolio_tab
-import pen as pen_research_cfg                  # Henry Hub + TTF + EUA, dispatching to configs/energy.py and configs/emissions.py
+import pen as pen_research_cfg                  # Henry Hub + TTF + UK Gas + EUA, dispatching to configs/energy.py and configs/emissions.py
 import emissions as emissions_research_cfg
 
 st.set_page_config(
-    page_title="Power, Emissions & Nat Gas Risk Premia - Stage 2",
+    page_title="Gas & Emissions Risk Premia - Stage 2",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -73,19 +75,21 @@ st.set_page_config(
 inject_css()
 
 # Per-product source: price file, calendar file, config registry, first date used, and the TC-per-flip unit label (display only, no effect on Sharpe/PnL).
-PRODUCT_ORDER = ["NG", "TZT", "MO"]
+PRODUCT_ORDER = ["NG", "TZT", "FN", "MO"]
 PRODUCT_SOURCE = {
     "NG":  dict(config=ENERGY_CONFIG,    futures=ENERGY_FUTURES_FILE,    calendar=ENERGY_CALENDAR_FILE,    start="2006-01-01", unit="/MMBtu"),
     "TZT": dict(config=EMISSIONS_CONFIG, futures=EMISSIONS_FUTURES_FILE, calendar=EMISSIONS_CALENDAR_FILE,
                 start=emissions_research_cfg.ANALYSIS_STARTS["TTF"], unit="/MWh"),
+    "FN":  dict(config=EMISSIONS_CONFIG, futures=EMISSIONS_FUTURES_FILE, calendar=EMISSIONS_CALENDAR_FILE,
+                start=emissions_research_cfg.ANALYSIS_STARTS["UKGas"], unit="p/therm"),
     "MO":  dict(config=EMISSIONS_CONFIG, futures=EMISSIONS_FUTURES_FILE, calendar=EMISSIONS_CALENDAR_FILE,
                 start=emissions_research_cfg.ANALYSIS_STARTS["EUA"], unit="/t"),
 }
-PRODUCT_NAME = {"NG": "Nat Gas Henry Hub (NYMEX)", "TZT": "TTF Natural Gas (ICE Endex)", "MO": "EUA Carbon (ICE Endex)"}
+PRODUCT_NAME = {"NG": "Nat Gas Henry Hub (NYMEX)", "TZT": "TTF Natural Gas (ICE Endex)", "FN": "UK Gas NBP (ICE)", "MO": "EUA Carbon (ICE Endex)"}
 PEN_PORTFOLIO_EXCLUDED = ()
 
 with st.sidebar:
-    st.markdown('<p class="main-title">⚡ Power, Emissions &amp; Nat Gas Dashboard</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-title">⚡ Gas &amp; Emissions Dashboard</p>', unsafe_allow_html=True)
     st.markdown('<p class="main-subtitle">Stage 2: Momentum, Carry, Value, Skewness</p>', unsafe_allow_html=True)
     st.divider()
     return_basis_selector()
@@ -102,8 +106,8 @@ with st.sidebar:
         index=1, key="pen_roll_method",   # default: Nth trading day of the expiry month (same roll as the research numbers), 2026-10-11
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="pen_roll_n")
-    st.caption("Power, Emissions and Nat Gas bucket: Henry Hub (US natural gas), TTF (European natural gas) and EUA carbon allowances. TTF and EUA come from the "
-               "Bloomberg pull of 29-Oct with their own expiry calendars; EUA starts on 2008-04-01 (first Phase II day). EUA data quality is still under review. "
+    st.caption("Gas and Emissions bucket: Henry Hub (US natural gas), TTF (European natural gas), UK Gas (NBP) and EUA carbon allowances. TTF and EUA come from the "
+               "Bloomberg pull of 29-Oct with their own expiry calendars; UK Gas (pence per therm) uses an expiry calendar derived from the ICE rule (last trade 2 business days before the delivery month); EUA starts on 2008-04-01 (first Phase II day). EUA data quality is still under review. "
                "Same Momentum/Carry/Value/Skewness format as the other dashboards.")
 
 src = PRODUCT_SOURCE[product_code]
@@ -129,7 +133,7 @@ register_geo_inputs(f1_df)
 curve = load_curve_simple(src["futures"], cfg["price_sheet"])
 curve = curve[curve.index >= src["start"]]
 
-st.markdown(f'<p class="main-title">⚡ Power, Emissions &amp; Nat Gas Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
+st.markdown(f'<p class="main-title">⚡ Gas &amp; Emissions Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
 st.caption(f"Data: {f1r.index[0].date()} to {f1r.index[-1].date()}. "
            "PnL on F1_continuous, TC on F1_raw, active-day Sharpe, no look-ahead.")
 
@@ -159,8 +163,8 @@ with tab_compare:
                                             "Value": value_positions, "Skewness": skew_positions})
 
 with tab_portfolio:
-    st.caption("Combines the 3 products (Henry Hub, TTF, EUA) into one bucket-level portfolio, independent of the sidebar's Product selection above, "
+    st.caption("Combines the 4 products (Henry Hub, TTF, UK Gas, EUA) into one bucket-level portfolio, independent of the sidebar's Product selection above, "
                "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. The common data window starts with the latest product start "
-               "(EUA, 2008-04-01). Carry and Carry momentum: Henry Hub F1-F3 + F1-F13, TTF F1-F2 + F1-F13, EUA F1-F2 + F1-F5.")
+               "(EUA, 2008-04-01). Carry and Carry momentum: Henry Hub F1-F3 + F1-F13, TTF and UK Gas F1-F2 + F1-F13, EUA F1-F2 + F1-F5.")
     render_portfolio_tab(pen_research_cfg, key_prefix="pen_portfolio",
                           excluded_products=PEN_PORTFOLIO_EXCLUDED)

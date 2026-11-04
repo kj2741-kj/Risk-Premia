@@ -104,14 +104,14 @@ from regimes import REGIMES, REPORT_START
 # argument accepts "agri" alongside the original four.
 ASSET_CLASSES = ["metals", "energy", "precious", "ngl"]
 # 2026-10-31: the live hub now offers the SIX buckets of the research dashboard: Energy is split into Petroleum (WTI, Brent, RBOB, Heating Oil;
-# research/configs/petroleum.py) and Power, Emissions and Nat Gas (Henry Hub, TTF, EUA; research/configs/pen.py). "energy" stays a valid key (its
+# research/configs/petroleum.py) and Gas and Emissions (Henry Hub, TTF, UK Gas, EUA; research/configs/pen.py; renamed from "Power, Emissions and Nat Gas" and UK Gas added 2026-11-04). "energy" stays a valid key (its
 # config and the validated reference forms above still use it) but is no longer offered: ALL_ASSET_CLASSES is the live set, and the hub builds its
 # pickers from LIVE_ASSET_CLASS_LABELS.
 ALL_ASSET_CLASSES = ["metals", "petroleum", "pen", "precious", "ngl", "agri"]
-ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "petroleum": "Petroleum", "pen": "Power, Emissions and Nat Gas",
+ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "petroleum": "Petroleum", "pen": "Gas and Emissions",
                       "precious": "Precious", "ngl": "NGL", "agri": "Agriculture"}
 LIVE_ASSET_CLASS_LABELS = {k: ASSET_CLASS_LABELS[k] for k in ALL_ASSET_CLASSES}
-ASSET_CLASS_SHORT = {"pen": "PEN"}       # short names for pair labels, e.g. "Metals-PEN"
+ASSET_CLASS_SHORT = {"pen": "GasEm"}     # short names for pair labels, e.g. "Metals-GasEm"
 # Dashboard-visible product lists (CLAUDE.md's documented exclusion: research configs' PRODUCTS
 # is NOT what the live dashboard, or the cross-asset numbers, are built on -- Energy excludes
 # Singapore Gasoil + Fuel Oil, NGL excludes Ethylene + Propylene, Precious excludes Copper
@@ -125,7 +125,7 @@ ASSET_CLASS_SHORT = {"pen": "PEN"}       # short names for pair labels, e.g. "Me
 DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
     "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
-    "pen": ["NatGas", "TTF", "EUA"],
+    "pen": ["NatGas", "TTF", "UKGas", "EUA"],
     "ngl": ["Ethane", "Propane", "Butane", "Isobutane"],
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],
     # Agriculture: six products only (2026-10-11), matching research/configs/agri.py's PRODUCTS and the

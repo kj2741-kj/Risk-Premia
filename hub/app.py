@@ -84,12 +84,12 @@ DASHBOARD_LINKS = {
     "Metals":         {"url": "https://risk-premia-metals.streamlit.app/", "ready": True,
                         "desc": "LME Copper and Aluminium. Momentum, Carry, and Value strategies. A fuller "
                                 "10-tab research build is also available at metals-risk-premia-kj.streamlit.app."},
-    # 2026-10-31: "Energy" became Petroleum (WTI, Brent, RBOB, Heating Oil); same deployment and URL. Henry Hub moved to the new Power, Emissions and Nat Gas bucket.
+    # 2026-10-31: "Energy" became Petroleum (WTI, Brent, RBOB, Heating Oil); same deployment and URL. Henry Hub is in the Gas and Emissions bucket.
     "Petroleum":      {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
                         "desc": "WTI, Brent, RBOB, Heating Oil. Momentum, Carry, Value, Skewness."},
     # New Streamlit Cloud app, main file pen_dashboard/app.py (URL added 2026-10-31).
-    "Power, Emissions & Nat Gas": {"url": "https://penriskpremia.streamlit.app/", "ready": True,
-                        "desc": "Henry Hub, TTF, EUA carbon. Momentum, Carry, Value, Skewness."},
+    "Gas & Emissions": {"url": "https://penriskpremia.streamlit.app/", "ready": True,
+                        "desc": "Henry Hub, TTF, UK Gas, EUA carbon. Momentum, Carry, Value, Skewness."},
     "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
                         "desc": "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value."},
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
@@ -393,7 +393,7 @@ walk-forward out-of-sample testing yet), to oil and energy, precious metals, and
     )
 
     section_header("HEADLINE FINDINGS")
-    st.info("Coming soon. Consolidated headline findings across Metals, Petroleum, Power/Emissions/Nat Gas, Precious Metals, "
+    st.info("Coming soon. Consolidated headline findings across Metals, Petroleum, Gas/Emissions, Precious Metals, "
             "and NGL will be published here once results from all asset classes are finalized.")
 
     section_header("CONCLUSION")
@@ -539,7 +539,7 @@ with tab_fund:
             mime="text/csv",
         )
 
-# TAB 3: Cross-Asset Portfolio (Metals + Petroleum + Power/Emissions/Nat Gas + Precious + NGL + Agriculture combined)
+# TAB 3: Cross-Asset Portfolio (Metals + Petroleum + Gas/Emissions + Precious + NGL + Agriculture combined)
 with tab_crossasset:
     st.markdown('<p class="main-title">🌐 Cross-Asset Portfolio</p>', unsafe_allow_html=True)
     st.caption(
@@ -566,8 +566,8 @@ with tab_crossasset:
                    "Tenor pairs apply to both Carry and Carry momentum. Momentum and Value are unaffected. "
                    "With the pairs left at their defaults, Precious and Agriculture also blend each product's own long "
                    "pair (Gold F1-F7, Silver F1-F6, Platinum/Palladium F1-F5; Corn/Wheat/Coffee F1-F6, Soybean/Soybean Oil "
-                   "F1-F8, Sugar F1-F5) with the F1-F2 shown, exactly as in the Final Research Dashboard. Power, Emissions and Nat Gas uses "
-                   "F1-F2 plus F1-F13 for TTF, F1-F2 plus F1-F5 for EUA and F1-F3 plus F1-F13 for Henry Hub. Editing any pair "
+                   "F1-F8, Sugar F1-F5) with the F1-F2 shown, exactly as in the Final Research Dashboard. Gas and Emissions uses "
+                   "F1-F2 plus F1-F13 for TTF and UK Gas, F1-F2 plus F1-F5 for EUA and F1-F3 plus F1-F13 for Henry Hub. Editing any pair "
                    "below replaces that with one uniform pair list for the asset class.")
         k1, k2, k3 = st.columns([2, 1, 1])
         with k1:

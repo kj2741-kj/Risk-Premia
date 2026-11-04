@@ -126,6 +126,10 @@ def main():
             cal.to_excel(xw, sheet_name=name, index=False)
             print(f"Emissions_Expiry_Calendars.xlsx [{name}]: {len(cal)} contracts {cal.Contract.iloc[0]} .. {cal.Contract.iloc[-1]}", flush=True)
 
+    # --- UK Gas (2026-11-04): curve from the 3-Nov drop and a calendar derived from the ICE rule, added to the two Emissions files just written; aligned to the 29-Oct data date ---
+    from new_products import add_ukgas
+    print("UK Gas:", add_ukgas(DST, min(CUTOFF, pd.Timestamp("2026-10-29"))), flush=True)
+
 
 if __name__ == "__main__":
     main()

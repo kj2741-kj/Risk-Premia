@@ -107,11 +107,11 @@ ASSET_CLASSES = ["metals", "energy", "precious", "ngl"]
 # research/configs/petroleum.py) and Gas and Emissions (Henry Hub, TTF, UK Gas, EUA; research/configs/pen.py; renamed from "Power, Emissions and Nat Gas" and UK Gas added 2026-11-04). "energy" stays a valid key (its
 # config and the validated reference forms above still use it) but is no longer offered: ALL_ASSET_CLASSES is the live set, and the hub builds its
 # pickers from LIVE_ASSET_CLASS_LABELS.
-ALL_ASSET_CLASSES = ["metals", "petroleum", "pen", "precious", "ngl", "agri"]
+ALL_ASSET_CLASSES = ["metals", "petroleum", "pen", "ngl", "precious", "agri"]   # same order as the research pages
 ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "petroleum": "Petroleum", "pen": "Gas and Emissions",
                       "precious": "Precious", "ngl": "NGL", "agri": "Agriculture"}
 LIVE_ASSET_CLASS_LABELS = {k: ASSET_CLASS_LABELS[k] for k in ALL_ASSET_CLASSES}
-ASSET_CLASS_SHORT = {"pen": "GasEm"}     # short names for pair labels, e.g. "Metals-GasEm"
+ASSET_CLASS_SHORT: dict[str, str] = {}   # no short names: pair labels use the full bucket label, e.g. "Metals-Gas and Emissions" (the research pages write "Metals - Gas and Emissions")
 # Dashboard-visible product lists (CLAUDE.md's documented exclusion: research configs' PRODUCTS
 # is NOT what the live dashboard, or the cross-asset numbers, are built on -- Energy excludes
 # Singapore Gasoil + Fuel Oil, NGL excludes Ethylene + Propylene, Precious excludes Copper

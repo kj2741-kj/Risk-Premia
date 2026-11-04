@@ -1,0 +1,5 @@
+series,first_date,days,cme_adv_lots,cme_share_days_print,ice_adv_lots_same_dates,cme_to_ice,cme_last_20d_adv
+PJM_Peak_CME,2026-05-11,122,0.0,0.0,13929.1,0.0,0.0
+PJM_OffPeak_CME,2026-05-11,122,0.0,0.0,3040.5,0.0,0.0
+ERCOT_Peak_CME,2026-08-31,45,0.0,0.0,2728.1,0.0,0.0
+ERCOT_OffPeak_CME,2026-08-31,45,0.0,0.0,350.4,0.0,0.0

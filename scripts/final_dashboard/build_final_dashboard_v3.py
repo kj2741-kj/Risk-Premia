@@ -33,6 +33,19 @@ _pk = list(res["meta"]["rolls"].keys())
 assert all(k.split("|")[1] in _liq for k in _pk), [k for k in _pk if k.split("|")[1] not in _liq]
 data["meta"] = dict(res["meta"], liq={k: float(_liq[k.split("|")[1]]["L_strip"]) for k in _pk})
 
+# Power tab (2026-11-04), standalone: scripts/final_dashboard/power_tab_v3.py -> power_tab.json. It is added as its own tab entry (data["tabs"]["power"]) and is NOT in meta.keys, which drives the
+# All-buckets book, By Style, Cross-Pair and Correlations, so none of those sees it. Tag 0930 only (the power data are cut at 2026-09-30).
+POWER = None
+_pt = R / out_dir(TAG) / "power_tab.json"
+if TAG == "0930" and _pt.exists():
+    POWER = json.load(open(_pt))
+    assert "power" not in res["meta"]["keys"] and "power" not in res["tabs"]
+    data["tabs"] = dict(res["tabs"], power=POWER["tab"])
+    data["products"] = dict(res["products"], **POWER["products"])
+    data["equity"] = dict(res["equity"], **POWER["equity"])
+    data["meta"] = dict(data["meta"], liq=dict(data["meta"]["liq"], **POWER["meta"]["liq"]),
+                        pairs=dict(res["meta"]["pairs"], **POWER["meta"]["pairs"]), rolls=dict(res["meta"]["rolls"], **POWER["meta"]["rolls"]))
+
 h = TEMPLATE.read_text(encoding="utf8")
 m = re.search(r"<script>\nconst D=(.*?);\n", h, re.S)
 assert m, "template layout changed: const D= not found"
@@ -49,7 +62,7 @@ b = head_body
 b = rep(b, "<title>Risk Premia: Final Research Dashboard (2012 start, three periods)</title>", "<title>Risk Premia: Final Research Dashboard (2012 start, three periods, data to " + CFG["cutoff"] + ")</title>")
 b = rep(b, "<h1>Risk Premia Analysis Dashbaord</h1>", "<h1>Risk Premia Analysis Dashboard</h1>")
 b = rep(b, "Five commodity asset classes, five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through 2026-09-23.",
-        "Six commodity buckets (Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture), five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through " + CFG["cutoff"] + ".")
+        "Six commodity buckets (Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture), five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through " + CFG["cutoff"] + "." + (" A separate Power tab (US power futures, from 2015) stands alone: it is not part of the combined book, By Style, Cross-Pair or Correlations." if POWER else ""))
 b = rep(b, "one per asset class, plus By Style, Cross-Pair, Correlations and Notes (methods and data).", "one per bucket, plus By Style, Cross-Pair, Correlations and Notes (methods and data).")
 b = rep(b, "every control you can change: period, commodity, metric, Energy with or without NatGas.", "every control you can change: period, commodity, metric.")
 b = rep(b, "<b>Each asset-class tab</b>", "<b>Each bucket tab</b>")
@@ -84,6 +97,18 @@ b = rep(b, "<h3>Data and calendars</h3>",
         "It is shown as <i>Time to trade 1 sigma risk (in Days)</i> in each By-product table. The ranking of products does not depend on <i>K</i>.</li>"
         "<li>For research purposes the metric has been evaluated on 2025 volumes for each product (a one-time snapshot); NGL volume is the CME half only.</li></ul>"
         "<h3>Data and calendars</h3>")
+if POWER:
+    b = rep(b, "<h3>Data and calendars</h3>",
+            "<h3>Power tab (standalone)</h3><ul class=\"steps\">"
+            "<li><b>What it is:</b> a separate tab for US power with the same layout as the bucket tabs. It is <b>not</b> part of the All-buckets book, By Style, Cross-Pair or Correlations, which cover the six buckets only.</li>"
+            "<li><b>Series:</b> ICE monthly real-time power futures (USD/MWh), peak and off-peak, on the PJM Western Hub, ERCOT North 345KV and MISO Indiana Hub. The data files hold ten series: the four CME ones start in 2026 and carry no volume or open interest, so six are usable, "
+            "and the five whose Calendar-2025 time to trade 1 sigma risk is under 5 days are shown (PJM Peak 0.10, ERCOT Peak 0.36, PJM OffPeak 0.47, ERCOT OffPeak 4.7, MISO Peak 4.7; MISO OffPeak, 9.9 days, is excluded). One lot is 1 MW for every hour of the contract (ICE), i.e. 304 to 417 MWh.</li>"
+            "<li><b>Contracts and roll:</b> every delivery month is listed (12 last trade dates a year) and the last trade date falls in the delivery month, so the generic F1 is the contract delivering now. The same roll rule applies (5th trading day of the expiry month), "
+            "which here rolls into the next month on the 5th trading day of the delivery month: every roll of every series falls on that day. The position is therefore in the partly settled delivery-month contract for its first four or five trading days. F2 is the next month and F13 the same month a year later.</li>"
+            "<li><b>Parameters:</b> the same as every other bucket (Momentum, Carry V2 on F1-F2 and F1-F13, Carry-Momentum, Value on F3, Skewness; 5 bps costs; EW and Inverse Vol).</li>"
+            "<li><b>Windows:</b> the data start on 2015-01-02 and Value needs two years of F3, so Full is 2017-2026 and P1 (2012-2016) is not available; P2, P3 and 2026 are as elsewhere. "
+            "Power prices are far more volatile than the other buckets (about 60% to 125% a year per sleeve), so read the IRs together with the drawdowns.</li></ul>"
+            "<h3>Data and calendars</h3>")
 b = rep(b, "Transaction costs are charged when the position changes.</li></ul>", "Transaction costs of 5 bps per unit of turnover are charged when the position changes, and on every roll day.</li></ul>")
 b = rep(b, "The two z-scores are summed and the sign of the sum is the signal.", "The z-scores of a product's tenor pairs are summed (two pairs for every product) and the sign of the sum is the signal.")
 b = rep(b, "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.", "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.")
@@ -93,7 +118,7 @@ t = tail
 i0 = t.index('const LABEL={metals:"Metals"')
 i1 = t.index('const bar=document.getElementById("tabbar")')
 t = t[:i0] + ('const LABEL=D.meta.labels;\n'
-              'const ORDER=D.meta.keys.map(k=>[k,LABEL[k]]).concat([["all6","All 6 buckets"],["bystyle","By Style"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]]);\n') + t[i1:]
+              'const ORDER=D.meta.keys.map(k=>[k,LABEL[k]]).concat(' + ('[["power",D.tabs.power.label]]' if POWER else '[]') + ').concat([["all6","All 6 buckets"],["bystyle","By Style"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]]);\n') + t[i1:]
 t = rep(t, 'const HIDDEN_TABS=["all5","all5_exng"];', 'const HIDDEN_TABS=["all6"];')
 t = rep(t, 'const asset=ASSET[key],t=D.tabs[key];\n  const sleeves', 'const t=D.tabs[key];\n  const sleeves')
 t = rep(t, 't.products.map(pr=>{const d=D.products[asset+"|"+pr];return `<tr><td>${pr}</td>`', 't.pkeys.map((pk,ix)=>{const pr=t.products[ix];const d=D.products[pk];return `<tr><td>${pr}</td>`')
@@ -102,6 +127,23 @@ t = rep(t, '<th>Tenor pairs</th><th>Roll events</th>', '<th>Tenor pairs</th><th>
 t = rep(t, 'const asset=ASSET[key],t=D.tabs[key],host=p.querySelector("[data-peq]");', 'const t=D.tabs[key],host=p.querySelector("[data-peq]");')
 t = rep(t, '${t.products.map(x=>`<option>${x}</option>`).join("")}', '${t.pkeys.map((k,ix)=>`<option value="${k}">${t.products[ix]}</option>`).join("")}')
 t = rep(t, 'renderEquity(inner,"prod|"+asset+"|"+sel.value)', 'renderEquity(inner,"prod|"+sel.value)')
+if POWER:
+    # tab-specific period columns (Full 2017-2026, P1 not available): mergedTable / wireMerged / the horizon selectors take the tab's own `cols`; every other tab passes none and keeps D.cols
+    a0, a1 = t.index("function mergedTable(W,per,lab){"), t.index("function wireHeads(")
+    mt = t[a0:a1].replace("D.cols", "CC")
+    mt = rep(mt, "function mergedTable(W,per,lab){\n  const names=", "function mergedTable(W,per,lab,cols){\n  const CC=cols||D.cols;const names=")
+    t = t[:a0] + mt + t[a1:]
+    t = rep(t, 'function wireMerged(p,getW,lab){', 'function wireMerged(p,getW,lab,cols){')
+    t = rep(t, 'tb.innerHTML=mergedTable(getW(),sel.value,lab);wireHeads(tb,sel);', 'tb.innerHTML=mergedTable(getW(),sel.value,lab,cols);wireHeads(tb,sel);')
+    t = rep(t, 'const horizonOpts=D.cols.map(c=>`<option value="${c.key}">${c.label} (${c.years})</option>`).join("");',
+            'const hOpts=cols=>(cols||D.cols).map(c=>`<option value="${c.key}">${c.label} (${c.years})</option>`).join("");const horizonOpts=hOpts();')
+    t = rep(t, '<select class="window-select" data-ph>${horizonOpts}</select>', '<select class="window-select" data-ph>${hOpts(t.cols)}</select>')
+    t = rep(t, '<select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div><div data-prod></div>',
+            '<select class="window-select" data-hs>${hOpts(t.cols)}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div><div data-prod></div>')
+    t = rep(t, 'wireMerged(p,()=>t.windows);', 'wireMerged(p,()=>t.windows,undefined,t.cols);')
+    # the tab title comes from the tab's own data, not from D.meta.labels (which lists the six buckets only and drives the correlation selector)
+    t = rep(t, '<div class="card"><h2>${LABEL[key]}</h2><p class="note"><b>Products:</b>', '<div class="card"><h2>${t.label}</h2><p class="note"><b>Products:</b>')
+    t = rep(t, '<b>Data:</b> ${t.data_first} to ${t.data_last}.</p>', '<b>Data:</b> ${t.data_first} to ${t.data_last}.${t.note?" "+t.note:""}</p>')
 # combined book (tab stays hidden, as in the published 2012 page)
 t = rep(t, '[["all5","All 5 asset classes (Energy with NatGas)"],["all5_exng","All 5 asset classes (Energy ex-NatGas)"]].forEach(([key,label])=>{const c=D.combined[key];', '[["all6","All 6 buckets"]].forEach(([key,label])=>{const c=D.combined;')
 t = rep(t, "Two-stage book: five sleeves into an asset-class portfolio, then the five asset-class portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across asset classes).",

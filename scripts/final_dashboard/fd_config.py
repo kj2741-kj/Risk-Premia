@@ -24,7 +24,7 @@ BUCKETS = {
     "metals": ("Metals", [("metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]]),
     "petroleum": ("Petroleum", [("energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]]),
     "pen": ("Gas and Emissions", [("energy", "NatGas"), ("emissions", "TTF"), ("emissions", "UKGas"), ("emissions", "EUA")]),
-    "ngl": ("NGL", [("ngl", p) for p in ["Ethane", "Propane", "Butane", "Isobutane"]]),
+    "ngl": ("NGL", [("ngl", p) for p in ["Ethane", "Propane", "Butane", "Isobutane"]] + [("naphtha", "Naphtha")]),
     "precious": ("Precious", [("precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]]),
     "agri": ("Agriculture", [("agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]]),
 }

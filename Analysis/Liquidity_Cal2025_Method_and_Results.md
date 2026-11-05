@@ -23,9 +23,9 @@ CME: WTI 1,000 bbl; RBOB and NY Harbor ULSD 42,000 gal; Henry Hub 10,000 MMBtu; 
 
 Data check: our all-tenor volume equals CME's published final volume for 26 to 28 Oct 2026 within about 1% for RBOB, ULSD, Butane, Isobutane, Henry Hub, WTI and TET Propane. Ethane is the exception (60 to 65% of CME on two days). The Gasoil series (Bloomberg root QS) is ICE Low Sulphur Gasoil, not Singapore Gasoil as the engine config name suggests.
 
-## Result (K = $1M), 2026-11-04 update: all six NGL, UK Gas and the Naphtha candidate added
+## Result (K = $1M), 2026-11-04 update: all six NGL, UK Gas and Naphtha added
 
-The 26 products of the 2026-10-31 run are reproduced exactly (maximum absolute difference 0.0 on every column); four rows are new: Ethylene and Propylene (so all six NGL are in), UK Gas and Naphtha.
+The 26 products of the 2026-10-31 run are reproduced exactly (maximum absolute difference 0.0 on every column); four rows are new: Ethylene and Propylene (so all six Mont Belvieu NGL are in), UK Gas and Naphtha (now part of the NGL bucket). Naphtha uses the NGL swap convention: the held contract is the sheet's F2 before the roll and F3 after it.
 
 | # | Product | Bucket | Strip | ADV (lots/day) | Risk per contract ($) | x ($m/day) | K/x | x held ($m/day) |
 |---|---|---|---|---|---|---|---|---|
@@ -55,22 +55,22 @@ The 26 products of the 2026-10-31 run are reproduced exactly (maximum absolute d
 | 24 | Propane | ngl | F1-F12 | 8,273 | 586 | 4.8 | 0.2062 | 1.187 |
 | 25 | Butane | ngl | F1-F12 | 2,907 | 624 | 1.8 | 0.551 | 0.4572 |
 | 26 | Ethane | ngl | F1-F12 | 1,203 | 290 | 0.3492 | 2.864 | 0.09974 |
-| 27 | Naphtha | candidate (not in a bucket) | F1-F12 | 12 | 9,354 | 0.1082 | 9.241 | 0.0218 |
+| 27 | Naphtha | ngl | F1-F12 | 12 | 9,234 | 0.1068 | 9.36 | 0.02583 |
 | 28 | Propylene | ngl | F1-F12 | 123 | 614 | 0.0753 | 13.28 | 0.01351 |
 | 29 | Ethylene | ngl | F1-F12 | 105 | 498 | 0.0525 | 19.03 | 0.01057 |
 | 30 | Isobutane | ngl | F1-F12 | 10 | 642 | 0.0064 | 156.2 | 0.0006 |
 
 Least liquid non-energy products: Lead x = 19.3, Palladium x = 23.9, Sugar 34.7 (USD millions of one-sigma risk per day).
 
-NGL against the least liquid non-energy product (Lead): Propane 0.25x, Butane 0.09x, Ethane 0.018x, Propylene 0.004x, Ethylene 0.003x, Isobutane 0.0003x. UK Gas (x = 31.4) sits above Lead and Palladium, between Sugar and Palladium. Naphtha (x = 0.108) is 0.006x Lead, about a third of Ethane and above Propylene, Ethylene and Isobutane.
+NGL against the least liquid non-energy product (Lead): Propane 0.25x, Butane 0.09x, Ethane 0.018x, Propylene 0.004x, Ethylene 0.003x, Isobutane 0.0003x. UK Gas (x = 31.4) sits above Lead and Palladium, between Sugar and Palladium. Naphtha (x = 0.107, K/x = 9.4 days) is 0.006x Lead, about a third of Ethane and above Propylene, Ethylene and Isobutane.
 
 ## Caveats and open items
 
 - 2026-11-04 volume check: the new `Volume_NGL.xlsx` (2026-11-03 drop) equals `Prices_1029/Volume_NGL.xlsx` cell for cell on all 14 sheets (same dates, same values, last dates 10-29 and 10-28); only the file hash differs. No merge was needed.
 - Ethylene and Propylene print on 71% and 73% of days; PCW and PGP volumes were not cross-checked against CME's published volume (CME's public page keeps only five trade dates). The NGL dashboards still show four NGL products; the metric covers all six.
-- Naphtha (Bloomberg KI generic): volume comes from the 2026-11-03 drop, whose volume sheet has rows only on days with a print (139 rows in 2025), missing days are counted as zero as everywhere. The ADV of 11.6 lots a day (median 5) is what Bloomberg reports for the generic; OTC-cleared swap volume that Bloomberg does not see is not in it, so x is a lower bound, as for the NGL swaps. Whether "KI ... COMB" combines ICE and CME is not stated in the file.
-- Naphtha is a monthly average-price swap, F1 is the month being priced and expires on the last business day of that month; the engine rolls on the 5th trading day of that month, out of the month being priced, like every other product. Its expiry dates are derived (scripts/new_products.py), not Bloomberg's.
-- UK Gas: the volume unit is lots of 1,000 therms a day (ICE minimum 5 lots); 30,417 therms per lot assumes an average month. The calendar is derived from the ICE rule and matches the Bloomberg generic roll on every contract. Held-contract x (9.0) is 29% of strip x (31.4): the contract we hold trades 9,179 lots a day against 31,979 for the 12-month strip.
+- Naphtha (Bloomberg KI generic): volume comes from the 2026-11-03 drop, whose volume sheet has rows only on days with a print (139 rows in 2025); missing days are counted as zero as everywhere. The ADV of 11.6 lots a day (median 5) is what Bloomberg reports for the generic; OTC-cleared swap volume that Bloomberg does not see is not in it, so x is a lower bound, as for the NGL swaps. Whether "KI ... COMB" combines ICE and CME is not stated in the file.
+- Naphtha is a monthly average-price swap: F1 is the month being priced and expires on the last business day of that month (Bloomberg expiry history). It follows the Mont Belvieu swap convention, the engine's front contract is the sheet's F2 (F3 after the roll on the 5th trading day of the month).
+- UK Gas: the volume unit is lots of 1,000 therms a day (Bloomberg contract size 28,000 to 31,000 therms by month); 30,417 therms per lot is the average month. The calendar is Bloomberg's expiry history. Held-contract x (9.0) is 29% of strip x (31.4): the contract we hold trades 9,179 lots a day against 31,979 for the 12-month strip.
 
 - ICE half of NGL is not included. Bogorad's Figure 10 implies ICE roughly doubles NGL volume in 2025; even doubled, Propane would be about half of Lead. Per-product ICE volume to be added when available.
 - CME Non-TET Propane (about 1,400 lots a day in late October 2026) is not in our data; it would add roughly 20% to Propane.

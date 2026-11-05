@@ -29,10 +29,14 @@ sl = lambda s, w: s.loc[WIN[w][0]:WIN[w][1]] if WIN[w][1] else s.loc[WIN[w][0]:]
 # ---------------- A. continuous series from the raw curve ------------------------------------------------------------------------------------------------------
 PX = f"data/{os.environ['RP_PRICES_DIR']}/Emissions_Futures_Updated.xlsx"; CAL = f"data/{os.environ['RP_PRICES_DIR']}/Emissions_Expiry_Calendars.xlsx"
 import emissions as em
-for prod, psheet, csheet in (("UKGas", "UK Gas NBP (ICE)", "FN - UK Gas NBP (ICE)"), ("TTF", "TTF Natural Gas (ICE Endex)", "TZT - TTF Gas (ICE Endex)")):
-    raw = pd.read_excel(PX, sheet_name=psheet, header=1); raw["Date"] = pd.to_datetime(raw["Date"], errors="coerce")
-    curve = raw.dropna(subset=["Date"]).set_index("Date").sort_index().apply(pd.to_numeric, errors="coerce").loc[em.ANALYSIS_STARTS[prod]:]
-    ltd = pd.to_datetime(pd.read_excel(CAL, sheet_name=csheet)["LAST_TRADEABLE_DT"]).sort_values().reset_index(drop=True)
+import naphtha as nap
+PXN = f"data/{os.environ['RP_PRICES_DIR']}/Naphtha_Futures_Updated.xlsx"; CALN = f"data/{os.environ['RP_PRICES_DIR']}/Naphtha_Expiry_Calendars.xlsx"
+# (product, module, price file, price sheet, calendar file, calendar sheet, tenor offset): Naphtha follows the NGL swap convention, the engine's front is the sheet's F2 (offset 1)
+for prod, mod_, pxf, psheet, calf, csheet, off in (("UKGas", em, PX, "UK Gas NBP (ICE)", CAL, "FN - UK Gas NBP (ICE)", 0), ("TTF", em, PX, "TTF Natural Gas (ICE Endex)", CAL, "TZT - TTF Gas (ICE Endex)", 0),
+                                                   ("Naphtha", nap, PXN, "Naphtha KI (COMB)", CALN, "KI - Naphtha CIF NWE (COMB)", 1)):
+    raw = pd.read_excel(pxf, sheet_name=psheet, header=1); raw["Date"] = pd.to_datetime(raw["Date"], errors="coerce")
+    curve = raw.dropna(subset=["Date"]).set_index("Date").sort_index().apply(pd.to_numeric, errors="coerce").loc[(em.ANALYSIS_STARTS[prod] if prod in em.ANALYSIS_STARTS else nap.ANALYSIS_START):]
+    ltd = pd.to_datetime(pd.read_excel(calf, sheet_name=csheet)["LAST_TRADEABLE_DT"]).sort_values().reset_index(drop=True)
     idx = curve.index; cols = list(curve.columns)
     pos = {t: i for i, t in enumerate(idx)}
     # roll day of contract k: 5th trading day of the month of its last trade date
@@ -50,12 +54,12 @@ for prod, psheet, csheet in (("UKGas", "UK Gas NBP (ICE)", "FN - UK Gas NBP (ICE
     px = curve.values
     ind = np.full(len(idx), np.nan)
     for i in range(1, len(idx)):
-        h = held[i - 1]; a = h - f1k[i] ; b = h - f1k[i - 1]
+        h = held[i - 1] + off; a = h - f1k[i] ; b = h - f1k[i - 1]
         if 0 <= a < px.shape[1] and 0 <= b < px.shape[1]:
             p1, p0 = px[i, a], px[i - 1, b]
             if p1 > 0 and p0 > 0:
                 ind[i] = np.log(p1 / p0)
-    eng = (em.load_f1_series_logret(prod)["log_price"].diff()).reindex(idx)
+    eng = (mod_.load_f1_series_logret(prod)["log_price"].diff()).reindex(idx)
     both = pd.DataFrame({"ind": ind, "eng": eng.values}, index=idx).dropna()
     d = (both.ind - both.eng).abs()
     check(f"A. {prod}: independent continuous returns == engine log_price diffs ({len(both)} days)", d.max() < 1e-9,
@@ -116,16 +120,16 @@ PP = engine_run(D / "engine_per_product_v504.pkl", 504)       # the same with th
 check("C. engine bucket list and order == HTML", list(cae.ALL_ASSET_CLASSES) == BK == res["meta"]["keys"], str(cae.ALL_ASSET_CLASSES))
 # the only difference between the engine as shipped and the research series (from 2012-01-01) must be the Value warm-up
 M0 = {"Momentum": "Momentum", "Combined Carry": "Carry", "Combined CarryMom": "CarryMom", "Value": "Value", "Skewness": "Skewness"}
-AC = {"metals": "metals", "petroleum": "energy", "ngl": "ngl", "precious": "precious", "agri": "agri"}
+AC = {"metals": "metals", "petroleum": "energy", "ngl": "ngl", "precious": "precious", "agri": "agri"}   # Naphtha: module "naphtha", see the lookup below
 diffs = {}
 for ac in BK:
     for sty, lab in M0.items():
         for nm, net in zip(PP[ac][sty]["names"], PP[ac][sty]["net"]):
-            a_ = AC.get(ac) or ("energy" if nm == "NatGas" else "emissions")
+            a_ = "naphtha" if nm == "Naphtha" else (AC.get(ac) or ("energy" if nm == "NatGas" else "emissions"))
             r = nets[(a_, nm)][lab]; idx = r.index.union(net.index)
             d = (r.reindex(idx).fillna(0) - net.reindex(idx).fillna(0)).abs().loc["2012-01-01":]
             if d.max() > 1e-9: diffs[(ac, nm, lab)] = d.max()
-check("C. engine with the research Value warm-up (504): all 27 products x 5 sleeves == research series from 2012", not diffs, str(list(diffs)[:5]))
+check("C. engine with the research Value warm-up (504): all 28 products x 5 sleeves == research series from 2012", not diffs, str(list(diffs)[:5]))
 d0 = {}
 for ac in (BK if PP0 else []):
     for sty, lab in M0.items():

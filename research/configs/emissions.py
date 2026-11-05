@@ -2,7 +2,7 @@
 research/configs/emissions.py
 ===============================
 Config for the European gas and carbon products of the "Gas and Emissions" bucket (renamed from "Power, Emissions and Nat Gas" on 2026-11-04) of the research dashboard: EUA carbon allowances (ICE Endex, Bloomberg
-root MO), TTF natural gas (ICE Endex, root TZT) and, since 2026-11-04, UK Gas (ICE NBP, root FN, pence per therm; monthly; calendar DERIVED from the ICE rule by scripts/new_products.py because the Bloomberg drop has no expiry data; Carry F1-F2 + F1-F13 like TTF, F13 quoted from 2008-04-11). Added 2026-10-31. Henry Hub stays in configs/energy.py (the bucket takes NatGas from there). The other power
+root MO), TTF natural gas (ICE Endex, root TZT) and, since 2026-11-04, UK Gas (ICE NBP, root FN, pence per therm; monthly; calendar = Bloomberg expiry history (scripts/new_products.py); Carry F1-F2 + F1-F13 like TTF, F13 quoted from 2008-04-11). Added 2026-10-31. Henry Hub stays in configs/energy.py (the bucket takes NatGas from there). The other power
 products come later. Mirrors configs/energy.py: same signal forms, same engine, nothing new in the shared engine. (The module name is historical: it holds the
 non-US products of the bucket.)
 

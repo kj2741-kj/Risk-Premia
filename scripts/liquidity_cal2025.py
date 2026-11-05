@@ -1,9 +1,9 @@
-"""Liquidity metric, Calendar 2025 (one-time snapshot), 30 products -> Analysis/Liquidity_Cal2025_results.csv (2026-11-04: + Ethylene, Propylene (all six NGL), UK Gas and the Naphtha candidate).
+"""Liquidity metric, Calendar 2025 (one-time snapshot), 30 products -> Analysis/Liquidity_Cal2025_results.csv (2026-11-04: + Ethylene, Propylene (all six Mont Belvieu NGL), UK Gas and Naphtha, which is in the NGL bucket).
 x = ADV * P * sigma * multiplier = USD of one-sigma daily risk traded per day (Prof. Bouchouev's denominator); K/x with K = $1M.
 ADV = mean over 2025 trading days of volume summed over the contracts of a 12-month strip (F1-F12 for monthly products, fewer for quarterly or
 bi-monthly chains, see P below); NaN volume = 0. NGL is the CME half only (ICE to be added). Held-contract and F1-F3 ADV are kept as sensitivities.
-Run from the repo root: python scripts/liquidity_cal2025.py. Needs data/Prices_1029 (volume), data/Prices_1029_merged (prices; UK Gas curve and derived calendar inside), data/Emissions_1029,
-data/Prices_1103 (UK Gas and Naphtha volume; Naphtha engine inputs in data/Prices_1103/derived, written by scripts/new_products.py)."""
+Run from the repo root: python scripts/liquidity_cal2025.py. Needs data/Prices_1029 (volume), data/Prices_1029_merged (prices; UK Gas curve and calendar, Naphtha files), data/Emissions_1029,
+data/Prices_1103 (UK Gas and Naphtha volume). UK Gas and Naphtha prices and Bloomberg calendars are in the price folder (scripts/new_products.py)."""
 import os, sys, warnings; warnings.filterwarnings("ignore")
 os.environ["RP_PRICES_DIR"] = "Prices_1029_merged"
 sys.path[:0] = ["research", "research/configs", "scripts"]   # run from the repo root
@@ -22,7 +22,7 @@ P = [
  ("energy", "HeatingOil", "petroleum", "ENERGY", "HO", 42000, 0.01, 1, 12), ("energy", "SingaporeGasoil", "petroleum", "ENERGY", "QS", 100, 1, 1, 12),
  ("energy", "NatGas", "pen", "ENERGY", "NG", 10000, 1, 1, 12), ("emissions", "TTF", "pen", "EMI", "TTF", 730.5, 1, EUR, 12), ("emissions", "EUA", "pen", "EMI", "EUA", 1000, 1, EUR, 4),
  ("ngl", "Ethylene", "ngl", "NGL", "PCW", 100000, 1, 1, 12), ("ngl", "Propylene", "ngl", "NGL", "PGP", 100000, 1, 1, 12),
- ("emissions", "UKGas", "pen", "UKG", "UKG", THERMS_PER_LOT, 0.01, GBP, 12), ("naphtha", "Naphtha", "candidate", "NAP", "NAP", 1000, 1, 1, 12),
+ ("emissions", "UKGas", "pen", "UKG", "UKG", THERMS_PER_LOT, 0.01, GBP, 12), ("naphtha", "Naphtha", "ngl", "NAP", "NAP", 1000, 1, 1, 12),
  ("ngl", "Ethane", "ngl", "NGL", "CAP", 42000, 1, 1, 12), ("ngl", "Propane", "ngl", "NGL", "BAP", 42000, 1, 1, 12), ("ngl", "Butane", "ngl", "NGL", "DAE", 42000, 1, 1, 12), ("ngl", "Isobutane", "ngl", "NGL", "IBD", 42000, 1, 1, 12),
  ("precious", "Gold", "precious", "PRECIOUS", "GC", 100, 1, 1, 6), ("precious", "Silver", "precious", "PRECIOUS", "SI", 5000, 1, 1, 5), ("precious", "Platinum", "precious", "PRECIOUS", "PL", 50, 1, 1, 4), ("precious", "Palladium", "precious", "PRECIOUS", "PA", 100, 1, 1, 4),
  ("agri", "Corn", "agri", "AGRI", "C", 5000, 0.01, 1, 5), ("agri", "Wheat", "agri", "AGRI", "W", 5000, 0.01, 1, 5), ("agri", "Soybean", "agri", "AGRI", "S", 5000, 0.01, 1, 7),
@@ -41,22 +41,9 @@ def vol_sheet(kind, root):
     return d.dropna(subset=["Date"]).set_index("Date").apply(pd.to_numeric, errors="coerce")
 
 
-def load_naphtha_logret():
-    """Engine series for Naphtha (candidate, not in any bucket): derived calendar (last business day of the pricing month), same roll rule as every product."""
-    from rolling_continuous import apply_data_fixes   # noqa: F401  (no fixes defined for Naphtha)
-    from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio
-    D = "data/Prices_1103/derived/"
-    cfgd = {"KI": {"name": "Naphtha", "price_sheet": "Naphtha KI", "calendar_sheet": "KI - Naphtha CIF NWE", "f1_col": 1, "f2_col": 2, "data_start_row": 2}}
-    df = get_metal_rolling_f1_ratio("KI", futures_file=D + "Naphtha_Futures.xlsx", calendar_file=D + "Naphtha_Expiry_Calendar.xlsx", config=cfgd,
-                                    verbose=False, roll_day=5, roll_rule="expiry_month_nth_td")
-    df = reanchor_f1_continuous_ratio(df)
-    price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0); df["log_price"] = np.log(price)
-    return df
-
-
 rows = []
 for mod, name, bucket, kind, root, m, pf, fx, nstrip in P:
-    raw = load_naphtha_logret() if mod == "naphtha" else importlib.import_module(mod).load_f1_series_logret(name)
+    raw = importlib.import_module(mod).load_f1_series_logret(name)
     r = raw.loc["2025-01-01":"2025-12-31"]
     sig = float(r["log_price"].diff().std())
     held_f2 = r["Phase"].isin(["Roll_LTD-5", "F2_Tracking"])

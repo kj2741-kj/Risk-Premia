@@ -183,9 +183,19 @@ EMISSIONS_CONFIG = {
            "f1_col": 1, "f2_col": 2, "data_start_row": 2},
     "TZT": {"name": "TTF Natural Gas (ICE Endex)", "price_sheet": "TTF Natural Gas (ICE Endex)", "calendar_sheet": "TZT - TTF Gas (ICE Endex)",
             "f1_col": 1, "f2_col": 2, "data_start_row": 2},
-    # UK Gas (ICE NBP, pence per therm), added 2026-11-04; calendar DERIVED from the ICE rule (scripts/new_products.py), not a Bloomberg field.
+    # UK Gas (ICE NBP, pence per therm), added 2026-11-04; calendar = Bloomberg expiry history (scripts/new_products.py).
     "FN": {"name": "UK Gas NBP (ICE)", "price_sheet": "UK Gas NBP (ICE)", "calendar_sheet": "FN - UK Gas NBP (ICE)",
            "f1_col": 1, "f2_col": 2, "data_start_row": 2},
+}
+
+# Naphtha (Bloomberg KI generic, USD per t, monthly average-price swap), added to the NGL bucket 2026-11-04. Same swap convention as the NGL products above: the sheet's F2/F3
+# columns are the effective front/next contract (F1 is the month being priced). Files are written by scripts/new_products.py (price curve from the 2026-11-03 drop,
+# calendar = Bloomberg expiry history).
+NAPHTHA_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Naphtha_Futures_Updated.xlsx")
+NAPHTHA_CALENDAR_FILE = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Naphtha_Expiry_Calendars.xlsx")
+NAPHTHA_CONFIG = {
+    "KI": {"name": "Naphtha CIF NWE (COMB)", "price_sheet": "Naphtha KI (COMB)", "calendar_sheet": "KI - Naphtha CIF NWE (COMB)",
+           "f1_col": 2, "f2_col": 3, "data_start_row": 2},
 }
 
 METALS_CONFIG: dict[str, dict] = {

@@ -3,7 +3,7 @@ Data: data/Prices_0930 (merged 29-Oct pull, every sheet cut at 2026-09-30) or da
 Same sleeves, signals, roll rule (5th trading day of the last-trade-date month), tenor-pair rule and 5 bps costs (roll days charged) as compute_products.py, plus:
   * the Emissions class (EUA from the first Phase II day 2008-04-01, TTF from 2006; research/configs/emissions.py; Carry F1-F2 plus a 12-month pair for both (TTF F1-F13, EUA F1-F5; TTF has no Carry signal before 2014-09-25); own calendars in Emissions_Expiry_Calendars.xlsx);
   * Value needs 504 observations of F3 (not 630), as in the 2012 variant, so that every product's Value is defined before the 2012 reporting start.
-Tenor pairs: Metals / Energy: F1-F3 + F1-F13;  NGL: F2-F4 + F2-F14;  Emissions: TTF F1-F2 + F1-F13, EUA F1-F2 + F1-F5;  Precious / Agriculture: F1-F2 + long (as compute_products.py).
+Tenor pairs: Metals / Energy: F1-F3 + F1-F13;  NGL: F2-F4 + F2-F14 (Naphtha F2-F4 only);  Emissions: TTF F1-F2 + F1-F13, EUA F1-F2 + F1-F5;  Precious / Agriculture: F1-F2 + long (as compute_products.py).
 Run from the repo root:  RP_PRICES_DIR=Prices_0930 (or Prices_1029_merged) python scripts/final_dashboard/compute_products_v3.py   (tag 0930 / 1029, see fd_config.py)"""
 import os
 import sys
@@ -26,7 +26,7 @@ CUTOFF = pd.Timestamp(TAGS[TAG]["cutoff"])
 TC = 5
 SKEW_WINDOW, SKEW_SHIFT_N = 252, 1
 VALUE_MIN = 504
-cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "emissions", "ngl", "precious", "agri")}
+cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "emissions", "ngl", "naphtha", "precious", "agri")}
 import rolling_continuous as rc
 from carry_zsum import carry_z, carry_slope_change, summed_signal
 OUT.mkdir(parents=True, exist_ok=True)
@@ -34,13 +34,13 @@ OUT.mkdir(parents=True, exist_ok=True)
 LONG = {"precious": {"Gold": "F7", "Silver": "F6", "Platinum": "F5", "Palladium": "F5"},
         "agri": {"Corn": "F6", "Wheat": "F6", "Soybean": "F8", "SoybeanOil": "F8", "Coffee": "F6", "Sugar": "F5"}}
 PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "emissions": ["EUA", "TTF", "UKGas"],
-            "ngl": ["Ethane", "Propane", "Butane", "Isobutane"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"])}
+            "ngl": ["Ethane", "Propane", "Butane", "Isobutane"], "naphtha": ["Naphtha"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"])}
 
 
 def pairs_for(a, p):
     if a in ("metals", "energy"):
         return [("F1", "F3"), ("F1", "F13")]
-    if a == "emissions":
+    if a in ("emissions", "naphtha"):
         return cfgs[a].carry_pairs(p)
     if a == "ngl":
         return [("F2", "F4"), ("F2", "F14")]

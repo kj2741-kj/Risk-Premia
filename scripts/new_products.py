@@ -1,19 +1,14 @@
-"""UK Gas (ICE NBP) and Naphtha inputs from the 2026-11-03 Bloomberg drop (data/Prices_1103/New_Products_Futures_2006_to_date.xlsx), 2026-11-04.
+"""UK Gas (ICE NBP) and Naphtha inputs from the 2026-11-03 Bloomberg drop, 2026-11-04.
 
-The drop has prices, volume and open interest for both products but NO expiry calendar (its "Expiry Calendar" sheet says "No expiry data returned" and no other file in the
-repo covers them). This module builds the calendars from the exchange rules and the engine inputs from the drop.
+PRICES: data/Prices_1103/New_Products_Futures_2006_to_date.xlsx (sheets "UK Gas - Price", "Naphtha - Price"; PX_LAST of the Bloomberg generics FN1..FN27 and KI1..KI24).
+EXPIRY CALENDARS: data/Prices_1103/Expiry_Calendars_naphtha_UK_Gas.xlsx, Bloomberg's own historical expiry history (user-supplied 2026-11-04; sheets "UK Gas" 300 contracts
+Jan-06..Dec-30 and "Naphtha" 288 contracts Jan-06..Dec-29, every row flagged OK). It replaced the calendar first derived from the exchange rule (kept below as `derived_*`
+only to cross-check Bloomberg's dates; the two agree on 299 of 300 UK Gas and 286 of 288 Naphtha contracts, the differences being holiday handling).
 
-UK GAS (ICE Futures Europe UK Natural Gas Futures, Bloomberg root FN, pence per therm). Monthly contracts, 1,000 therms per day, delivered every day of the month, so one lot is
-1,000 x days-in-month therms. Last trading day = two business days before the first calendar day of the delivery month (ICE contract spec 910), i.e. in the month before it,
-the same rule as TTF. Business days = Monday-Friday minus UK bank holidays and the one-off closures (see EXTRA_CLOSURES). Validated 2026-11-04 against the Bloomberg generic series:
-the generic F1 moves to the next contract on the first trading day after the rule's last trade date for the whole sample (median curve-shift statistic 0.34 on that day against
-2.9 to 3.7 one to three business days earlier or later; 3.2 on an ordinary day); the same counting rule reproduces 290 of 341 Bloomberg TTF last trade dates, all 51 misses being
-holiday-calendar differences between London and Amsterdam or contracts after 2029. FUT_DLV_DT_LAST = last day of the delivery month. FUT_NOTICE_FIRST and FUT_FIRST_TRADE_DT are left empty.
-These dates are DERIVED, not Bloomberg's; a Bloomberg pull of LAST_TRADEABLE_DT for the FN contracts would replace them.
-
-NAPHTHA (Bloomberg KI generic, USD per metric ton, a monthly average-price swap on Platts Naphtha CIF NWE; 1,000 t per lot on both ICE and CME). The contract month is the pricing
-month, so F1 is the month being priced and its last trading day is the last business day of that month; the generic moves to the next month on the following business day (seen in
-the drop: the open-interest column shifts on 2026-11-02 after the 2026-10-30 expiry). Weaker validation than UK Gas (median statistic 0.81 on the roll day against 1.1 to 1.5 at other lags).
+UK GAS (ICE Futures Europe UK Natural Gas Futures, Bloomberg root FN, pence per therm): monthly contracts, lot = 1,000 therms a day over the delivery month (Bloomberg
+"Contract Size" 28,000 to 31,000 therms, = 1,000 x days in the month); last trade = two business days before the first day of the delivery month, i.e. in the month before it.
+NAPHTHA (Bloomberg KI generic, "KI.. COMB", USD per metric ton, monthly average-price swap on Platts Naphtha CIF NWE, 1,000 t a lot): the contract month is the pricing month,
+last trade = last business day of that month (Bloomberg Last Trade Date = First Notice Date), the generic moves to the next month on the following business day.
 """
 from __future__ import annotations
 
@@ -26,16 +21,47 @@ from dateutil.easter import easter
 
 ROOT = Path(__file__).resolve().parent.parent
 DROP = ROOT / "data" / "Prices_1103" / "New_Products_Futures_2006_to_date.xlsx"
+BBG_CAL = ROOT / "data" / "Prices_1103" / "Expiry_Calendars_naphtha_UK_Gas.xlsx"
 MONTH_CODE = "FGHJKMNQUVXZ"
 UKGAS_SHEET = "UK Gas NBP (ICE)"
 UKGAS_CAL_SHEET = "FN - UK Gas NBP (ICE)"
-# One-off closures inside the data window (royal events); confirmed by missing rows in the drop (2011-04-29 wedding, 2012-06-04/05 Jubilee, 2022-06-02/03 Jubilee,
-# 2022-09-19 state funeral, 2023-05-08 coronation)
+NAPHTHA_SHEET = "Naphtha KI (COMB)"
+NAPHTHA_CAL_SHEET = "KI - Naphtha CIF NWE (COMB)"
+SRC_NOTE = "Bloomberg expiry history, Expiry_Calendars_naphtha&UK_Gas.xlsx (user-supplied 2026-11-04)"
+
+
+# ───────────────────────── Bloomberg calendars (the ones in use) ─────────────────────────
+def bloomberg_calendar(product: str) -> pd.DataFrame:
+    """Bloomberg's expiry history for "UK Gas" or "Naphtha" in the schema load_metal_calendar() reads (Contract, LAST_TRADEABLE_DT, FUT_DLV_DT_LAST) plus the other Bloomberg fields.
+    Checks: every row flagged OK, one row per contract month, contiguous months, last trade dates strictly increasing and not after the last delivery date."""
+    raw = pd.read_excel(BBG_CAL, sheet_name=product, header=1).dropna(subset=["Ticker"])
+    assert (raw["Date Check"] == "OK").all(), f"{product}: rows not flagged OK"
+    cm = pd.to_datetime(raw["Contract Month"])
+    raw = raw.assign(cm=cm).sort_values("cm").reset_index(drop=True)
+    assert not raw["cm"].duplicated().any()
+    assert (raw["cm"].diff().dropna().dt.days.between(28, 31)).all(), f"{product}: contract months not contiguous"
+    ltd, fn, ldd = (pd.to_datetime(raw[c]) for c in ("Last Trade Date", "First Notice Date", "Last Delivery Date"))
+    assert ltd.is_monotonic_increasing and ltd.is_unique and not ltd.isna().any() and not ldd.isna().any(), f"{product}: last trade dates not strictly increasing"
+    assert (ltd <= ldd).all()
+    contract = raw["Ticker"].str.replace(" COMB Comdty", "", regex=False).str.replace(" Comdty", "", regex=False)
+    return pd.DataFrame({"Contract": contract, "Ticker": raw["Ticker"], "Year": raw["cm"].dt.year, "Month": raw["cm"].dt.month,
+                         "Delivery": raw["cm"].dt.strftime("%b%y"), "LAST_TRADEABLE_DT": ltd, "FUT_NOTICE_FIRST": fn, "FUT_DLV_DT_LAST": ldd,
+                         "Contract Size": raw["Contract Size"], "Currency": raw["Currency"], "Source": SRC_NOTE})
+
+
+def uk_gas_calendar() -> pd.DataFrame:
+    return bloomberg_calendar("UK Gas")
+
+
+def naphtha_calendar() -> pd.DataFrame:
+    return bloomberg_calendar("Naphtha")
+
+
+# ───────────────────────── rule-derived calendars (cross-check only) ─────────────────────────
 EXTRA_CLOSURES = ["2011-04-29", "2012-06-04", "2012-06-05", "2022-06-02", "2022-06-03", "2022-09-19", "2023-05-08"]
 
 
 def uk_bank_holidays(y0: int, y1: int) -> set:
-    """England and Wales bank holidays y0..y1 (New Year, Good Friday, Easter Monday, early May, spring and summer bank holiday, Christmas, Boxing Day, with substitute days)."""
     H: set = set()
 
     def next_free(d):
@@ -70,39 +96,25 @@ def business_days(start="2005-01-01", end="2031-12-31") -> pd.DatetimeIndex:
     return pd.DatetimeIndex(sorted(set(pd.bdate_range(start, end)) - hol))
 
 
-def _months(first_year: int, last_year: int):
-    return [(y, m) for y in range(first_year, last_year + 1) for m in range(1, 13)]
+def derived_last_trade(product: str, years=range(2006, 2031)) -> pd.Series:
+    """Last trade date from the exchange rule on a UK business-day calendar, indexed by (year, month). UK Gas: two business days before the delivery month;
+    Naphtha: last business day of the pricing month. Used only to cross-check Bloomberg's calendar."""
+    bd = business_days(); out = {}
+    for y in years:
+        for m in range(1, 13):
+            d1 = pd.Timestamp(y, m, 1)
+            out[(y, m)] = bd[bd < d1][-2] if product == "UK Gas" else bd[bd <= d1 + pd.offsets.MonthEnd(0)][-1]
+    return pd.Series(out)
 
 
-def uk_gas_calendar(first_year: int = 2006, last_year: int = 2030) -> pd.DataFrame:
-    """Contract calendar in the schema load_metal_calendar() reads (Contract, LAST_TRADEABLE_DT, FUT_DLV_DT_LAST) plus Ticker/Year/Month/Delivery/FUT_DLV_DT_FIRST/Source."""
-    bd = business_days()
-    rows = []
-    for y, m in _months(first_year, last_year):
-        d1 = pd.Timestamp(y, m, 1)
-        ltd = bd[bd < d1][-2]                                   # two business days before the first calendar day of the delivery month
-        code = f"FN{MONTH_CODE[m - 1]}{y % 100:02d}"
-        rows.append(dict(Contract=code, Ticker=f"{code} Comdty", Year=y, Month=m, Delivery=f"UK NBP {d1:%b%y}", LAST_TRADEABLE_DT=ltd,
-                         FUT_NOTICE_FIRST=pd.NaT, FUT_FIRST_TRADE_DT=pd.NaT, FUT_DLV_DT_FIRST=d1, FUT_DLV_DT_LAST=d1 + pd.offsets.MonthEnd(0),
-                         Source="DERIVED from ICE rule 910 (2 business days before the delivery month); not a Bloomberg field"))
-    return pd.DataFrame(rows)
+def compare_with_derived(product: str) -> pd.DataFrame:
+    b = bloomberg_calendar(product).set_index(["Year", "Month"])["LAST_TRADEABLE_DT"]
+    d = derived_last_trade(product).reindex(b.index)
+    diff = pd.DataFrame({"bloomberg": b, "derived": d}); return diff[diff.bloomberg != diff.derived]
 
 
-def naphtha_calendar(first_year: int = 2006, last_year: int = 2030) -> pd.DataFrame:
-    bd = business_days()
-    rows = []
-    for y, m in _months(first_year, last_year):
-        d1 = pd.Timestamp(y, m, 1); end = d1 + pd.offsets.MonthEnd(0)
-        ltd = bd[bd <= end][-1]                                 # last business day of the pricing month
-        code = f"KI{MONTH_CODE[m - 1]}{y % 100:02d}"
-        rows.append(dict(Contract=code, Ticker=f"{code} Comdty", Year=y, Month=m, Delivery=f"Naphtha CIF NWE {d1:%b%y}", LAST_TRADEABLE_DT=ltd,
-                         FUT_NOTICE_FIRST=pd.NaT, FUT_FIRST_TRADE_DT=pd.NaT, FUT_DLV_DT_FIRST=d1, FUT_DLV_DT_LAST=end,
-                         Source="DERIVED (average-price swap, last business day of the pricing month); not a Bloomberg field"))
-    return pd.DataFrame(rows)
-
-
+# ───────────────────────── prices ─────────────────────────
 def read_drop(sheet: str) -> pd.DataFrame:
-    """One sheet of the drop (title row, Date/F1.. header row) as a Date-indexed frame."""
     d = pd.read_excel(DROP, sheet_name=sheet, header=1)
     d["Date"] = pd.to_datetime(d["Date"], errors="coerce")
     d = d.dropna(subset=["Date"]).set_index("Date").sort_index()
@@ -123,21 +135,27 @@ def _write_sheet(wb, name: str, title: str, df: pd.DataFrame, index_name: str = 
     if name in wb.sheetnames:
         del wb[name]
     ws = wb.create_sheet(name)
-    ws.append([title] + [None] * (df.shape[1] - 1 if df.index.name else df.shape[1] - 1))
+    ws.append([title] + [None] * (df.shape[1] - 1))
     ws.append([index_name] + list(df.columns))
     for t, row in df.iterrows():
         ws.append([t.to_pydatetime()] + [None if pd.isna(v) else float(v) for v in row.values])
         ws.cell(ws.max_row, 1).number_format = "yyyy-mm-dd"
 
 
-def add_ukgas(dst_dir, cutoff: str | pd.Timestamp) -> dict:
-    """Add the UK Gas curve (Date, F1..F27 in the simple format) to dst_dir/Emissions_Futures_Updated.xlsx and the derived calendar to dst_dir/Emissions_Expiry_Calendars.xlsx.
-    Rows after `cutoff` are not written. Returns a small report dict."""
+def _write_calendar(path: Path, sheet: str, cal: pd.DataFrame):
+    sheets = pd.read_excel(path, sheet_name=None) if path.exists() else {}
+    sheets[sheet] = cal
+    with pd.ExcelWriter(path) as xw:
+        for k, v in sheets.items():
+            v.to_excel(xw, sheet_name=k, index=False)
+
+
+def add_ukgas(dst_dir, cutoff) -> dict:
+    """UK Gas curve (Date, F1..F27 in the simple format) into dst_dir/Emissions_Futures_Updated.xlsx and Bloomberg's calendar into dst_dir/Emissions_Expiry_Calendars.xlsx.
+    Rows after `cutoff` are not written."""
     import openpyxl
     dst = Path(dst_dir)
-    px = read_drop("UK Gas - Price")
-    px = drop_partial_last_rows(px, "UK Gas")
-    px = px.loc[:pd.Timestamp(cutoff)]
+    px = drop_partial_last_rows(read_drop("UK Gas - Price"), "UK Gas").loc[:pd.Timestamp(cutoff)]
     assert px.index.is_monotonic_increasing and not px.index.has_duplicates
     fut = dst / "Emissions_Futures_Updated.xlsx"
     wb = openpyxl.load_workbook(fut)
@@ -148,36 +166,41 @@ def add_ukgas(dst_dir, cutoff: str | pd.Timestamp) -> dict:
             if r[0].value == "UK Gas":
                 rd.delete_rows(r[0].row, 1)
                 break
-        rd.append(["UK Gas", f"ICE NBP, pence per therm, monthly; Bloomberg FN1..FN27 PX_LAST from data/Prices_1103/New_Products_Futures_2006_to_date.xlsx, to {px.index[-1].date()} "
-                              "(the partial 2026-11-03 row dropped); calendar derived from the ICE rule, see scripts/new_products.py"])
+        rd.append(["UK Gas", f"ICE NBP, pence per therm, monthly; Bloomberg FN1..FN27 PX_LAST from data/Prices_1103/New_Products_Futures_2006_to_date.xlsx, to {px.index[-1].date()}; "
+                              "calendar = Bloomberg expiry history (sheet FN - UK Gas NBP (ICE) of Emissions_Expiry_Calendars.xlsx)"])
     wb.save(fut)
-    cal = uk_gas_calendar()
-    calf = dst / "Emissions_Expiry_Calendars.xlsx"
-    sheets = pd.read_excel(calf, sheet_name=None)
-    sheets[UKGAS_CAL_SHEET] = cal
-    with pd.ExcelWriter(calf) as xw:
-        for k, v in sheets.items():
-            v.to_excel(xw, sheet_name=k, index=False)
+    cal = uk_gas_calendar(); _write_calendar(dst / "Emissions_Expiry_Calendars.xlsx", UKGAS_CAL_SHEET, cal)
     return dict(rows=len(px), first=px.index[0].date(), last=px.index[-1].date(), contracts=len(cal))
 
 
-def write_naphtha_inputs(dst_dir) -> dict:
-    """Engine-format workbook + derived calendar for Naphtha (analysis only, not wired into any bucket): dst_dir/Naphtha_Futures.xlsx and dst_dir/Naphtha_Expiry_Calendar.xlsx."""
+def add_naphtha(dst_dir, cutoff) -> dict:
+    """Naphtha curve (Date, F1..F24, simple format) into dst_dir/Naphtha_Futures_Updated.xlsx and Bloomberg's calendar into dst_dir/Naphtha_Expiry_Calendars.xlsx (both rewritten)."""
     import openpyxl
-    dst = Path(dst_dir); dst.mkdir(parents=True, exist_ok=True)
-    px = drop_partial_last_rows(read_drop("Naphtha - Price"), "Naphtha")
-    wb = openpyxl.Workbook(); wb.active.title = "README"
-    wb["README"].append(["Naphtha (Bloomberg KI generic, USD/t, monthly average-price swap, Platts CIF NWE) - engine-format copy of the 2026-11-03 drop"])
-    _write_sheet(wb, "Naphtha KI", f"Naphtha KI -- Futures Curve (F1-F{px.shape[1]})", px)
-    wb.save(dst / "Naphtha_Futures.xlsx")
+    dst = Path(dst_dir)
+    px = drop_partial_last_rows(read_drop("Naphtha - Price"), "Naphtha").loc[:pd.Timestamp(cutoff)]
+    assert px.index.is_monotonic_increasing and not px.index.has_duplicates
+    wb = openpyxl.Workbook(); rd = wb.active; rd.title = "README"
+    for r in [["Naphtha (Bloomberg KI generic, COMB) - Futures Curve", None], [None, None],
+              ["Source", "data/Prices_1103/New_Products_Futures_2006_to_date.xlsx, sheet Naphtha - Price (PX_LAST of KI1..KI24)"],
+              ["Cut", f"{px.index[-1].date()}"],
+              ["Contract", "monthly average-price swap on Platts Naphtha CIF NWE, USD per metric ton, 1,000 t a lot; F1 is the month being priced (as for the NGL swaps)"],
+              ["Calendar", "Naphtha_Expiry_Calendars.xlsx = Bloomberg expiry history (Expiry_Calendars_naphtha&UK_Gas.xlsx)"],
+              ["Tenors", "F1-F4 are quoted every day; F14 and beyond on only 16 to 36% of days in 2024-2026; see research/configs/naphtha.py"],
+              ["Format", "title row, Date,F1.. row, data from row 3 (same as the other price workbooks)"]]:
+        rd.append(r)
+    _write_sheet(wb, NAPHTHA_SHEET, f"{NAPHTHA_SHEET} -- Futures Curve (F1-F{px.shape[1]})", px)
+    wb.save(dst / "Naphtha_Futures_Updated.xlsx")
     cal = naphtha_calendar()
-    with pd.ExcelWriter(dst / "Naphtha_Expiry_Calendar.xlsx") as xw:
-        cal.to_excel(xw, sheet_name="KI - Naphtha CIF NWE", index=False)
-    return dict(rows=len(px), first=px.index[0].date(), last=px.index[-1].date())
+    with pd.ExcelWriter(dst / "Naphtha_Expiry_Calendars.xlsx") as xw:
+        cal.to_excel(xw, sheet_name=NAPHTHA_CAL_SHEET, index=False)
+    return dict(rows=len(px), first=px.index[0].date(), last=px.index[-1].date(), contracts=len(cal))
 
 
 if __name__ == "__main__":
-    import sys
-    for d, cut in (("data/Prices_1029_merged", "2026-10-29"), ("data/Prices_0930", "2026-09-30")):
-        print(d, add_ukgas(ROOT / d, cut))
-    print("naphtha", write_naphtha_inputs(ROOT / "data" / "Prices_1103" / "derived"))
+    for p in ("UK Gas", "Naphtha"):
+        d = compare_with_derived(p)
+        print(f"{p}: Bloomberg vs rule-derived last trade dates differ on {len(d)} contracts"); print(d.to_string() if len(d) else "")
+    for d, cut in (("data/Prices_1029_merged", "2026-10-29"), ("data/Prices_0930", "2026-09-30"), ("data/Prices_0924", "2026-09-23")):
+        if d != "data/Prices_0924":
+            print(d, "UK Gas", add_ukgas(ROOT / d, cut))
+        print(d, "Naphtha", add_naphtha(ROOT / d, cut))

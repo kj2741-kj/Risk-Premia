@@ -35,10 +35,13 @@ for f in ("Final_Research_Dashboard_2012", "Commodity_Rankings", "Skewness_Resea
 h = pages["Final_Research_Dashboard_2012"]
 m = re.search(r"<script>\nconst D=(.*?);\n", h, re.S); emb = json.loads(m.group(1))
 for k in ("tabs", "products", "combined", "crosspair", "corr", "equity", "bystyle"):
-    check(f"dashboard embedded '{k}' == final_v3.json", emb[k] == res[k])
+    sub = isinstance(res[k], dict) and all(x in emb[k] for x in res[k])      # extra entries (e.g. the Power tab) are allowed; every key of final_v3.json must be identical
+    check(f"dashboard embedded '{k}' == final_v3.json", emb[k] == res[k] or (sub and all(emb[k][x] == res[k][x] for x in res[k])))
 check("pen tab products", emb["tabs"]["pen"]["products"] == ["NatGas", "TTF", "UKGas", "EUA"], str(emb["tabs"]["pen"]["products"]))
 check("pen tab label", emb["tabs"]["pen"]["label"] == "Gas and Emissions", emb["tabs"]["pen"]["label"])
 liq = {r["product"]: r for r in csv.DictReader(open("Analysis/Liquidity_Cal2025_results.csv", encoding="utf8"))}
+if os.path.exists("Analysis/Power_Liquidity_Cal2025_results.csv"):     # the Power tab has its own liquidity file
+    liq.update({r["product"]: r for r in csv.DictReader(open("Analysis/Power_Liquidity_Cal2025_results.csv", encoding="utf8"))})
 ok = all(abs(emb["meta"]["liq"][k] - float(liq[k.split("|")[1]]["L_strip"])) < 1e-12 for k in emb["meta"]["liq"])
 check("dashboard By-product L == liquidity CSV L_strip (all products)", ok)
 check("UKGas L in dashboard", abs(emb["meta"]["liq"]["emissions|UKGas"] - float(liq["UKGas"]["L_strip"])) < 1e-12, f"{emb['meta']['liq']['emissions|UKGas']:.5f}")
@@ -114,5 +117,21 @@ app = open("pen_dashboard/app.py", encoding="utf8").read(); hub = open("hub/app.
 check("pen app: UK Gas product wired", '"FN"' in app and "UKGas" in app and 'PRODUCT_ORDER = ["NG", "TZT", "FN", "MO"]' in app)
 check("pen app: no old name in UI strings", "Power, Emissions &" not in app and "Power, Emissions &amp;" not in app)
 check("hub: bucket entry renamed", '"Gas & Emissions"' in hub and '"Power, Emissions & Nat Gas"' not in hub)
+# 7. Naphtha in the NGL bucket (2026-11-04) ------------------------------------------------------------------------------------------------------------------
+check("ngl tab products (dashboard)", emb["tabs"]["ngl"]["products"] == ["Ethane", "Propane", "Butane", "Isobutane", "Naphtha"], str(emb["tabs"]["ngl"]["products"]))
+check("Naphtha L in dashboard == liquidity CSV", abs(emb["meta"]["liq"]["naphtha|Naphtha"] - float(liq["Naphtha"]["L_strip"])) < 1e-12, f"{emb['meta']['liq']['naphtha|Naphtha']:.3f}")
+if m:
+    names = [p["name"] for p in blk["products"] if p["asset"] == "NGL"]
+    check("Rankings: NGL products", names == ["Ethane", "Propane", "Butane", "Isobutane", "Naphtha"], str(names))
+    bad = 0
+    for p in blk["products"]:
+        if p["name"] == "Naphtha":
+            for s_ in ("Momentum", "Carry", "CarryMom", "Value", "Skewness"):
+                for w, v in p["vals"][s_].items():
+                    bad += v != pk(res["products"]["naphtha|Naphtha"][s_][w])
+    check("Rankings Naphtha rows == final_v3.json", bad == 0, f"{bad} differences")
+check("cross-asset engine: NGL products", cae.DASHBOARD_PRODUCTS["ngl"] == ["Ethane", "Propane", "Butane", "Isobutane", "Naphtha"])
+ngl_app = open("ngl_dashboard/app.py", encoding="utf8").read()
+check("ngl app: Naphtha wired", 'PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD", "KI"]' in ngl_app and "NAPHTHA_CONFIG" in ngl_app and "import ngl_bucket" in ngl_app)
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

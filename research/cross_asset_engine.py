@@ -126,7 +126,7 @@ DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
     "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
     "pen": ["NatGas", "TTF", "UKGas", "EUA"],
-    "ngl": ["Ethane", "Propane", "Butane", "Isobutane"],
+    "ngl": ["Ethane", "Propane", "Butane", "Isobutane", "Naphtha"],   # Naphtha added 2026-11-04 (average-price swap, same convention as the Mont Belvieu swaps)
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],
     # Agriculture: six products only (2026-10-11), matching research/configs/agri.py's PRODUCTS and the
     # Agriculture dashboard. The other nine of the original 14-product build never enter a portfolio.
@@ -158,9 +158,12 @@ def cross_pair_label(a: str, b: str) -> str:
 _CFG_CACHE: dict[str, object] = {}
 
 
+_CFG_MODULE = {"ngl": "ngl_bucket"}   # 2026-11-04: the NGL bucket is configs/ngl.py plus Naphtha (configs/ngl_bucket.py dispatches); every other key is its own module
+
+
 def _get_cfg(asset_class: str):
     if asset_class not in _CFG_CACHE:
-        _CFG_CACHE[asset_class] = importlib.import_module(asset_class)
+        _CFG_CACHE[asset_class] = importlib.import_module(_CFG_MODULE.get(asset_class, asset_class))
     return _CFG_CACHE[asset_class]
 
 

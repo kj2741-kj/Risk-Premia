@@ -2,7 +2,8 @@
 NGL / Refined Products Dashboard - Stage 2
 ============================================
 Standalone Streamlit app, its own separate deployment. Ethane, Propane,
-Butane, Isobutane (Mt Belvieu NGL swaps). Momentum / Carry / Value
+Butane, Isobutane (Mt Belvieu NGL swaps) and Naphtha (CIF NWE average-price swap).
+Momentum / Carry / Value
 only, same format as the Metals and Energy Stage 2 rebuilds -- reuses
 the identical shared engine (common_engine.py) so all three dashboards
 behave identically.
@@ -77,10 +78,11 @@ from common_curve_loader import load_curve_simple
 from common_engine import (render_momentum_tab, render_carry_tab, render_value_tab, render_skewness_tab,
                            render_comparison_tab)
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
-                                 NGL_CONFIG, NGL_FUTURES_FILE, NGL_CALENDAR_FILE)
+                                 NGL_CONFIG, NGL_FUTURES_FILE, NGL_CALENDAR_FILE,
+                                 NAPHTHA_CONFIG, NAPHTHA_FUTURES_FILE, NAPHTHA_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 from dashboard_portfolio_tab import render_portfolio_tab
-import ngl as ngl_research_cfg
+import ngl_bucket as ngl_research_cfg                # Mont Belvieu products (configs/ngl.py) + Naphtha (configs/naphtha.py)
 
 st.set_page_config(
     page_title="NGL Risk Premia - Stage 2",
@@ -95,9 +97,12 @@ inject_css()
 # Ethylene (PCW) and Propylene (PGP) removed 2026-08-03 -- see module
 # docstring. Both remain in research/configs/ngl.py's own PRODUCTS list.
 PRODUCT_UNITS = {
-    "CAP": "/gal", "BAP": "/gal", "DAE": "/gal", "IBD": "/gal",
+    "CAP": "/gal", "BAP": "/gal", "DAE": "/gal", "IBD": "/gal", "KI": "/t",
 }
-PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD"]
+PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD", "KI"]
+# Per-product source: config registry, price file, calendar file (Naphtha has its own, see research/configs/naphtha.py)
+PRODUCT_SOURCE = {c: dict(config=NGL_CONFIG, futures=NGL_FUTURES_FILE, calendar=NGL_CALENDAR_FILE) for c in ("CAP", "BAP", "DAE", "IBD")}
+PRODUCT_SOURCE["KI"] = dict(config=NAPHTHA_CONFIG, futures=NAPHTHA_FUTURES_FILE, calendar=NAPHTHA_CALENDAR_FILE)
 NGL_PORTFOLIO_EXCLUDED = ("Ethylene", "Propylene")
 
 # ── Defaults tuned for NGL/petrochemical products (2026-07-10, re-checked
@@ -132,6 +137,9 @@ MOMENTUM_DEFAULT_FEATURE = {
 # See research/configs/ngl.py's docstring for the same caveat.
 CARRY_DEFAULT_ACTIVE = ["V1 (F2-F14)", "V2 (win=252)", "V3 (N=20)"]
 CARRY_DEFAULT_FEATURE = "V1 (F2-F14)"
+# Naphtha: single carry pair F2-F4 (research/configs/naphtha.py)
+CARRY_DEFAULT_ACTIVE_BY_PRODUCT = {"KI": ["V1 (F2-F4)", "V2 (win=252)", "V3 (N=20)"]}
+CARRY_DEFAULT_FEATURE_BY_PRODUCT = {"KI": "V1 (F2-F4)"}
 # Value: no NGL-specific override as of 2026-08-03 -- falls back to
 # render_value_tab's own default (F3 / 5yr / 10%), same as every other
 # dashboard, per the user's explicit decision to force F3 uniformly across
@@ -146,7 +154,7 @@ with st.sidebar:
     st.divider()
     product_code = st.radio(
         "Product", PRODUCT_ORDER, key="ngl_product_choice",
-        format_func=lambda c: NGL_CONFIG[c]["name"],
+        format_func=lambda c: PRODUCT_SOURCE[c]["config"][c]["name"],
     )
     st.divider()
     st.markdown("**Rolling Configuration**")
@@ -156,7 +164,7 @@ with st.sidebar:
         index=1, key="ngl_roll_method",   # default: Nth trading day of the expiry month (same roll as the research numbers), 2026-10-11
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="ngl_roll_n")
-    st.caption("Ethane/Propane/Butane/Isobutane are Mt Belvieu NGL swaps. Ethylene and Propylene "
+    st.caption("Ethane/Propane/Butane/Isobutane are Mt Belvieu NGL swaps; Naphtha is the CIF NWE average-price swap (USD per tonne, Bloomberg KI). Ethylene and Propylene "
                "(the Mt Belvieu / Polymer Grade petrochemicals) are excluded from this dashboard as "
                "of 2026-08-03; both remain in the underlying research config and engine. Same "
                "Momentum/Carry/Value format as the Metals and Energy dashboards.")
@@ -164,17 +172,18 @@ with st.sidebar:
                "F1 can be a stale/partial-month price. All Momentum/Carry/Value PnL and the Momentum "
                "signal are based on F2 (rolling into F3).")
 
-cfg = NGL_CONFIG[product_code]
+src = PRODUCT_SOURCE[product_code]
+cfg = src["config"][product_code]
 unit = PRODUCT_UNITS[product_code]
 
 if roll_method == "N days before last trading day":
-    f1_df = get_metal_rolling_f1(product_code, futures_file=NGL_FUTURES_FILE,
-                                  calendar_file=NGL_CALENDAR_FILE, verbose=False,
-                                  config=NGL_CONFIG, roll_day=roll_n)
+    f1_df = get_metal_rolling_f1(product_code, futures_file=src["futures"],
+                                  calendar_file=src["calendar"], verbose=False,
+                                  config=src["config"], roll_day=roll_n)
 else:
-    f1_df = get_rolling_f1_5td(product_code, futures_file=NGL_FUTURES_FILE,
-                                calendar_file=NGL_CALENDAR_FILE, verbose=False,
-                                config=NGL_CONFIG, roll_day=roll_n)
+    f1_df = get_rolling_f1_5td(product_code, futures_file=src["futures"],
+                                calendar_file=src["calendar"], verbose=False,
+                                config=src["config"], roll_day=roll_n)
 if f1_df.empty:
     st.error(f"Could not build F1_continuous for {cfg['name']}.")
     st.stop()
@@ -183,7 +192,7 @@ f1r, f1c = f1_df["F1_raw"], f1_df["F1_continuous"]
 phase = f1_df["Phase"]
 register_geo_inputs(f1_df)
 
-curve = load_curve_simple(NGL_FUTURES_FILE, cfg["price_sheet"])
+curve = load_curve_simple(src["futures"], cfg["price_sheet"])
 curve = curve[curve.index.year >= 2006]
 
 st.markdown(f'<p class="main-title">🧪 NGL Risk Premia: {cfg["name"]}</p>', unsafe_allow_html=True)
@@ -201,8 +210,8 @@ with tab_mom:
 
 with tab_carry:
     carry_positions = render_carry_tab(curve, f1r, f1c, cfg["name"], unit, key_prefix=key_prefix, phase=phase,
-                                        default_active_variants=CARRY_DEFAULT_ACTIVE,
-                                        default_feature_variant=CARRY_DEFAULT_FEATURE,
+                                        default_active_variants=CARRY_DEFAULT_ACTIVE_BY_PRODUCT.get(product_code, CARRY_DEFAULT_ACTIVE),
+                                        default_feature_variant=CARRY_DEFAULT_FEATURE_BY_PRODUCT.get(product_code, CARRY_DEFAULT_FEATURE),
                                         skip_front_contract=True)
 
 with tab_val:
@@ -221,13 +230,12 @@ with tab_compare:
                                             "Value": value_positions, "Skewness": skew_positions})
 
 with tab_portfolio:
-    st.caption("Combines 4 NGL products (Ethane, Propane, Butane, Isobutane) into one "
+    st.caption("Combines 5 NGL products (Ethane, Propane, Butane, Isobutane, Naphtha) into one "
                "asset-class-level portfolio, independent of the sidebar's Product selection "
                "above, which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. Ethylene and "
                "Propylene are excluded here too (dashboard-only, see sidebar note); both still "
                "exist in research/configs/ngl.py's own PRODUCTS list for the research pipeline. "
-               "Carry and Carry momentum use NGL's single F4-F15 tenor pair, not the Metals-style "
-               "two-tier structure. Does not include the StatArb sleeve (the 8-spread cross-asset "
+               "Carry and Carry momentum use F2-F4 + F2-F14 for the Mont Belvieu products and F2-F4 for Naphtha. Does not include the StatArb sleeve (the 8-spread cross-asset "
                "book, shared with Energy); this tab covers Momentum, Carry, Carry momentum, and "
                "Value only.")
     render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio",

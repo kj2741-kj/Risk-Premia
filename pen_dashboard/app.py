@@ -9,8 +9,8 @@ Each product keeps its own data file, roll calendar and start date:
   * Henry Hub (NG):  Energy_Futures_Updated.xlsx + expiry_calendars_20260701.xlsx, from 2006.
   * TTF (TZT):       Emissions_Futures_Updated.xlsx + Emissions_Expiry_Calendars.xlsx (Bloomberg expiry history), from 2006. Monthly contracts, last trade two business days
                      before the delivery month.
-  * UK Gas (FN):     same files, from 2006, pence per therm. Monthly contracts, last trade two business days before the delivery month (ICE rule; the dates are DERIVED, the
-                     Bloomberg drop has no expiry data, and reproduce the Bloomberg generic roll on every contract).
+  * UK Gas (FN):     same files, from 2006, pence per therm. Monthly contracts, last trade two business days before the delivery month (Bloomberg expiry
+                     history).
   * EUA (MO):        same files, from 2008-04-01 (the first EU ETS Phase II day; the earlier generic series is Phase I contracts at 0.01-0.07 EUR). Quarterly contracts.
 The Portfolio tab and the cross-asset hub use Carry F1-F2 + F1-F13 for TTF and UK Gas, F1-F2 + F1-F5 for EUA and F1-F3 + F1-F13 for Henry Hub (research/configs/pen.py).
 """
@@ -107,7 +107,7 @@ with st.sidebar:
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="pen_roll_n")
     st.caption("Gas and Emissions bucket: Henry Hub (US natural gas), TTF (European natural gas), UK Gas (NBP) and EUA carbon allowances. TTF and EUA come from the "
-               "Bloomberg pull of 29-Oct with their own expiry calendars; UK Gas (pence per therm) uses an expiry calendar derived from the ICE rule (last trade 2 business days before the delivery month); EUA starts on 2008-04-01 (first Phase II day). EUA data quality is still under review. "
+               "Bloomberg pull of 29-Oct with their own expiry calendars; UK Gas (pence per therm) uses Bloomberg's expiry history (last trade 2 business days before the delivery month); EUA starts on 2008-04-01 (first Phase II day). EUA data quality is still under review. "
                "Same Momentum/Carry/Value/Skewness format as the other dashboards.")
 
 src = PRODUCT_SOURCE[product_code]

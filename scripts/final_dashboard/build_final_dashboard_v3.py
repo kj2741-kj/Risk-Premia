@@ -44,6 +44,9 @@ if TAG == "0930":
                  "(after python scripts/power/power_liquidity.py), or restore it from git.")
     POWER = json.load(open(_pt))
     assert "power" not in res["meta"]["keys"] and "power" not in res["tabs"]
+    for _c in POWER["tab"]["cols"]:
+        if _c["key"] == "p1":
+            _c["years"] = ""          # P1 (2012-2016) does not exist for power: show nothing, not "n/a"
     data["tabs"] = dict(res["tabs"], power=POWER["tab"])
     data["products"] = dict(res["products"], **POWER["products"])
     data["equity"] = dict(res["equity"], **POWER["equity"])
@@ -177,13 +180,46 @@ t = rep(t, '[cv,cc,hs].forEach(e=>e.addEventListener("change",draw));draw();})()
 t = rep(t, 'const CAC=["metals","energy","precious","ngl","agri"],CLAB=["Metals","Energy","Precious","NGL","Agriculture"];', 'const CAC=D.meta.keys,CLAB=D.meta.keys.map(k=>LABEL[k]);')
 t = rep(t, "Within-asset-class matrices use each asset class's own calendar; cross-asset-class and rolling figures use the intersection of trading dates across the five asset classes (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}; the Inverse Vol rows start later because NGL's Inverse Vol series is undefined before 23 Feb 2012).",
         "Within-bucket matrices use each bucket's own calendar; cross-bucket and rolling figures use the intersection of trading dates across the six buckets (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}).")
-# Cumulative-return charts as a geometric index that starts at 100% at the chosen period start (tag 0930 only): level = exp(cumulative log return since the start) x 100, with a baseline at 100%.
+# Cumulative-return charts (tag 0930 only): value of $100 invested at the chosen period start = exp(cumulative log return since the start) x 100, baseline at $100, PNG and CSV download buttons.
 if TAG == "0930":
-    t = rep(t, "Cumulative return, rebased to 0 at the start of the period.", "Cumulative return index (geometric), 100% at the start of the period.")
+    t = rep(t, "Cumulative return, rebased to 0 at the start of the period.</span></div>",
+            "Value of $100 invested at the start of the period.</span><span style=\"margin-left:auto\"><button type=\"button\" class=\"window-select\" data-eq=\"png\">Download PNG</button> <button type=\"button\" class=\"window-select\" data-eq=\"csv\">Download CSV</button></span></div>")
     t = rep(t, "const vals={};let lo=0,hi=0;", "const vals={};let lo=100,hi=100;")
     t = rep(t, "vals[nm]=idx.map(i=>(Math.exp(c[i]-c[s0])-1)*100);", "vals[nm]=idx.map(i=>Math.exp(c[i]-c[s0])*100);")
+    t = rep(t, "const W=920,H=340,padL=56,", "const W=920,H=340,padL=64,")
+    t = rep(t, "const pad=(hi-lo)*0.06;lo-=pad;hi+=pad;", "const pad=(hi-lo)*0.06;lo=Math.max(0,lo-pad);hi+=pad;")
+    t = rep(t, "function renderEquity(host,key){", "const D$=(v,d)=>\"$\"+(Math.abs(v)<0.5*Math.pow(10,-d)?0:v).toLocaleString(\"en-US\",{minimumFractionDigits:d,maximumFractionDigits:d});\nfunction renderEquity(host,key){")
+    t = rep(t, "const on={};names.forEach", "let cur=null;const on={};names.forEach")
     t = rep(t, "for(let v=Math.ceil(lo/stepV)*stepV;v<=hi;v+=stepV){const y=yS(v);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"${Math.abs(v)<1e-9?\"rc-zero-line\":\"rc-grid-line\"}\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">${v.toFixed(0)}%</text>`;}",
-             "for(let v=Math.ceil(lo/stepV)*stepV;v<=hi;v+=stepV){if(Math.abs(v-100)<1e-9)continue;const y=yS(v);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"rc-grid-line\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">${v.toFixed(0)}%</text>`;}{const y=yS(100);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"rc-zero-line\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">100%</text>`;}")
+             "const dp=stepV<1?2:0;for(let v=Math.ceil(lo/stepV)*stepV;v<=hi;v+=stepV){if(Math.abs(v-100)<1e-9)continue;const y=yS(v);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"rc-grid-line\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">${D$(v,dp)}</text>`;}{const y=yS(100);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"rc-zero-line\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">$100</text>`;}")
+    t = rep(t, "chart.innerHTML=`<svg viewBox", "cur={sel,idx,vals,lo,hi,stepV,start};chart.innerHTML=`<svg viewBox")
+    t = rep(t, "vals[nm][k].toFixed(1)+\"%\"", "D$(vals[nm][k],2)")
+    EXPORT = r"""startSel.addEventListener("change",draw);draw();
+  const esc=x=>String(x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const ttl=()=>{const card=host.closest(".card");let x=card&&card.querySelector("h2")?card.querySelector("h2").textContent:"Cumulative return";if(key.indexOf("prod|")===0){const sl=card&&card.querySelector("[data-pc]");if(sl)x+=" - "+sl.options[sl.selectedIndex].text;}return x;};
+  const fname=()=>(ttl()+" from "+cur.start).replace(/[^A-Za-z0-9._-]+/g,"_");
+  const save=(blob,name)=>{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},1000);};
+  host.querySelector("[data-eq=csv]").addEventListener("click",()=>{if(!cur)return;const q=x=>'"'+String(x).replace(/"/g,'""')+'"';const rows=[["Date"].concat(cur.sel.map(nm=>nm+" ($)")).map(q).join(",")];cur.idx.forEach((gi,k)=>rows.push([E.dates[gi]].concat(cur.sel.map(nm=>cur.vals[nm][k].toFixed(4))).join(",")));save(new Blob(["\ufeff"+rows.join("\r\n")],{type:"text/csv;charset=utf-8"}),fname()+".csv");});
+  host.querySelector("[data-eq=png]").addEventListener("click",()=>{if(!cur)return;const {sel,idx,vals,lo,hi,stepV}=cur,n=idx.length,dp=stepV<1?2:0;
+    const W=920,H=340,padL=64,padR=16,padT=14,padB=30,plotW=W-padL-padR,plotH=H-padT-padB,F='font-family="Arial,Helvetica,sans-serif"';
+    let lx=16,ly=44,lg="";sel.forEach(nm=>{const w=nm.length*6.3+34;if(lx+w>W-16){lx=16;ly+=18;}lg+=`<rect x="${lx}" y="${ly-8}" width="14" height="4" fill="${PALETTE[names.indexOf(nm)%PALETTE.length]}"/><text x="${lx+19}" y="${ly}" font-size="11" fill="#222" ${F}>${esc(nm)}</text>`;lx+=w;});
+    const OFF=ly+14,TH=OFF+H,xS=i=>padL+(i/Math.max(1,n-1))*plotW,yS=v=>padT+(1-(v-lo)/(hi-lo))*plotH;
+    let g="";for(let v=Math.ceil(lo/stepV)*stepV;v<=hi;v+=stepV){if(Math.abs(v-100)<1e-9)continue;const y=yS(v);g+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#e1e4e8" stroke-width="1"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="11" fill="#444" ${F}>${D$(v,dp)}</text>`;}
+    {const y=yS(100);g+=`<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W-padR}" y2="${y.toFixed(1)}" stroke="#666" stroke-width="1.2" stroke-dasharray="4 3"/><text x="${padL-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="11" font-weight="700" fill="#222" ${F}>$100</text>`;}
+    let ly0=null;idx.forEach((gi,k)=>{const yy=E.dates[gi].slice(0,4);if(yy!==ly0){ly0=yy;const x=xS(k);g+=`<line x1="${x.toFixed(1)}" y1="${padT}" x2="${x.toFixed(1)}" y2="${H-padB}" stroke="#e1e4e8" stroke-width="1"/><text x="${x.toFixed(1)}" y="${H-padB+14}" text-anchor="middle" font-size="11" fill="#444" ${F}>${yy}</text>`;}});
+    const pl=sel.map(nm=>`<polyline fill="none" stroke="${PALETTE[names.indexOf(nm)%PALETTE.length]}" stroke-width="1.8" stroke-linejoin="round" points="${vals[nm].map((v,k)=>xS(k).toFixed(1)+","+yS(v).toFixed(1)).join(" ")}"/>`).join("");
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${TH}" viewBox="0 0 ${W} ${TH}"><rect width="${W}" height="${TH}" fill="#fff"/><text x="16" y="20" font-size="15" font-weight="700" fill="#111" ${F}>${esc(ttl())}</text><text x="${W-16}" y="20" text-anchor="end" font-size="11" fill="#444" ${F}>Value of $100 invested on ${cur.start}</text>${lg}<g transform="translate(0,${OFF})">${g}${pl}</g></svg>`;
+    const url=URL.createObjectURL(new Blob([svg],{type:"image/svg+xml;charset=utf-8"})),img=new Image();
+    img.onload=()=>{const c=document.createElement("canvas");c.width=W*2;c.height=TH*2;const cx=c.getContext("2d");cx.fillStyle="#fff";cx.fillRect(0,0,c.width,c.height);cx.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(url);c.toBlob(b=>save(b,fname()+".png"),"image/png");};img.src=url;});"""
+    t = rep(t, 'startSel.addEventListener("change",draw);draw();', EXPORT)
+    # Power tab: P1 does not exist, so its heading year range and its cells stay empty instead of "n/a"
+    t = rep(t, "const hOpts=cols=>(cols||D.cols).map(c=>`<option value=\"${c.key}\">${c.label} (${c.years})</option>`).join(\"\");",
+            "const hOpts=cols=>(cols||D.cols).map(c=>`<option value=\"${c.key}\">${c.label}${c.years?` (${c.years})`:\"\"}</option>`).join(\"\");")
+    t = rep(t, "Details for \"+pc.label+\" (\"+pc.years+\")</th>", "Details for \"+pc.label+(pc.years?\" (\"+pc.years+\")\":\"\")+\"</th>")
+    t = rep(t, "CC.map(c=>`<td${c.key===per?' class=\"on\"':\"\"}>${ir(W[c.key][i].ir)}</td>`).join(\"\")+`<td class=\"sel\">${f(r.ret,2,\"%\")}</td><td class=\"sel\">${f(r.vol,2,\"%\")}</td><td class=\"sel\">${f(r.mdd,2,\"%\")}</td></tr>`",
+            "CC.map(c=>`<td${c.key===per?' class=\"on\"':\"\"}>${c.years===\"\"?\"\":ir(W[c.key][i].ir)}</td>`).join(\"\")+(pc.years===\"\"?`<td class=\"sel\"></td><td class=\"sel\"></td><td class=\"sel\"></td></tr>`:`<td class=\"sel\">${f(r.ret,2,\"%\")}</td><td class=\"sel\">${f(r.vol,2,\"%\")}</td><td class=\"sel\">${f(r.mdd,2,\"%\")}</td></tr>`)")
+    t = rep(t, "const v=d[s][ph.value][m];const b=s===\"EW PORT\"?' style=\"font-weight:700\"':\"\";return m===\"ir\"?",
+            "const v=d[s][ph.value][m];const b=s===\"EW PORT\"?' style=\"font-weight:700\"':\"\";if((t.cols||D.cols).find(c=>c.key===ph.value).years===\"\")return `<td${b}></td>`;return m===\"ir\"?")
 t = rep(t, "Section 1: Within-Asset-Class Correlation", "Section 1: Within-Bucket Correlation")
 t = rep(t, "Select asset class</h3><label>Asset class: <select", "Select bucket</h3><label>Bucket: <select")
 t = rep(t, "Section 2: Cross-Asset-Class Correlation", "Section 2: Cross-Bucket Correlation")

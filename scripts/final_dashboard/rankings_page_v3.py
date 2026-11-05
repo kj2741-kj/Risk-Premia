@@ -25,6 +25,8 @@ import os
 BASES = [(f"2012 start, data to {TAGS[TAG]['cutoff']}", str(out_dir(TAG)), "products_nets.pkl",
           [("full", "Full 2012-2026", "2012-01-01", None), ("p1", "P1 2012-2016", "2012-01-01", "2016-12-31"), ("p2", "P2 2017-2021", "2017-01-01", "2021-12-31"),
            ("p3", "P3 2022-2026", "2022-01-01", None), ("y26", "2026 YTD", "2026-01-01", None)])]
+import csv
+LIQ = {r["product"]: r for r in csv.DictReader(open("Analysis/Liquidity_Cal2025_results.csv", encoding="utf8"))}   # Calendar-2025 snapshot, K = USD 1M: L_strip = K / x (days), x_strip = x (USD m of one-sigma risk traded per day)
 pack = lambda m: [None if pd.isna(m[k]) else round(float(m[k]), 3) for k in ("ir", "ret", "vol", "mdd")]
 DATA = {}
 for name, d, pkl, wins in BASES:
@@ -36,7 +38,7 @@ for name, d, pkl, wins in BASES:
         lst = [nets[(a, p)][s] for s in SLEEVES]
         for col, ser in (("EW-5", combine_returns(lst, "equal_weight")), ("IV-5", combine_returns(lst, "inverse_vol", vol_window=63))):
             vals[col] = {w: pack(_metrics(ser.loc[st:e] if e else ser.loc[st:])) for w, _, st, e in wins}
-        prods.append(dict(name=p, asset=BUCKETS[bk], vals=vals))
+        prods.append(dict(name=p, asset=BUCKETS[bk], vals=vals, L=float(LIQ[p]["L_strip"]), X=float(LIQ[p]["x_strip"])))
     classes = []
     for key, label in CLASSES:
         vals = {}
@@ -61,8 +63,10 @@ svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}
 <div class="ctl"><label>Period <select id="period"></select></label></div>
 <div class="leg" id="leg"></div>
 <h2>1. Buckets (sector portfolios)</h2><p class="note">Equal-weighted across each bucket's commodities, from the dashboard tabs. Click any column heading to sort (click again to reverse); the table starts sorted by the EW PORT. The small number is the rank among the six rows for that column.</p><div class="ts" id="cheat"></div>
-<h2>2. Commodities</h2><p class="note">Click any column heading to sort by it (click again to reverse); the table starts sorted by the EW mini-portfolio. Cell colour: green positive, red negative; the small number is the rank among the __NPROD__ commodities for that column.</p><div class="ts" id="heat"></div>
+<h2>2. Commodities</h2><p class="note">Click any column heading to sort by it (click again to reverse); the table starts sorted by the EW mini-portfolio. Cell colour: green positive, red negative; the small number is the rank among the __NPROD__ commodities for that column. The last two columns are the Calendar-2025 liquidity snapshot and do not depend on the Period: Time to trade 1 sigma risk (in Days) = K / x with K = USD 1M of one-sigma daily risk, and Risk Millions per day = x, the USD millions of one-sigma risk the market trades per day (average daily volume x price x volatility x contract multiplier). For both, rank 1 = most liquid (fewest days, most risk per day), and the cells are not coloured.</p><div class="ts" id="heat"></div>
 <h2>3. Bar charts by risk premium</h2><div class="ctl"><label>Risk premium <select id="prem"></select></label></div><h3>Buckets</h3><div id="cbars"></div><h3>Commodities</h3><div id="bars"></div>
+<h2>4. Liquidity (Calendar 2025)</h2><p class="note">Calendar-2025 snapshot, the same figures as the last two columns of the Commodities table; it does not depend on the Period or Risk premium selections. Both charts use a log scale (each gridline is ten times the previous one) because the commodities span more than five orders of magnitude. Time to trade 1 sigma risk (in Days) = K / x with K = USD 1M of one-sigma daily risk; sorted from the fewest days (most liquid, shortest bar). Risk Millions per day = x, the USD millions of one-sigma risk the market trades per day; sorted from the most (most liquid, longest bar).</p>
+<h3>Time to trade 1 sigma risk (in Days)</h3><div id="lbars"></div><h3>Risk Millions per day</h3><div id="xbars"></div>
 </div><script>
 const DATA=__DATA__;
 const SECT=["Metals","Petroleum","Gas and Emissions","NGL","Precious","Agriculture"],COL={"Metals":"var(--c0)","Petroleum":"var(--c1)","Gas and Emissions":"var(--c5)","NGL":"var(--c3)","Precious":"var(--c2)","Agriculture":"var(--c4)"};
@@ -70,6 +74,8 @@ const PREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Mo
 const CPREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Momentum (V3)"],["Value","Value"],["Skewness","Skewness"],["EW PORT","EW PORT (5 sleeves)"],["Inverse Vol","Inverse Vol (5 sleeves)"]];
 const $=id=>document.getElementById(id),f2=v=>v==null?"n/a":v.toFixed(2);
 let SORT=null,SORTC=null;
+const fL=v=>v==null?"n/a":String(Number(v.toPrecision(3))),fX=v=>v==null?"n/a":(v>=100?Math.round(v).toLocaleString("en-US"):(v>=10?v.toFixed(1):(v>=1?v.toFixed(2):String(Number(v.toPrecision(2))))));
+const LCOLS=[["__L","Time to trade 1 sigma risk (in Days)",1],["__X","Risk Millions per day",-1]];   // [key, heading, default sort direction]
 $("leg").innerHTML=SECT.map(s=>`<span><i style="background:${COL[s]}"></i>${s}</span>`).join("");
 const BASIS=Object.keys(DATA)[0];
 $("prem").innerHTML=PREM.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join("");
@@ -82,19 +88,31 @@ function bars(host,rows){ // rows: [{name,sector,v}] already sorted
     s+=`<text x="${L-8}" y="${y+11}" text-anchor="end">${i+1}. ${r.name}</text><rect x="${x}" y="${y}" width="${Math.abs(w)}" height="${rh-5}" rx="2" fill="${COL[r.sector]||'var(--c0)'}"><title>${r.name}: ${f2(r.v)}</title></rect>
     <text x="${w>=0?x0+w+5:x0+w-5}" y="${y+11}" text-anchor="${w>=0?'start':'end'}">${f2(r.v)}</text>`;});
   host.innerHTML=s+"</svg>";}
+function logbars(host,rows,fmt){ // rows: [{name,sector,v}] already sorted; log10 axis with a gridline at every power of ten
+  const W=900,rh=19,L=150,R=70,H=rows.length*rh+44,pw=W-L-R,lv=rows.map(r=>Math.log10(r.v)),lo=Math.floor(Math.min(...lv)),hi=Math.ceil(Math.max(...lv)),xs=v=>L+(Math.log10(v)-lo)/(hi-lo)*pw;
+  let s=`<svg viewBox="0 0 ${W} ${H}">`;
+  for(let d=lo;d<=hi;d++){const x=L+(d-lo)/(hi-lo)*pw;s+=`<line class="axis" x1="${x}" y1="8" x2="${x}" y2="${H-26}"/><text x="${x}" y="${H-10}" text-anchor="middle">${String(Number("1e"+d))}</text>`;}
+  rows.forEach((r,i)=>{const y=12+i*rh,w=xs(r.v)-L;
+    s+=`<text x="${L-8}" y="${y+11}" text-anchor="end">${i+1}. ${r.name}</text><rect x="${L}" y="${y}" width="${w}" height="${rh-5}" rx="2" fill="${COL[r.sector]||'var(--c0)'}"><title>${r.name}: ${fmt(r.v)}</title></rect><text x="${xs(r.v)+5}" y="${y+11}">${fmt(r.v)}</text>`;});
+  host.innerHTML=s+"</svg>";}
+function liqbars(){
+  const P=DATA[BASIS].products.map(x=>({name:x.name,sector:x.asset,L:x.L,X:x.X}));
+  logbars($("lbars"),[...P].sort((a,b)=>a.L-b.L).map(x=>({name:x.name,sector:x.sector,v:x.L})),fL);
+  logbars($("xbars"),[...P].sort((a,b)=>b.X-a.X).map(x=>({name:x.name,sector:x.sector,v:x.X})),fX);}
 function render(){
   const D=DATA[BASIS],w=$("period").value,p=$("prem").value;
-  const P=D.products.map(x=>({name:x.name,sector:x.asset,vals:x.vals}));
+  const P=D.products.map(x=>({name:x.name,sector:x.asset,vals:x.vals,L:x.L,X:x.X}));
   const sorted=[...P].sort((a,b)=>(b.vals[p][w][0]??-9)-(a.vals[p][w][0]??-9));
   bars($("bars"),sorted.map(x=>({name:x.name,sector:x.sector,v:x.vals[p][w][0]})));
   // heat table with ranks
   const rank={};PREM.forEach(([k])=>{const o=[...P].sort((a,b)=>(b.vals[k][w][0]??-9)-(a.vals[k][w][0]??-9));rank[k]={};o.forEach((x,i)=>rank[k][x.name]=i+1);});
+  const rankL={},rankX={};[...P].sort((a,b)=>a.L-b.L).forEach((x,i)=>rankL[x.name]=i+1);[...P].sort((a,b)=>b.X-a.X).forEach((x,i)=>rankX[x.name]=i+1);
   const sk=SORT?SORT.k:"EW-5",dir=SORT?SORT.d:-1,isStr=sk==="__name"||sk==="__sector";
-  const val=x=>sk==="__name"?x.name:(sk==="__sector"?x.sector:x.vals[sk][w][0]);
+  const val=x=>sk==="__name"?x.name:(sk==="__sector"?x.sector:(sk==="__L"?x.L:(sk==="__X"?x.X:x.vals[sk][w][0])));
   const rows=[...P].sort((a,b)=>isStr?dir*String(val(a)).localeCompare(String(val(b))):dir*((val(a)??-9)-(val(b)??-9)));
   const arrow=k=>sk===k?(dir<0?" &#9660;":" &#9650;"):"";
-  $("heat").innerHTML="<table><tr><th class='srt' data-k='__name'>Commodity"+arrow("__name")+"</th><th class='srt' data-k='__sector'>Sector"+arrow("__sector")+"</th>"+PREM.map(q=>`<th class="srt" data-k="${q[0]}">${q[1]}${arrow(q[0])}</th>`).join("")+"</tr>"+rows.map(x=>`<tr><td class="nm"><i style="background:${COL[x.sector]}"></i>${x.name}</td><td>${x.sector}</td>`+PREM.map(([k])=>{const v=x.vals[k][w][0];return `<td style="background:${tint(v)}">${f2(v)} <sup>${rank[k][x.name]}</sup></td>`;}).join("")+"</tr>").join("")+"</table>";
-  document.querySelectorAll("#heat th.srt").forEach(th=>th.onclick=()=>{const k=th.dataset.k,st=k==="__name"||k==="__sector";SORT=(SORT&&SORT.k===k)?{k,d:-SORT.d}:(!SORT&&"EW-5"===k?{k,d:1}:{k,d:st?1:-1});render();});
+  $("heat").innerHTML="<table><tr><th class='srt' data-k='__name'>Commodity"+arrow("__name")+"</th><th class='srt' data-k='__sector'>Sector"+arrow("__sector")+"</th>"+PREM.map(q=>`<th class="srt" data-k="${q[0]}">${q[1]}${arrow(q[0])}</th>`).join("")+LCOLS.map(q=>`<th class="srt" data-k="${q[0]}">${q[1]}${arrow(q[0])}</th>`).join("")+"</tr>"+rows.map(x=>`<tr><td class="nm"><i style="background:${COL[x.sector]}"></i>${x.name}</td><td>${x.sector}</td>`+PREM.map(([k])=>{const v=x.vals[k][w][0];return `<td style="background:${tint(v)}">${f2(v)} <sup>${rank[k][x.name]}</sup></td>`;}).join("")+`<td>${fL(x.L)} <sup>${rankL[x.name]}</sup></td><td>${fX(x.X)} <sup>${rankX[x.name]}</sup></td></tr>`).join("")+"</table>";
+  document.querySelectorAll("#heat th.srt").forEach(th=>th.onclick=()=>{const k=th.dataset.k,st=k==="__name"||k==="__sector";SORT=(SORT&&SORT.k===k)?{k,d:-SORT.d}:(!SORT&&"EW-5"===k?{k,d:1}:{k,d:(st||k==="__L")?1:-1});render();});
   // asset classes
   const cp=CPREM.map(x=>x[0]).includes(p)?p:(p==="EW-5"?"EW PORT":(p==="IV-5"?"Inverse Vol":"Momentum"));
   const C=D.classes,csorted=[...C].sort((a,b)=>(b.vals[cp][w][0]??-9)-(a.vals[cp][w][0]??-9));
@@ -108,7 +126,7 @@ function render(){
   document.querySelectorAll("#cheat th.srt").forEach(th=>th.onclick=()=>{const k=th.dataset.k,st=k==="__name";SORTC=(SORTC&&SORTC.k===k)?{k,d:-SORTC.d}:(!SORTC&&"EW PORT"===k?{k,d:1}:{k,d:st?1:-1});render();});
 }
 $("period").onchange=render;$("prem").onchange=render;
-setPeriods();render();
+setPeriods();render();liqbars();
 </script></body></html>"""
 _out = f"Analysis/Commodity_Rankings_{TAG}.html"
 Path(_out).write_text(PAGE.replace("__DATA__", json.dumps(DATA)).replace("__NPROD__", str(len(PRODUCTS))), encoding="utf8")

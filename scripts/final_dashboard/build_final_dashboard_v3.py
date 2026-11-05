@@ -176,6 +176,13 @@ t = rep(t, '[cv,cc,hs].forEach(e=>e.addEventListener("change",draw));draw();})()
 t = rep(t, 'const CAC=["metals","energy","precious","ngl","agri"],CLAB=["Metals","Energy","Precious","NGL","Agriculture"];', 'const CAC=D.meta.keys,CLAB=D.meta.keys.map(k=>LABEL[k]);')
 t = rep(t, "Within-asset-class matrices use each asset class's own calendar; cross-asset-class and rolling figures use the intersection of trading dates across the five asset classes (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}; the Inverse Vol rows start later because NGL's Inverse Vol series is undefined before 23 Feb 2012).",
         "Within-bucket matrices use each bucket's own calendar; cross-bucket and rolling figures use the intersection of trading dates across the six buckets (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}).")
+# Cumulative-return charts as a geometric index that starts at 100% at the chosen period start (tag 0930 only): level = exp(cumulative log return since the start) x 100, with a baseline at 100%.
+if TAG == "0930":
+    t = rep(t, "Cumulative return, rebased to 0 at the start of the period.", "Cumulative return index (geometric), 100% at the start of the period.")
+    t = rep(t, "const vals={};let lo=0,hi=0;", "const vals={};let lo=100,hi=100;")
+    t = rep(t, "vals[nm]=idx.map(i=>(Math.exp(c[i]-c[s0])-1)*100);", "vals[nm]=idx.map(i=>Math.exp(c[i]-c[s0])*100);")
+    t = rep(t, "for(let v=Math.ceil(lo/stepV)*stepV;v<=hi;v+=stepV){const y=yS(v);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"${Math.abs(v)<1e-9?\"rc-zero-line\":\"rc-grid-line\"}\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">${v.toFixed(0)}%</text>`;}",
+             "for(let v=Math.ceil(lo/stepV)*stepV;v<=hi;v+=stepV){if(Math.abs(v-100)<1e-9)continue;const y=yS(v);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"rc-grid-line\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">${v.toFixed(0)}%</text>`;}{const y=yS(100);grid+=`<line x1=\"${padL}\" y1=\"${y.toFixed(1)}\" x2=\"${W-padR}\" y2=\"${y.toFixed(1)}\" class=\"rc-zero-line\"/><text x=\"${padL-6}\" y=\"${(y+3).toFixed(1)}\" text-anchor=\"end\" class=\"rc-axis-label\">100%</text>`;}")
 t = rep(t, "Section 1: Within-Asset-Class Correlation", "Section 1: Within-Bucket Correlation")
 t = rep(t, "Select asset class</h3><label>Asset class: <select", "Select bucket</h3><label>Bucket: <select")
 t = rep(t, "Section 2: Cross-Asset-Class Correlation", "Section 2: Cross-Bucket Correlation")

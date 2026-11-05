@@ -69,5 +69,5 @@ d["N_contracts_for_K"] = K / d.risk_per_contract
 d["L_strip"] = K / (d.x_strip * 1e6)       # K as a multiple of one day's market 1-sigma risk turnover
 pd.set_option("display.width", 260); pd.set_option("display.max_columns", 40)
 d = d.sort_values("x_strip", ascending=False)
-d.round(5).to_csv(OUT, index=False)
+d.round(9).to_csv(OUT, index=False)   # full precision: L_strip is as small as 0.00075 and is shown to 3 significant figures
 print(d[["bucket", "product", "strip", "n_days", "price_usd_unit", "sigma", "mult", "risk_per_contract", "adv_strip", "strip_share_of_total", "share_days_print", "x_strip", "x_held", "x_f1f3", "L_strip"]].round(4).to_string(index=False))

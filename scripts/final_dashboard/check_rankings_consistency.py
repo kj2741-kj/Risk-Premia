@@ -106,5 +106,12 @@ for p in prods:
             if mdd is not None:
                 bad += mdd > 0
 check("4. every cell: IR == return / vol (rounding) and drawdown <= 0", bad == 0, f"{bad} cells")
+# 5 the two liquidity columns (Calendar-2025 snapshot): L = K / x in days and x in USD millions per day, from Analysis/Liquidity_Cal2025_results.csv
+import csv
+liq = {r["product"]: r for r in csv.DictReader(open("Analysis/Liquidity_Cal2025_results.csv", encoding="utf8"))}
+bad = sum(abs(p["L"] - float(liq[p["name"]]["L_strip"])) > 1e-5 * max(1, abs(p["L"])) or abs(p["X"] - float(liq[p["name"]]["x_strip"])) > 1e-4 for p in prods)
+check("5. page liquidity columns (Time to trade 1 sigma risk in Days, Risk Millions per day) == liquidity CSV for all products", bad == 0, f"{bad} differences")
+bad = sum(abs(p["L"] * p["X"] - 1.0) > 2e-3 for p in prods)       # K = USD 1M: L x x = 1
+check("5. L x (Risk Millions per day) == K = USD 1M for every product", bad == 0, f"{bad} differences")
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

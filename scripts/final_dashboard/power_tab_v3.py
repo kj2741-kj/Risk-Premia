@@ -1,4 +1,4 @@
-"""Power tab of the 2012 research dashboard, tag 0930 (2026-11-04) -> outputs/final_dashboard_0930/power_tab.json, merged into the page by build_final_dashboard_v3.py.
+"""Power tab of the 2012 research dashboard, tag 0930 (2026-11-04) -> Analysis/_power_build/power_tab_0930.json (tracked), merged into the page by build_final_dashboard_v3.py, which stops if the file is missing.
 STANDALONE: the Power tab is not in fd_config.BUCKETS, so it is not in the All-buckets book, By Style, Cross-Pair or Correlations; it has the same structure as the bucket tabs
 (performance by period for the five sleeves, EW PORT and Inverse Vol; cumulative return; by-product table; cumulative return by product).
 Series: the ICE monthly real-time power futures with Calendar-2025 L = K / x below 5 days (K = USD 1M): PJM Western Hub peak and off-peak, ERCOT North peak and off-peak, MISO Indiana Hub peak
@@ -9,6 +9,7 @@ import json
 import os
 import pickle
 import sys
+from pathlib import Path
 
 os.environ.setdefault("RP_PRICES_DIR", "Prices_0930")
 sys.path[:0] = ["research", "research/configs", "scripts", "scripts/final_dashboard"]
@@ -83,8 +84,9 @@ for p in members:
     eq[f"prod|power|{p}"] = equity({**{st: nets[p][st] for st in STYLES}, "EW PORT": ew_p})
 out = dict(tab=tab, products=products, equity=eq,
            meta=dict(label="Power", liq={pk(p): float(liq.loc[p, "L_strip"]) for p in members}, pairs=tab["pairs"], rolls=tab["rolls"]))
-OUT.mkdir(parents=True, exist_ok=True)
-json.dump(out, open(OUT / "power_tab.json", "w"))
+TRACKED = Path("Analysis/_power_build/power_tab_0930.json")   # tracked, read by build_final_dashboard_v3.py (which stops if it is missing)
+TRACKED.parent.mkdir(parents=True, exist_ok=True)
+json.dump(out, open(TRACKED, "w"))
 print("members:", members)
 print("windows (IR):", {w: {r["name"]: r["ir"] for r in tab["windows"][w]} for w in ("full", "p2")})
-print("saved", OUT / "power_tab.json", (OUT / "power_tab.json").stat().st_size // 1024, "KB")
+print("saved", TRACKED, TRACKED.stat().st_size // 1024, "KB")

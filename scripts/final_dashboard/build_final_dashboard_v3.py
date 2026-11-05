@@ -33,11 +33,15 @@ _pk = list(res["meta"]["rolls"].keys())
 assert all(k.split("|")[1] in _liq for k in _pk), [k for k in _pk if k.split("|")[1] not in _liq]
 data["meta"] = dict(res["meta"], liq={k: float(_liq[k.split("|")[1]]["L_strip"]) for k in _pk})
 
-# Power tab (2026-11-04), standalone: scripts/final_dashboard/power_tab_v3.py -> power_tab.json. It is added as its own tab entry (data["tabs"]["power"]) and is NOT in meta.keys, which drives the
-# All-buckets book, By Style, Cross-Pair and Correlations, so none of those sees it. Tag 0930 only (the power data are cut at 2026-09-30).
+# Power tab (2026-11-04), standalone: scripts/final_dashboard/power_tab_v3.py -> Analysis/_power_build/power_tab_0930.json (TRACKED, so a rebuild on any machine has it). It is added as its own tab
+# entry (data["tabs"]["power"]) and is NOT in meta.keys, which drives the All-buckets book, By Style, Cross-Pair and Correlations, so none of those sees it. Tag 0930 only (the power data are cut
+# at 2026-09-30). If the file is missing the build STOPS: a page without the Power tab must never be published by accident (it happened once, when the input sat in the untracked outputs/ folder).
 POWER = None
-_pt = R / out_dir(TAG) / "power_tab.json"
-if TAG == "0930" and _pt.exists():
+_pt = R / "Analysis/_power_build/power_tab_0930.json"
+if TAG == "0930":
+    if not _pt.exists():
+        sys.exit(f"{_pt} is missing: the 0930 page has a Power tab. Regenerate it with  python scripts/power/power_pipeline.py  and  python scripts/final_dashboard/power_tab_v3.py "
+                 "(after python scripts/power/power_liquidity.py), or restore it from git.")
     POWER = json.load(open(_pt))
     assert "power" not in res["meta"]["keys"] and "power" not in res["tabs"]
     data["tabs"] = dict(res["tabs"], power=POWER["tab"])

@@ -50,9 +50,9 @@ A("- **Contract cycle checked (2026-11-04): every series is monthly, not bimonth
   "for the first 4 to 5 trading days of its delivery month, so those days are in a partly settled contract. Rolling on the 2nd trading day instead is tested in Section 4 "
   "(the 1st trading day is not usable: the roll lands on the bridge day and the engine then skips it).\n")
 A("## 3. Liquidity, Calendar 2025 (K = USD 1M, 2025 data only)\n")
-A("Same method as the 26-product table (x = ADV x price x sigma x multiplier, USD millions of one-sigma daily risk traded per day; L = K / x in days). "
+A(f"Same method as the {len(base)}-product table (x = ADV x price x sigma x multiplier, USD millions of one-sigma daily risk traded per day; L = K / x in days). "
   "ADV is volume summed over F1-F12; 'held' uses only the contract the strategy holds.\n")
-A("| Series | ADV F1-F12 (lots/day) | Days traded | Price (USD/MWh) | Sigma (daily) | Multiplier (MWh) | x (USD m/day) | L (days) | x held (USD m/day) | L held (days) | Rank among 32 |\n"
+A(f"| Series | ADV F1-F12 (lots/day) | Days traded | Price (USD/MWh) | Sigma (daily) | Multiplier (MWh) | x (USD m/day) | L (days) | x held (USD m/day) | L held (days) | Rank among {len(base) + len(liq)} |\n"
   "|---|---|---|---|---|---|---|---|---|---|---|")
 allx = pd.concat([base[["product", "x_strip"]], liq[["product", "x_strip"]]]).sort_values("x_strip", ascending=False).reset_index(drop=True)
 for _, q in liq.iterrows():

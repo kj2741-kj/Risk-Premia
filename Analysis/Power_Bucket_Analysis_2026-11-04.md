@@ -39,16 +39,16 @@ PJM and MISO are near duplicates (0.82 to 0.92) and peak and off-peak of one hub
 
 ## 3. Liquidity, Calendar 2025 (K = USD 1M, 2025 data only)
 
-Same method as the 26-product table (x = ADV x price x sigma x multiplier, USD millions of one-sigma daily risk traded per day; L = K / x in days). ADV is volume summed over F1-F12; 'held' uses only the contract the strategy holds.
+Same method as the 30-product table (x = ADV x price x sigma x multiplier, USD millions of one-sigma daily risk traded per day; L = K / x in days). ADV is volume summed over F1-F12; 'held' uses only the contract the strategy holds.
 
-| Series | ADV F1-F12 (lots/day) | Days traded | Price (USD/MWh) | Sigma (daily) | Multiplier (MWh) | x (USD m/day) | L (days) | x held (USD m/day) | L held (days) | Rank among 32 |
+| Series | ADV F1-F12 (lots/day) | Days traded | Price (USD/MWh) | Sigma (daily) | Multiplier (MWh) | x (USD m/day) | L (days) | x held (USD m/day) | L held (days) | Rank among 36 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| PJM Peak | 14,010 | 100% | 59.4 | 3.52% | 340 | 9.96 | 0.100 | 2.79 | 0.36 | 23 |
-| ERCOT Peak | 2,627 | 99% | 52.4 | 5.97% | 340 | 2.80 | 0.358 | 0.659 | 1.52 | 25 |
-| PJM Off-peak | 3,881 | 99% | 41.7 | 3.37% | 390 | 2.12 | 0.471 | 0.471 | 2.13 | 26 |
-| ERCOT Off-peak | 292 | 73% | 39.2 | 4.80% | 390 | 0.214 | 4.667 | 0.032 | 31.68 | 29 |
-| MISO Peak | 386 | 98% | 53.2 | 3.05% | 340 | 0.213 | 4.696 | 0.065 | 15.30 | 30 |
-| MISO Off-peak | 201 | 86% | 38.0 | 3.38% | 390 | 0.101 | 9.907 | 0.024 | 42.32 | 31 |
+| PJM Peak | 14,010 | 100% | 59.4 | 3.52% | 340 | 9.96 | 0.100 | 2.79 | 0.36 | 24 |
+| ERCOT Peak | 2,627 | 99% | 52.4 | 5.97% | 340 | 2.80 | 0.358 | 0.659 | 1.52 | 26 |
+| PJM Off-peak | 3,881 | 99% | 41.7 | 3.37% | 390 | 2.12 | 0.471 | 0.471 | 2.13 | 27 |
+| ERCOT Off-peak | 292 | 73% | 39.2 | 4.80% | 390 | 0.214 | 4.667 | 0.032 | 31.68 | 30 |
+| MISO Peak | 386 | 98% | 53.2 | 3.05% | 340 | 0.213 | 4.696 | 0.065 | 15.30 | 31 |
+| MISO Off-peak | 201 | 86% | 38.0 | 3.38% | 390 | 0.101 | 9.907 | 0.024 | 42.32 | 33 |
 
 For reference (same method): Lead x = 19.3, Palladium 23.9, Propane 4.85, Ethane 0.35, Isobutane 0.006. **Only PJM Peak (x = 10.0) is near the least liquid non-energy products; ERCOT Peak and PJM Off-peak (2.8, 2.1) sit between Butane (1.8) and Propane (4.85); ERCOT Off-peak, MISO Peak and MISO Off-peak (0.21, 0.21, 0.10) are below Ethane (0.35).** On the held contract the figures are lower still (PJM Peak 2.8, MISO Off-peak 0.02). 33 to 68% of the 2025 volume sits beyond F12 (calendar strips), which the strategies do not trade.
 

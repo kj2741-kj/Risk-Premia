@@ -61,7 +61,7 @@ svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}
 <div class="ctl"><label>Period <select id="period"></select></label></div>
 <div class="leg" id="leg"></div>
 <h2>1. Buckets (sector portfolios)</h2><p class="note">Equal-weighted across each bucket's commodities, from the dashboard tabs. Click any column heading to sort (click again to reverse); the table starts sorted by the EW PORT. The small number is the rank among the six rows for that column.</p><div class="ts" id="cheat"></div>
-<h2>2. Commodities</h2><p class="note">Click any column heading to sort by it (click again to reverse); the table starts sorted by the EW mini-portfolio. Cell colour: green positive, red negative; the small number is the rank among the 25 commodities for that column.</p><div class="ts" id="heat"></div>
+<h2>2. Commodities</h2><p class="note">Click any column heading to sort by it (click again to reverse); the table starts sorted by the EW mini-portfolio. Cell colour: green positive, red negative; the small number is the rank among the __NPROD__ commodities for that column.</p><div class="ts" id="heat"></div>
 <h2>3. Bar charts by risk premium</h2><div class="ctl"><label>Risk premium <select id="prem"></select></label></div><h3>Buckets</h3><div id="cbars"></div><h3>Commodities</h3><div id="bars"></div>
 </div><script>
 const DATA=__DATA__;
@@ -111,5 +111,5 @@ $("period").onchange=render;$("prem").onchange=render;
 setPeriods();render();
 </script></body></html>"""
 _out = f"Analysis/Commodity_Rankings_{TAG}.html"
-Path(_out).write_text(PAGE.replace("__DATA__", json.dumps(DATA)), encoding="utf8")
+Path(_out).write_text(PAGE.replace("__DATA__", json.dumps(DATA)).replace("__NPROD__", str(len(PRODUCTS))), encoding="utf8")
 print("written", _out)

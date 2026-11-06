@@ -1,0 +1,51 @@
+{
+ "fig_power_combined.png": {
+  "Momentum": 278.6049245631029,
+  "Carry": 599.0159447453092,
+  "Carry-Momentum": 46.08930996261113,
+  "Value": 733.6417967829087,
+  "Skewness": 109.31279388250992,
+  "EW Portfolio": 228.0533664423678,
+  "Inverse Vol": 226.4878548305108
+ },
+ "figA_power_Momentum.png": {
+  "PJM Peak": 1747.2117047632044,
+  "PJM OffPeak": 176.7512713619212,
+  "ERCOT Peak": 4014.6250258076698,
+  "ERCOT OffPeak": 12.898353660168627,
+  "MISO Peak": 104.96792164853332,
+  "EW (All Products)": 278.6049245631029
+ },
+ "figA_power_Carry.png": {
+  "PJM Peak": 175.13428499673398,
+  "PJM OffPeak": 364.34963157531,
+  "ERCOT Peak": 44249.41206340835,
+  "ERCOT OffPeak": 26.511122679221227,
+  "MISO Peak": 1030.3073097956758,
+  "EW (All Products)": 599.0159447453092
+ },
+ "figA_power_CarryMom.png": {
+  "PJM Peak": 623.0914068813914,
+  "PJM OffPeak": 286.9201997750901,
+  "ERCOT Peak": 27.473038401173245,
+  "ERCOT OffPeak": 0.2964855948987952,
+  "MISO Peak": 142.81632484228547,
+  "EW (All Products)": 46.08930996261113
+ },
+ "figA_power_Value.png": {
+  "PJM Peak": 888.695995144359,
+  "PJM OffPeak": 671.579695648051,
+  "ERCOT Peak": 2714.2428347189557,
+  "ERCOT OffPeak": 472.96062695827885,
+  "MISO Peak": 277.3932320155716,
+  "EW (All Products)": 733.6417967829087
+ },
+ "figA_power_Skewness.png": {
+  "PJM Peak": 1.7213667418864975,
+  "PJM OffPeak": 4.0747102714956895,
+  "ERCOT Peak": 387.8149994414507,
+  "ERCOT OffPeak": 46305.2696256904,
+  "MISO Peak": 123.91669181540925,
+  "EW (All Products)": 109.31279388250992
+ }
+}

@@ -34,13 +34,13 @@ assert all(k.split("|")[1] in _liq for k in _pk), [k for k in _pk if k.split("|"
 data["meta"] = dict(res["meta"], liq={k: float(_liq[k.split("|")[1]]["L_strip"]) for k in _pk})
 
 # Power tab (2026-11-04), standalone: scripts/final_dashboard/power_tab_v3.py -> Analysis/_power_build/power_tab_0930.json (TRACKED, so a rebuild on any machine has it). It is added as its own tab
-# entry (data["tabs"]["power"]) and is NOT in meta.keys, which drives the All-buckets book, By Style, Cross-Pair and Correlations, so none of those sees it. Tag 0930 only (the power data are cut
-# at 2026-09-30). If the file is missing the build STOPS: a page without the Power tab must never be published by accident (it happened once, when the input sat in the untracked outputs/ folder).
+# entry (data["tabs"]["power"]) and is NOT in meta.keys, which drives the All-buckets book, By Style, Cross-Pair and Correlations, so none of those sees it. Tags 0930 and 1029 (the power data are cut
+# at 2026-09-30 and 2026-10-29). If the file is missing the build STOPS: a page without the Power tab must never be published by accident (it happened once, when the input sat in the untracked outputs/ folder).
 POWER = None
-_pt = R / "Analysis/_power_build/power_tab_0930.json"
-if TAG == "0930":
+_pt = R / f"Analysis/_power_build/power_tab_{TAG}.json"
+if TAG in ("0930", "1029"):
     if not _pt.exists():
-        sys.exit(f"{_pt} is missing: the 0930 page has a Power tab. Regenerate it with  python scripts/power/power_pipeline.py  and  python scripts/final_dashboard/power_tab_v3.py "
+        sys.exit(f"{_pt} is missing: the {TAG} page has a Power tab. Regenerate it with  FD_TAG={TAG} python scripts/power/power_pipeline.py  and  FD_TAG={TAG} python scripts/final_dashboard/power_tab_v3.py "
                  "(after python scripts/power/power_liquidity.py), or restore it from git.")
     POWER = json.load(open(_pt))
     assert "power" not in res["meta"]["keys"] and "power" not in res["tabs"]
@@ -180,8 +180,8 @@ t = rep(t, '[cv,cc,hs].forEach(e=>e.addEventListener("change",draw));draw();})()
 t = rep(t, 'const CAC=["metals","energy","precious","ngl","agri"],CLAB=["Metals","Energy","Precious","NGL","Agriculture"];', 'const CAC=D.meta.keys,CLAB=D.meta.keys.map(k=>LABEL[k]);')
 t = rep(t, "Within-asset-class matrices use each asset class's own calendar; cross-asset-class and rolling figures use the intersection of trading dates across the five asset classes (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}; the Inverse Vol rows start later because NGL's Inverse Vol series is undefined before 23 Feb 2012).",
         "Within-bucket matrices use each bucket's own calendar; cross-bucket and rolling figures use the intersection of trading dates across the six buckets (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}).")
-# Cumulative-return charts (tag 0930 only): value of $100 invested at the chosen period start = exp(cumulative log return since the start) x 100, baseline at $100, PNG and CSV download buttons.
-if TAG == "0930":
+# Cumulative-return charts (both tags): value of $100 invested at the chosen period start = exp(cumulative log return since the start) x 100, baseline at $100, PNG and CSV download buttons.
+if TAG in ("0930", "1029"):
     t = rep(t, "Cumulative return, rebased to 0 at the start of the period.</span></div>",
             "Value of $100 invested at the start of the period.</span><span style=\"margin-left:auto\"><button type=\"button\" class=\"window-select\" data-eq=\"png\">Download PNG</button> <button type=\"button\" class=\"window-select\" data-eq=\"csv\">Download CSV</button></span></div>")
     t = rep(t, "const vals={};let lo=0,hi=0;", "const vals={};let lo=100,hi=100;")

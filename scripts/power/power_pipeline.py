@@ -5,7 +5,8 @@ daily log returns; 5 bps costs, roll days charged; roll on the 5th trading day o
 Windows: the data start on 2015-01-02 and Value needs two years of F3 before its first signal, so the full window starts 2017-01-01 (every sleeve live); P2 2017-2021, P3 2022-2026, 2026 YTD.
 Run from the repo root:  python scripts/power/power_pipeline.py"""
 import json, os, pickle, sys
-os.environ.setdefault("RP_PRICES_DIR", "Prices_0930")
+_TAG = os.environ.get("FD_TAG", "0930")      # 0930 (default, committed page) or 1029 (data to 2026-10-29)
+os.environ.setdefault("RP_PRICES_DIR", {"0930": "Prices_0930", "1029": "Prices_1029_merged"}[_TAG])
 sys.path[:0] = ["research", "research/configs", "scripts"]
 import numpy as np, pandas as pd
 import power as pw
@@ -14,9 +15,9 @@ from carry_zsum import carry_slope_change, carry_z, summed_signal
 from run_regime_table import _metrics
 import rolling_continuous as rc
 
-CUT = pd.Timestamp("2026-09-30")
+CUT = pd.Timestamp({"0930": "2026-09-30", "1029": "2026-10-29"}[_TAG])
 TC, SKEW_W, VALUE_MIN = 5, 252, 504
-OUT = "outputs/power_0930"
+OUT = f"outputs/power_{_TAG}"
 os.makedirs(OUT, exist_ok=True)
 WINDOWS = [("full", "2017-01-01", None), ("p2", "2017-01-01", "2021-12-31"), ("p3", "2022-01-01", None), ("y26", "2026-01-01", None)]
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]

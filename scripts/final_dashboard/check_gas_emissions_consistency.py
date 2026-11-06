@@ -133,9 +133,9 @@ if m:
 check("cross-asset engine: NGL products", cae.DASHBOARD_PRODUCTS["ngl"] == ["Ethane", "Propane", "Butane", "Isobutane", "Naphtha"])
 ngl_app = open("ngl_dashboard/app.py", encoding="utf8").read()
 check("ngl app: Naphtha wired", 'PRODUCT_ORDER = ["CAP", "BAP", "DAE", "IBD", "KI"]' in ngl_app and "NAPHTHA_CONFIG" in ngl_app and "import ngl_bucket" in ngl_app)
-# 8. the standalone Power tab of the 0930 page must stay in place (built by scripts/power + power_tab_v3.py, not by the pipeline above) -------------------------------------------
-if TAG == "0930":
+# 8. the standalone Power tab of the 0930 and 1029 pages must stay in place (built by scripts/power + power_tab_v3.py, not by the pipeline above) -------------------------------------------
+if TAG in ("0930", "1029"):
     pw_ok = "power" in emb["tabs"] and emb["tabs"]["power"]["pkeys"] == ["power|PJM_Peak", "power|PJM_OffPeak", "power|ERCOT_Peak", "power|ERCOT_OffPeak", "power|MISO_Peak"]
-    check("0930 page keeps the standalone Power tab (5 series), outside the six-bucket book", pw_ok and "power" not in emb["meta"]["keys"] and "power" not in emb["combined"]["members"])
+    check(f"{TAG} page keeps the standalone Power tab (5 series), outside the six-bucket book", pw_ok and "power" not in emb["meta"]["keys"] and "power" not in emb["combined"]["members"])
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

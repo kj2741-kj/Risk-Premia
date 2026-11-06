@@ -11,7 +11,7 @@ import pickle
 import sys
 from pathlib import Path
 
-os.environ.setdefault("RP_PRICES_DIR", "Prices_0930")
+os.environ.setdefault("RP_PRICES_DIR", {"0930": "Prices_0930", "1029": "Prices_1029_merged"}[os.environ.get("FD_TAG", "0930")])
 sys.path[:0] = ["research", "research/configs", "scripts", "scripts/final_dashboard"]
 import pandas as pd
 from engine import combine_returns
@@ -20,7 +20,7 @@ from run_regime_table import _metrics
 import power as pw
 from fd_config import STYLES, out_dir
 
-TAG = "0930"
+TAG = os.environ.get("FD_TAG", "0930")
 OUT = out_dir(TAG)
 L_MAX = 5.0
 START = "2017-01-01"
@@ -53,8 +53,8 @@ liq = pd.read_csv("Analysis/Power_Liquidity_Cal2025_results.csv").set_index("pro
 assert (abs(liq["N_contracts_for_K"] * liq["risk_per_contract"] - 1e6) < 1).all(), "L is not on K = USD 1M"
 members = [p for p in pw.PRODUCTS if float(liq.loc[p, "L_strip"]) < L_MAX]
 assert members == ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"], members
-nets = pickle.load(open("outputs/power_0930/power_nets.pkl", "rb"))["nets"]
-CUT = pd.Timestamp("2026-09-30")
+nets = pickle.load(open(f"outputs/power_{TAG}/power_nets.pkl", "rb"))["nets"]
+CUT = pd.Timestamp({"0930": "2026-09-30", "1029": "2026-10-29"}[TAG])
 
 styles = {}
 for st in STYLES:
@@ -84,7 +84,7 @@ for p in members:
     eq[f"prod|power|{p}"] = equity({**{st: nets[p][st] for st in STYLES}, "EW PORT": ew_p})
 out = dict(tab=tab, products=products, equity=eq,
            meta=dict(label="Power", liq={pk(p): float(liq.loc[p, "L_strip"]) for p in members}, pairs=tab["pairs"], rolls=tab["rolls"]))
-TRACKED = Path("Analysis/_power_build/power_tab_0930.json")   # tracked, read by build_final_dashboard_v3.py (which stops if it is missing)
+TRACKED = Path(f"Analysis/_power_build/power_tab_{TAG}.json")   # tracked, read by build_final_dashboard_v3.py (which stops if it is missing)
 TRACKED.parent.mkdir(parents=True, exist_ok=True)
 json.dump(out, open(TRACKED, "w"))
 print("members:", members)

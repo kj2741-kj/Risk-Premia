@@ -381,7 +381,8 @@ def pnl_unit(unit_label: str) -> str:
 
 def equity_title(unit_label: str) -> str:
     """Heading of the equity-curve chart: value of $100 invested on the geometric basis, cumulative PnL otherwise."""
-    return "Value of $100 invested (Equity Curve, $): Net of TC" if is_geometric() else f"Cumulative PnL (Equity Curve, {unit_label}): Net of TC"
+    # st.markdown reads a pair of unescaped dollar signs as LaTeX, so they are escaped here (Plotly titles and axis labels take the plain text)
+    return "Value of \\$100 invested (Equity Curve, \\$): Net of TC" if is_geometric() else f"Cumulative PnL (Equity Curve, {unit_label}): Net of TC"
 
 
 def dollar100_curve(log_returns: pd.Series) -> pd.Series:

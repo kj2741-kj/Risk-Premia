@@ -332,7 +332,7 @@ def _render_equity_and_metrics(gross_dict: dict, net_dict: dict, key_prefix: str
         rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})
 
     layout = dict(CHART_LAYOUT)
-    layout["yaxis_title"] = "Value of $100 invested ($)"
+    layout["yaxis_title"] = "Value of $100 invested (USD)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=440)
     show_dollar_chart(fig, pd.DataFrame(curves), f"{key_prefix}_hub_equity", f"equity_{yr_start}_{yr_end}")
 

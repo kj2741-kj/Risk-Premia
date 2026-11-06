@@ -1173,7 +1173,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})
 
     layout = dict(CHART_LAYOUT)
-    layout["yaxis_title"] = "Value of $100 invested ($)" if geometric else "Cumulative Return (%)"
+    layout["yaxis_title"] = "Value of $100 invested (USD)" if geometric else "Cumulative Return (%)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=460)
     if geometric and curves:
         show_dollar_chart(fig, pd.DataFrame(curves), f"{key_prefix}_pt_equity", f"equity_{yr_start}_{yr_end}")

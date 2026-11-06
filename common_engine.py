@@ -1535,7 +1535,7 @@ def _plot_equity_curve_from_pnl(pnl_by_label: dict[str, pd.Series], start: pd.Ti
         curves[label] = eq
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    layout = dict(CHART_LAYOUT, height=380, yaxis_title=("Value of $100 invested ($)" if is_geometric() else f"Cumulative PnL ({unit_label})"))
+    layout = dict(CHART_LAYOUT, height=380, yaxis_title=("Value of $100 invested (USD)" if is_geometric() else f"Cumulative PnL ({unit_label})"))
     if vol_series is not None:
         vol_w = vol_series[(vol_series.index >= start) & (vol_series.index <= end)]
         fig_eq.add_trace(go.Scatter(

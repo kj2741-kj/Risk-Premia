@@ -64,7 +64,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
-from common_shared import inject_css, metric_card, section_header, CHART_LAYOUT
+from common_shared import inject_css, metric_card, section_header, CHART_LAYOUT, dollar100_curve, show_dollar_chart
 from ghr_spline_core import run_spline_analysis, DEFAULT_X_RANGE, DEFAULT_Y_RANGE
 import ghr_copper_inventory_spline as ghr_copper
 import ghr_wti_inventory_spline as ghr_wti
@@ -300,6 +300,7 @@ def _render_equity_and_metrics(gross_dict: dict, net_dict: dict, key_prefix: str
     section_header("Cumulative equity")
     fig = go.Figure()
     rows = []
+    curves = {}
     for i, label in enumerate(shown):
         s = net_dict[label]
         window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
@@ -307,7 +308,8 @@ def _render_equity_and_metrics(gross_dict: dict, net_dict: dict, key_prefix: str
             continue
         # True cumulative %, not log-return % -- see research/run_regime_table.py::_metrics for
         # the full derivation. Matches the metric cards above (ann/mdd already true %).
-        eq = (np.exp(window.cumsum()) - 1) * 100
+        eq = dollar100_curve(window)
+        curves[label] = eq
         width = 2.6 if label == "Portfolio" else 1.4
         dash = None if label == "Portfolio" else "solid"
         fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
@@ -327,9 +329,9 @@ def _render_equity_and_metrics(gross_dict: dict, net_dict: dict, key_prefix: str
         rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})
 
     layout = dict(CHART_LAYOUT)
-    layout["yaxis_title"] = "Cumulative Return (%)"
+    layout["yaxis_title"] = "Value of $100 invested ($)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=440)
-    st.plotly_chart(fig, use_container_width=True)
+    show_dollar_chart(fig, pd.DataFrame(curves), f"{key_prefix}_hub_equity", f"equity_{yr_start}_{yr_end}")
 
     if rows:
         st.dataframe(

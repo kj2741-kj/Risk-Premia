@@ -63,7 +63,7 @@ for _p in (_REPO_ROOT, _RESEARCH_DIR, _RESEARCH_CONFIGS_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from common_shared import CHART_LAYOUT, metric_card, section_header  # noqa: E402
+from common_shared import CHART_LAYOUT, dollar100_curve, metric_card, section_header, show_dollar_chart  # noqa: E402
 from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E402
                      log_return_daily, raw_signal_carry_v1, raw_signal_carry_v2,
                      raw_signal_carrymom, raw_signal_momentum, raw_signal_skewness, raw_signal_value)
@@ -1146,6 +1146,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
 
     fig = go.Figure()
     rows = []
+    curves = {}
     for i, label in enumerate(shown):
         s = instance_net[label]
         window = s[(s.index.year >= yr_start) & (s.index.year <= yr_end)].dropna()
@@ -1153,7 +1154,8 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             continue
         # True cumulative %, not log-return % -- see research/run_regime_table.py::_metrics for
         # the full derivation. Matches the metric cards above (ann/mdd already true %).
-        eq = (np.exp(window.cumsum()) - 1) * 100 if geometric else np.expm1(window).cumsum() * 100
+        eq = dollar100_curve(window) if geometric else np.expm1(window).cumsum() * 100
+        curves[label] = eq
         fig.add_trace(go.Scatter(x=eq.index, y=eq.values, name=label, mode="lines",
                                   line=dict(color=PALETTE[i % len(PALETTE)], width=1.6)))
         if len(window) > 20 and window.std(ddof=1) > 0:
@@ -1171,9 +1173,12 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         rows.append({"Strategy": label, "Return (%/yr)": ret, "Vol (%/yr)": vol, "IR": ir})
 
     layout = dict(CHART_LAYOUT)
-    layout["yaxis_title"] = "Cumulative Return (%)"
+    layout["yaxis_title"] = "Value of $100 invested ($)" if geometric else "Cumulative Return (%)"
     fig.update_layout(**layout, title=f"Cumulative Equity, {yr_start} to {yr_end}", height=460)
-    st.plotly_chart(fig, use_container_width=True)
+    if geometric and curves:
+        show_dollar_chart(fig, pd.DataFrame(curves), f"{key_prefix}_pt_equity", f"equity_{yr_start}_{yr_end}")
+    else:
+        st.plotly_chart(fig, use_container_width=True)
 
     if rows:
         metrics_df = pd.DataFrame(rows).set_index("Strategy")

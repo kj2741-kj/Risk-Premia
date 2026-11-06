@@ -45,7 +45,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 
-from common_shared import (CHART_LAYOUT, COLORS, pos_metrics_generic, section_header, tc_label_map,
+from common_shared import (CHART_LAYOUT, COLORS, dollar100_curve, equity_title, show_dollar_chart, pos_metrics_generic, section_header, tc_label_map,
                             metric_card, transaction_cost, is_geometric, geometric_daily_returns,
                             pnl_unit, ann_label, geo_log_returns)
 
@@ -1444,7 +1444,7 @@ def _render_multi_strategy_block(positions: dict[str, pd.Series], f1r: pd.Series
     # stay warmed up on full history; only the displayed/summed window
     # narrows), independent of any "Year range for performance metrics"
     # slider elsewhere on this tab. ──────────────────────────────────────────
-    st.markdown(f"**{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} (Equity Curve, {pnl_unit(unit_label)}): Net of TC**")
+    st.markdown(f"**{equity_title(unit_label)}**")
     start, end = _time_window_slider(f1r, key_prefix)
     pnl_by_label = {label: net_pnl for label, (gross_pnl, net_pnl) in pnl_cache.items()}
     _plot_equity_curve_from_pnl(pnl_by_label, start, end, key_prefix, unit_label)
@@ -1528,12 +1528,14 @@ def _plot_equity_curve_from_pnl(pnl_by_label: dict[str, pd.Series], start: pd.Ti
     at a glance whether a strategy's equity curve is moving with, against, or
     independent of the underlying's own volatility regime."""
     fig_eq = go.Figure()
+    curves = {}
     for i, (label, net_pnl) in enumerate(pnl_by_label.items()):
         pnl_w = net_pnl[(net_pnl.index >= start) & (net_pnl.index <= end)]
-        eq = equity_curve(pnl_w)
+        eq = dollar100_curve(pnl_w) if is_geometric() else equity_curve(pnl_w)
+        curves[label] = eq
         fig_eq.add_trace(go.Scatter(x=eq.index, y=eq.values, mode="lines", name=label,
                                      line=dict(color=_OVERLAY_COLORS[i % len(_OVERLAY_COLORS)], width=1.6)))
-    layout = dict(CHART_LAYOUT, height=380, yaxis_title=f"{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} ({pnl_unit(unit_label)})")
+    layout = dict(CHART_LAYOUT, height=380, yaxis_title=("Value of $100 invested ($)" if is_geometric() else f"Cumulative PnL ({unit_label})"))
     if vol_series is not None:
         vol_w = vol_series[(vol_series.index >= start) & (vol_series.index <= end)]
         fig_eq.add_trace(go.Scatter(
@@ -1544,7 +1546,10 @@ def _plot_equity_curve_from_pnl(pnl_by_label: dict[str, pd.Series], start: pd.Ti
                                  showgrid=False)
         layout["legend"] = dict(CHART_LAYOUT["legend"], orientation="h", y=1.15)
     fig_eq.update_layout(**layout)
-    st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity_chart")
+    if is_geometric():
+        show_dollar_chart(fig_eq, pd.DataFrame(curves), f"{key_prefix}_equity", f"equity_{key_prefix}_from_{start:%Y-%m-%d}")
+    else:
+        st.plotly_chart(fig_eq, use_container_width=True, key=f"{key_prefix}_equity_chart")
 
 
 def _plot_rolling_sharpe(positions: dict[str, pd.Series], f1r: pd.Series, f1c: pd.Series,
@@ -1573,7 +1578,7 @@ def _render_equity_curve_with_selector(positions: dict[str, pd.Series], f1r: pd.
     its own time-period slider (default = full history) directly above the
     chart -- narrowing it re-baselines the curve to 0 at that start date,
     independent of the 'Year range for performance metrics' slider above."""
-    st.markdown(f"**{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} (Equity Curve, {pnl_unit(unit_label)}): Net of TC**")
+    st.markdown(f"**{equity_title(unit_label)}**")
     options = list(positions.keys())
     _sync_multiselect_new_options(f"{key_prefix}_equity_select", options)
     chosen = st.multiselect("Strategies to show", options=options,
@@ -1732,7 +1737,7 @@ def render_comparison_tab(f1r: pd.Series, f1c: pd.Series, product: str, unit_lab
             positions = {label: all_positions[label] for label in chosen}
 
             st.divider()
-            st.markdown(f"**{'Cumulative Return' if is_geometric() else 'Cumulative PnL'} (Equity Curve, {pnl_unit(unit_label)}): Net of TC**")
+            st.markdown(f"**{equity_title(unit_label)}**")
             start, end = _time_window_slider(f1r, key_prefix + "_cmp")
             show_vol_overlay = st.checkbox(
                 f"Superimpose Volatility ({vol_window_label} window, from the chart above)",

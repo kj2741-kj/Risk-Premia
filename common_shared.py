@@ -379,6 +379,35 @@ def pnl_unit(unit_label: str) -> str:
     return "%" if is_geometric() else unit_label
 
 
+def equity_title(unit_label: str) -> str:
+    """Heading of the equity-curve chart: value of $100 invested on the geometric basis, cumulative PnL otherwise."""
+    return "Value of $100 invested (Equity Curve, $): Net of TC" if is_geometric() else f"Cumulative PnL (Equity Curve, {unit_label}): Net of TC"
+
+
+def dollar100_curve(log_returns: pd.Series) -> pd.Series:
+    """Value of $100 invested at the start of the window: 100 * exp(cumulative log return), with the starting $100 shown
+    one day before the first return. Same definition as the research dashboard's charts."""
+    r = log_returns.dropna()
+    if r.empty:
+        return r
+    eq = np.exp(r.cumsum()) * 100.0
+    return pd.concat([pd.Series([100.0], index=[r.index[0] - pd.Timedelta(days=1)]), eq])
+
+
+def show_dollar_chart(fig, frame: "pd.DataFrame", key: str, filename: str, baseline: bool = True) -> None:
+    """Dollar-axis styling of a value-of-$100 chart, a $100 baseline, and the downloads: PNG from the chart's camera button,
+    CSV of the plotted values from the button below it."""
+    fig.update_layout(yaxis=dict(tickprefix="$", tickformat=",.0f"))
+    for tr in fig.data:
+        if tr.yaxis in (None, "y"):
+            tr.hovertemplate = "%{x|%Y-%m-%d}<br>%{fullData.name}: $%{y:,.2f}<extra></extra>"
+    if baseline:
+        fig.add_hline(y=100, line=dict(color="#8A8278", width=1, dash="dot"))
+    st.plotly_chart(fig, use_container_width=True, key=f"{key}_chart",
+                    config={"displaylogo": False, "toImageButtonOptions": {"format": "png", "filename": filename, "scale": 2}})
+    st.download_button("Download CSV", frame.round(4).to_csv(index_label="Date"), file_name=f"{filename}.csv", mime="text/csv", key=f"{key}_csv")
+
+
 def ann_label() -> str:
     return "Ann Return (Net)" if is_geometric() else "Ann PnL (Net)"
 

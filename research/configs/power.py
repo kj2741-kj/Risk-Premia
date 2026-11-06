@@ -123,9 +123,17 @@ def load_sheet(product: str, kind: str = "PX", file: str | None = None, prefix: 
     return _SHEET_CACHE[key].copy()
 
 
+def _cutoff():
+    """Optional last date (env RP_POWER_CUTOFF, e.g. 2026-10-29). The Streamlit Power app sets it so that it ends on the same day as the other apps (data/Prices_1029_merged);
+    the research scripts leave it unset and cut at their own date (scripts/power/power_pipeline.py)."""
+    return os.environ.get("RP_POWER_CUTOFF") or None
+
+
 def load_curve(product: str) -> pd.DataFrame:
-    """Full raw price curve (PJM F1..F122, ERCOT / MISO F1..F48) from 2015-01-02."""
-    return load_sheet(product, "PX").loc[ANALYSIS_START:]
+    """Full raw price curve (PJM F1..F122, ERCOT / MISO F1..F48) from 2015-01-02 (to RP_POWER_CUTOFF when set)."""
+    df = load_sheet(product, "PX").loc[ANALYSIS_START:]
+    c = _cutoff()
+    return df.loc[:c] if c else df
 
 
 def load_f1_series(product: str) -> pd.DataFrame:
@@ -133,7 +141,9 @@ def load_f1_series(product: str) -> pd.DataFrame:
     _check(product)
     df = get_metal_rolling_f1(METAL_CODES[product], futures_file=SHEETS[product][0], calendar_file=CALENDAR_FILE, config=POWER_CONFIG,
                                verbose=False, roll_day=ROLL_N, roll_rule=ROLL_RULE)
-    return reanchor_f1_continuous(df.loc[ANALYSIS_START:])
+    df = reanchor_f1_continuous(df.loc[ANALYSIS_START:])
+    c = _cutoff()
+    return df.loc[:c] if c else df
 
 
 def load_f1_series_logret(product: str, roll_n: int = ROLL_N) -> pd.DataFrame:
@@ -143,6 +153,8 @@ def load_f1_series_logret(product: str, roll_n: int = ROLL_N) -> pd.DataFrame:
     df = get_metal_rolling_f1_ratio(METAL_CODES[product], futures_file=SHEETS[product][0], calendar_file=CALENDAR_FILE, config=POWER_CONFIG,
                                      verbose=False, roll_day=roll_n, roll_rule=ROLL_RULE)
     df = reanchor_f1_continuous_ratio(df.loc[ANALYSIS_START:])
+    c = _cutoff()
+    if c: df = df.loc[:c]
     price = df["F1_continuous_ratio"].where(df["F1_continuous_ratio"] > 0)
     df["log_price"] = np.log(price)
     return df

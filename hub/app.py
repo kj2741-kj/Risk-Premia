@@ -96,6 +96,9 @@ DASHBOARD_LINKS = {
                         "desc": "Ethane, Propane, Butane, Isobutane, Naphtha. Momentum, Carry, Value, Skewness."},
     "Agriculture":    {"url": "https://risk-premia-agri.streamlit.app/", "ready": True,
                         "desc": "Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar. Momentum, Carry, Value, Portfolio."},
+    # Standalone bucket (2026-11-06), main file power_dashboard/app.py; not part of the Cross-Asset Portfolio tab.
+    "US Power":       {"url": "https://power-risk-premia.streamlit.app/", "ready": True,
+                        "desc": "PJM, ERCOT and MISO real-time monthly power (ICE), peak and off-peak, from 2017. Standalone, outside the cross-asset book."},
 }
 
 # Cached data loaders for the Fundamental Analysis tab. Cached separately from

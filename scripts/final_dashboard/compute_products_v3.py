@@ -14,6 +14,7 @@ import json
 sys.path.insert(0, "scripts/final_dashboard")
 from fd_config import TAGS, tag_from_prices_dir, out_dir   # RP_PRICES_DIR must be Prices_0930 or Prices_1029_merged (scripts/rolling_continuous.py reads the data folder from it)
 TAG = tag_from_prices_dir()
+os.environ["RP_POWER_CUTOFF"] = TAGS[TAG]["cutoff"]     # the Power files run to 2026-11-02; the run ends on the tag's cutoff like every other series (research/configs/power.py reads this variable)
 sys.path.insert(0, "research"); sys.path.insert(0, "research/configs"); sys.path.insert(0, "scripts")
 import importlib
 import numpy as np
@@ -26,7 +27,7 @@ CUTOFF = pd.Timestamp(TAGS[TAG]["cutoff"])
 TC = 5
 SKEW_WINDOW, SKEW_SHIFT_N = 252, 1
 VALUE_MIN = 504
-cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "emissions", "ngl", "naphtha", "precious", "agri")}
+cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "emissions", "ngl", "naphtha", "precious", "agri", "power")}
 import rolling_continuous as rc
 from carry_zsum import carry_z, carry_slope_change, summed_signal
 OUT.mkdir(parents=True, exist_ok=True)
@@ -34,13 +35,14 @@ OUT.mkdir(parents=True, exist_ok=True)
 LONG = {"precious": {"Gold": "F7", "Silver": "F6", "Platinum": "F5", "Palladium": "F5"},
         "agri": {"Corn": "F6", "Wheat": "F6", "Soybean": "F8", "SoybeanOil": "F8", "Coffee": "F6", "Sugar": "F5"}}
 PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "emissions": ["EUA", "TTF", "UKGas"],
-            "ngl": ["Ethane", "Propane", "Butane", "Isobutane"], "naphtha": ["Naphtha"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"])}
+            "ngl": ["Ethane", "Propane", "Butane", "Isobutane"], "naphtha": ["Naphtha"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"]),
+            "power": ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]}      # US Power: the five series with Calendar-2025 L below 5 days (MISO OffPeak, 9.9 days, is out)
 
 
 def pairs_for(a, p):
     if a in ("metals", "energy"):
         return [("F1", "F3"), ("F1", "F13")]
-    if a in ("emissions", "naphtha"):
+    if a in ("emissions", "naphtha", "power"):
         return cfgs[a].carry_pairs(p)
     if a == "ngl":
         return [("F2", "F4"), ("F2", "F14")]

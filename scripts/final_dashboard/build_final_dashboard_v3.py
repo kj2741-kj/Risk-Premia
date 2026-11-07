@@ -22,7 +22,9 @@ R = Path(".")
 TEMPLATE = R / "Analysis/Final_Research_Dashboard_2012.html"
 res = json.load(open(R / out_dir(TAG) / "final_v3.json"))
 COLS = [("full", "Full", "2012-2026"), ("p1", "P1", "2012-2016"), ("p2", "P2", "2017-2021"), ("p3", "P3", "2022-2026"), ("y26", "2026", "YTD")]
-data = dict(res, cols=[dict(key=k, label=l, years=y) for k, l, y in COLS])
+_by = res["bystyle"]["common_first"][:4]       # the seven-bucket book (By Style, All buckets, cross-bucket correlations) starts with the US Power data
+BOOKCOLS = [("full", "Full", f"{_by}-2026"), ("p1", "P1", f"{_by}-2016"), ("p2", "P2", "2017-2021"), ("p3", "P3", "2022-2026"), ("y26", "2026", "YTD")]
+data = dict(res, cols=[dict(key=k, label=l, years=y) for k, l, y in COLS], bookcols=[dict(key=k, label=l, years=y) for k, l, y in BOOKCOLS])
 
 # Liquidity metric, Calendar 2025 (Analysis/Liquidity_Cal2025_results.csv, scripts/liquidity_cal2025.py): L = K / x with K = USD 1M of one-sigma daily risk, shown in the By-product tables
 import csv
@@ -30,6 +32,9 @@ _liq = {r["product"]: r for r in csv.DictReader(open(R / "Analysis/Liquidity_Cal
 for _r in _liq.values():
     assert abs(float(_r["N_contracts_for_K"]) * float(_r["risk_per_contract"]) - 1e6) < 1, ("L is not on K = USD 1M", _r["product"])
 _pk = list(res["meta"]["rolls"].keys())
+_liq.update({r["product"]: r for r in csv.DictReader(open(R / "Analysis/Power_Liquidity_Cal2025_results.csv", encoding="utf8"))})     # the five US Power series of the book
+for _r in list(_liq.values())[-6:]:
+    assert abs(float(_r["N_contracts_for_K"]) * float(_r["risk_per_contract"]) - 1e6) < 1, ("L is not on K = USD 1M", _r["product"])
 assert all(k.split("|")[1] in _liq for k in _pk), [k for k in _pk if k.split("|")[1] not in _liq]
 data["meta"] = dict(res["meta"], liq={k: float(_liq[k.split("|")[1]]["L_strip"]) for k in _pk})
 
@@ -43,7 +48,7 @@ if TAG in ("0930", "1029"):
         sys.exit(f"{_pt} is missing: the {TAG} page has a Power tab. Regenerate it with  FD_TAG={TAG} python scripts/power/power_pipeline.py  and  FD_TAG={TAG} python scripts/final_dashboard/power_tab_v3.py "
                  "(after python scripts/power/power_liquidity.py), or restore it from git.")
     POWER = json.load(open(_pt))
-    assert "power" not in res["meta"]["keys"] and "power" not in res["tabs"]
+    assert "power" in res["meta"]["keys"] and "power" not in res["tabs"]       # Power is a book member in the analysis stage; its tab comes from power_tab_v3.py
     for _c in POWER["tab"]["cols"]:
         if _c["key"] == "p1":
             _c["years"] = ""          # P1 (2012-2016) does not exist for power: show nothing, not "n/a"
@@ -69,7 +74,7 @@ b = head_body
 b = rep(b, "<title>Risk Premia: Final Research Dashboard (2012 start, three periods)</title>", "<title>Risk Premia: Final Research Dashboard (2012 start, three periods, data to " + CFG["cutoff"] + ")</title>")
 b = rep(b, "<h1>Risk Premia Analysis Dashbaord</h1>", "<h1>Risk Premia Analysis Dashboard</h1>")
 b = rep(b, "Five commodity asset classes, five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through 2026-09-23.",
-        "Six commodity buckets (Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture), five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through " + CFG["cutoff"] + "." + (" A separate Power tab (US power futures, from 2015) stands alone: it is not part of the combined book, By Style, Cross-Pair or Correlations." if POWER else ""))
+        "Seven buckets (Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture and US Power), five sleeves each (Momentum, Carry, Carry-Momentum, Value, Skewness), combined by Equal Weight and Inverse Vol only. Log-return methodology, 5 bps costs, reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column. All price data through " + CFG["cutoff"] + "." + (" US Power (ICE real-time power futures, data from 2015) is part of the combined book, By Style, Cross-Pair and Correlations on common dates from January 2015; its own tab reports from 2017, when all its sleeves are live." if POWER else ""))
 b = rep(b, "one per asset class, plus By Style, Cross-Pair, Correlations and Notes (methods and data).", "one per bucket, plus By Style, Cross-Pair, Correlations and Notes (methods and data).")
 b = rep(b, "every control you can change: period, commodity, metric, Energy with or without NatGas.", "every control you can change: period, commodity, metric.")
 b = rep(b, "<b>Each asset-class tab</b>", "<b>Each bucket tab</b>")
@@ -82,9 +87,9 @@ b = rep(b, "<li>Products inside a sleeve are equally weighted on common dates",
         "<li>Buckets: Petroleum = WTI, Brent, RBOB, Heating Oil. Gas and Emissions = Henry Hub natural gas (US), TTF natural gas (European, ICE Endex), UK Gas (NBP, ICE Futures Europe) and EUA carbon. NGL = Ethane, Propane, Butane, Isobutane and Naphtha (CIF NWE average-price swap). Metals, Precious and Agriculture are unchanged.</li>\n<li>Products inside a sleeve are equally weighted on common dates")
 b = rep(b, "<li>Each asset-class portfolio combines its five sleeves", "<li>Each bucket portfolio combines its five sleeves")
 b = rep(b, "sleeves into an asset-class portfolio, then the five asset-class portfolios into one book; all four EW / Inverse Vol pairs are shown, with and without NatGas. <b>Cross-pair portfolios</b> blend two asset classes' portfolios",
-        "sleeves into a bucket portfolio, then the six bucket portfolios into one book; all four EW / Inverse Vol pairs are shown. <b>Cross-pair portfolios</b> blend two buckets' portfolios")
+        "sleeves into a bucket portfolio, then the seven bucket portfolios into one book; all four EW / Inverse Vol pairs are shown. <b>Cross-pair portfolios</b> blend two buckets' portfolios")
 b = rep(b, "<li>Prices run through 2026-09-23 for all five asset classes. Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to 23 September. Value requires two years of F3 price history before its first signal.</li>",
-        "<li>" + CFG["data_line"].replace(" (the 29-Oct Bloomberg pull extends the 24-Sep file; every sheet is cut at 30 September)", "") + " Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to " + CFG["short"] + ". Value requires two years of price history of its contract (F3; F2 for Precious and Agriculture) before its first signal.</li>")
+        "<li>" + CFG["data_line"].replace(" (the 29-Oct Bloomberg pull extends the 24-Sep file; every sheet is cut at 30 September)", "") + " Reporting starts 2012-01-01; the 2026 year-to-date column covers 1 January to " + CFG["short"] + ". Value requires two years of price history of its contract (F3; F2 for Precious and Agriculture) before its first signal. The All-buckets book, By Style and the cross-bucket correlations include US Power and therefore start on " + res["bystyle"]["common_first"] + " (the first common trading day once the Power data begin in January 2015), so their Full window is " + _by + "-2026 and their P1 is " + _by + "-2016; the pairs with US Power start the same day, the other pairs in 2012. Inverse Vol series that include US Power (its own Inverse Vol portfolio, the six pairs with Power under the Inverse Vol construction, the Inverse Vol-sleeves rows of the combined book and the Inverse Vol rows of the correlations) start in " + res["meta"]["iv_start_power"][:7] + " at the earliest (Power's own Inverse Vol portfolio on " + res["meta"]["iv_start_power"] + ", the Inverse Vol pairs with Power 63 trading days later), because Power's Value sleeve is flat until December 2016 and a flat sleeve has no trailing volatility to weight by; their P1 is empty.</li>")
 b = rep(b, "Metals, Energy and NGL use expiry dates published by the exchange.</li>",
         "Metals, Energy (including Henry Hub) and the Mont Belvieu NGL swaps use expiry dates published by the exchange.</li>")
 b = rep(b, "and P3 covers 1 January 2022 to 23 September 2026 (the last price date).", "and P3 covers 1 January 2022 to " + CFG["last_txt"] + ".")
@@ -108,13 +113,13 @@ b = rep(b, "<h3>Data and calendars</h3>",
 if POWER:
     b = rep(b, "<h3>Data and calendars</h3>",
             "<h3>Power tab (standalone)</h3><ul class=\"steps\">"
-            "<li><b>What it is:</b> a separate tab for US power with the same layout as the bucket tabs. It is <b>not</b> part of the All-buckets book, By Style, Cross-Pair or Correlations, which cover the six buckets only.</li>"
+            "<li><b>What it is:</b> US power with the same layout as the bucket tabs. It is part of the All-buckets book, By Style, Cross-Pair and Correlations (seven buckets) on common dates, which start in January 2015 with the Power data; until its signals exist (Carry-Momentum from February 2015, Momentum from November 2015, Carry and Skewness from December 2015, Value from December 2016) the Power sleeves are flat and add a return of zero. The tab itself reports from 2017, when every sleeve is live.</li>"
             "<li><b>Series:</b> ICE monthly real-time power futures (USD/MWh), peak and off-peak, on the PJM Western Hub, ERCOT North 345KV and MISO Indiana Hub. The data files hold ten series: the four CME ones start in 2026 and carry no volume or open interest, so six are usable, "
             "and the five whose Calendar-2025 time to trade 1 sigma risk is under 5 days are shown (PJM Peak 0.10, ERCOT Peak 0.36, PJM OffPeak 0.47, ERCOT OffPeak 4.7, MISO Peak 4.7; MISO OffPeak, 9.9 days, is excluded). One lot is 1 MW for every hour of the contract (ICE), i.e. 304 to 417 MWh.</li>"
             "<li><b>Contracts and roll:</b> every delivery month is listed (12 last trade dates a year) and the last trade date falls in the delivery month, so the generic F1 is the contract delivering now. The same roll rule applies (5th trading day of the expiry month), "
             "which here rolls into the next month on the 5th trading day of the delivery month: every roll of every series falls on that day. The position is therefore in the partly settled delivery-month contract for its first four or five trading days. F2 is the next month and F13 the same month a year later.</li>"
             "<li><b>Parameters:</b> the same as every other bucket (Momentum, Carry V2 on F1-F2 and F1-F13, Carry-Momentum, Value on F3, Skewness; 5 bps costs; EW and Inverse Vol).</li>"
-            "<li><b>Windows:</b> the data start on 2015-01-02 and Value needs two years of F3, so Full is 2017-2026 and P1 (2012-2016) is not available; P2, P3 and 2026 are as elsewhere. "
+            "<li><b>Windows:</b> the data start on 2015-01-02 and Value needs two years of F3, so on this tab Full is 2017-2026 and P1 (2012-2016) is not available; P2, P3 and 2026 are as elsewhere (the All-buckets book and the correlations use the common dates from 2015). "
             "Power prices are far more volatile than the other buckets (about 60% to 125% a year per sleeve), so read the IRs together with the drawdowns.</li></ul>"
             "<h3>Data and calendars</h3>")
 b = rep(b, "Transaction costs are charged when the position changes.</li></ul>", "Transaction costs of 5 bps per unit of turnover are charged when the position changes, and on every roll day.</li></ul>")
@@ -126,8 +131,10 @@ t = tail
 i0 = t.index('const LABEL={metals:"Metals"')
 i1 = t.index('const bar=document.getElementById("tabbar")')
 t = t[:i0] + ('const LABEL=D.meta.labels;\n'
-              'const ORDER=D.meta.keys.map(k=>[k,LABEL[k]]).concat(' + ('[["power",D.tabs.power.label]]' if POWER else '[]') + ').concat([["all6","All 6 buckets"],["bystyle","By Style"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]]);\n') + t[i1:]
+              'const ORDER=D.meta.keys.map(k=>[k,LABEL[k]]).concat([["all6","All 7 buckets"],["bystyle","By Style"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]]);\n') + t[i1:]
 t = rep(t, 'const HIDDEN_TABS=["all5","all5_exng"];', 'const HIDDEN_TABS=["all6"];')
+t = rep(t, 'const f=(v,n,s)=>v==null?"n/a":v.toFixed(n)+(s||"");', 'const f=(v,n,s)=>v==null?"":v.toFixed(n)+(s||"");')     # a missing value (Power's P1, the Inverse Vol pairs with Power in P1) is left empty
+t = rep(t, 'const ir=v=>v==null?"n/a":`<span class="ir-cell"', 'const ir=v=>v==null?"":`<span class="ir-cell"')
 t = rep(t, 'const asset=ASSET[key],t=D.tabs[key];\n  const sleeves', 'const t=D.tabs[key];\n  const sleeves')
 t = rep(t, 't.products.map(pr=>{const d=D.products[asset+"|"+pr];return `<tr><td>${pr}</td>`', 't.pkeys.map((pk,ix)=>{const pr=t.products[ix];const d=D.products[pk];return `<tr><td>${pr}</td>`')
 t = rep(t, '${D.meta.pairs[asset+"|"+pr].join(", ")}</td><td>${D.meta.rolls[asset+"|"+pr]}</td>', '${D.meta.pairs[pk].join(", ")}</td><td>${(v=>v==null?"n/a":String(Number(v.toPrecision(3))))(D.meta.liq[pk])}</td>')
@@ -153,25 +160,25 @@ if POWER:
     t = rep(t, '<div class="card"><h2>${LABEL[key]}</h2><p class="note"><b>Products:</b>', '<div class="card"><h2>${t.label}</h2><p class="note"><b>Products:</b>')
     t = rep(t, '<b>Data:</b> ${t.data_first} to ${t.data_last}.</p>', '<b>Data:</b> ${t.data_first} to ${t.data_last}.${t.note?" "+t.note:""}</p>')
 # combined book (tab stays hidden, as in the published 2012 page)
-t = rep(t, '[["all5","All 5 asset classes (Energy with NatGas)"],["all5_exng","All 5 asset classes (Energy ex-NatGas)"]].forEach(([key,label])=>{const c=D.combined[key];', '[["all6","All 6 buckets"]].forEach(([key,label])=>{const c=D.combined;')
+t = rep(t, '[["all5","All 5 asset classes (Energy with NatGas)"],["all5_exng","All 5 asset classes (Energy ex-NatGas)"]].forEach(([key,label])=>{const c=D.combined[key];', '[["all6","All 7 buckets"]].forEach(([key,label])=>{const c=D.combined;')
 t = rep(t, "Two-stage book: five sleeves into an asset-class portfolio, then the five asset-class portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across asset classes).",
-        "Two-stage book: five sleeves into a bucket portfolio, then the six bucket portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across buckets).")
+        "Two-stage book: five sleeves into a bucket portfolio, then the seven bucket portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across buckets).")
 t = rep(t, '"Reference" rows are each asset class\'s own EW PORT on that window.', '"Reference" rows are each bucket\'s own EW PORT on that window.')
 # by style
 j0 = t.index('/* ---------- by style ---------- */')
 j1 = t.index('/* ---------- cross-pair ---------- */')
 t = t[:j0] + '''/* ---------- by style ---------- */
-(function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value, Skewness) is first equal-weighted across the six buckets' own sleeves on their common dates, giving one cross-bucket series per style. The five style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day).</p>
+(function(){const p=addPanel("bystyle",`<div class="card"><h2>By-Style Portfolio</h2><p class="note">Each style (Momentum, Carry, Carry-Momentum, Value, Skewness) is first equal-weighted across the seven buckets' own sleeves on their common dates, giving one cross-bucket series per style. The five style series are then combined into one Equal Weight portfolio (EW PORT) and one Inverse Vol portfolio (trailing 63-day volatility, lagged one day).</p>
   <div class="window-row"><span class="note" style="margin:0" data-bn></span></div>
-  <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
+  <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${hOpts(D.bookcols)}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
   const hs=p.querySelector("[data-hs]"),tb=p.querySelector("[data-full]");
-  const draw=()=>{const c=D.bystyle;p.querySelector("[data-bn]").textContent="Common window: "+c.common_first+" to "+c.common_last+".";tb.innerHTML=mergedTable(c.windows,hs.value);wireHeads(tb,hs);renderEquity(p.querySelector("[data-eq]"),"bystyle");};
+  const draw=()=>{const c=D.bystyle;p.querySelector("[data-bn]").textContent="Common window: "+c.common_first+" to "+c.common_last+" (the first common trading day once the US Power data begin in January 2015, to the last price date).";tb.innerHTML=mergedTable(c.windows,hs.value,undefined,D.bookcols);wireHeads(tb,hs);renderEquity(p.querySelector("[data-eq]"),"bystyle");};
   hs.addEventListener("change",draw);draw();})();
 
 ''' + t[j1:]
 # cross pair
 t = rep(t, "Each row blends two asset classes' own portfolios, 50/50 (Equal Weight) or by trailing 63-day inverse volatility (Inverse Vol); each asset-class portfolio is built with the same method. Series are aligned on the pair's common dates. Pairs involving Energy are shown with NatGas and ex-NatGas.",
-        "Each row blends two buckets' own portfolios, 50/50 (Equal Weight) or by trailing 63-day inverse volatility (Inverse Vol); each bucket portfolio is built with the same method. Series are aligned on the pair's common dates (15 pairs).")
+        "Each row blends two buckets' own portfolios, 50/50 (Equal Weight) or by trailing 63-day inverse volatility (Inverse Vol); each bucket portfolio is built with the same method. Series are aligned on the pair's common dates (21 pairs; the six pairs with US Power start in January 2015, so their P1 is 2015-2016, and the other fifteen start in 2012).")
 t = rep(t, '<label>Energy: <select class="window-select" data-cv><option value="with NatGas">with NatGas</option><option value="ex-NatGas">ex-NatGas</option></select> Construction:', '<label>Construction:')
 t = rep(t, 'const cv=p.querySelector("[data-cv]"),cc=p.querySelector("[data-cc]")', 'const cc=p.querySelector("[data-cc]")')
 t = rep(t, 'const W=D.crosspair[cv.value][cc.value];', 'const W=D.crosspair[cc.value];')
@@ -179,7 +186,7 @@ t = rep(t, '[cv,cc,hs].forEach(e=>e.addEventListener("change",draw));draw();})()
 # correlations
 t = rep(t, 'const CAC=["metals","energy","precious","ngl","agri"],CLAB=["Metals","Energy","Precious","NGL","Agriculture"];', 'const CAC=D.meta.keys,CLAB=D.meta.keys.map(k=>LABEL[k]);')
 t = rep(t, "Within-asset-class matrices use each asset class's own calendar; cross-asset-class and rolling figures use the intersection of trading dates across the five asset classes (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}; the Inverse Vol rows start later because NGL's Inverse Vol series is undefined before 23 Feb 2012).",
-        "Within-bucket matrices use each bucket's own calendar; cross-bucket and rolling figures use the intersection of trading dates across the six buckets (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}).")
+        "Within-bucket matrices use each bucket's own calendar; cross-bucket and rolling figures use the intersection of trading dates across the seven buckets, which starts in January 2015 with the US Power data (days per strategy: ${D.corr.rows.map(r=>r+\" \"+D.corr.cross._n[r]).join(\", \")}).")
 # Cumulative-return charts (both tags): value of $100 invested at the chosen period start = exp(cumulative log return since the start) x 100, baseline at $100, PNG and CSV download buttons.
 if TAG in ("0930", "1029"):
     t = rep(t, "Cumulative return, rebased to 0 at the start of the period.</span></div>",

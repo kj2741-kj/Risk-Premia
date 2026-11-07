@@ -14,6 +14,7 @@ from engine import combine_returns
 from cross_asset_engine import combine_cross_asset
 from run_regime_table import _metrics
 from fd_config import TAGS, BUCKETS, PAGE_CSS, current_tag, out_dir, check_run
+BUCKETS = {k: v for k, v in BUCKETS.items() if k != "power"}      # US Power joined the dashboard, rankings, hub and report book on 2026-11-07; this page stays on the six research buckets as published
 
 TAG = current_tag(); check_run(TAG); CFG = TAGS[TAG]
 START = "2012-01-01"

@@ -1,8 +1,8 @@
 """Analysis stage of the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_<tag>/final_v3.json (tag from env FD_TAG, default 0930; see fd_config.py)
 Input: products_nets.pkl (compute_products_v3.py). Reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column.
 Data through the tag's cutoff (0930: 2026-09-30, 1029: 2026-10-29). Methods: EW and Inverse Vol (63d trailing vol) only, as before.
-Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Gas and Emissions (NatGas, TTF, UKGas, EUA), NGL, Precious, Agriculture.
-The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all six buckets.
+Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Gas and Emissions (NatGas, TTF, UKGas, EUA), NGL, Precious, Agriculture; US Power (five ICE series) enters the combined book, the pairs and the correlations on common dates (from January 2015, when its data begin) while its own tab keeps the 2017 start.
+The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all seven buckets (the six above and US Power).
 Run from the repo root after compute_products_v3.py."""
 import json
 import pickle
@@ -55,6 +55,7 @@ def ac_series(members):
 def equity(rows, step=5):
     """Cumulative LOG return from REPORT_START, sampled every `step` trading days (JS rebases and converts to % return)."""
     df = pd.concat(rows, axis=1, keys=list(rows.keys())).loc[REPORT_START:]
+    df = df.loc[min(df[c].first_valid_index() for c in df.columns):]       # series that start after the reporting start (the seven-bucket book starts with the US Power data, 2015-01-02) are charted from their own first day
     df = df.fillna(0.0).cumsum().iloc[::step]
     return dict(dates=[d.strftime("%Y-%m-%d") for d in df.index], series={k: [round(float(x), 5) for x in df[k]] for k in df.columns})
 
@@ -64,6 +65,9 @@ acs = {}
 for key, (label, members) in BUCKETS.items():
     styles, ew, iv = ac_series(members)
     acs[key] = dict(styles=styles, ew=ew, iv=iv)
+    if key == "power":     # US Power: its own tab, per-product detail and equity come from power_tab_v3.py (Full window from 2017, all sleeves live); here it only enters the book, the pairs and the correlations
+        print("book member", key, "series from", ew.first_valid_index().date(), flush=True)
+        continue
     rows = dict(styles); rows["EW PORT"] = ew; rows["Inverse Vol"] = iv
     res["tabs"][key] = dict(label=label, products=[p for _, p in members], pkeys=[pk(a, p) for a, p in members], windows=win(rows),
                             data_first=max(meta[m]["first"] for m in members), data_last=min(meta[m]["last"] for m in members),
@@ -74,6 +78,8 @@ for key, (label, members) in BUCKETS.items():
 
 # per product detail (full sample + period IRs)
 for key, (label, members) in BUCKETS.items():
+    if key == "power":
+        continue
     for a, p in members:
         d = {}
         for k, s in nets[(a, p)].items():
@@ -101,7 +107,7 @@ for st in STYLES:
     al, _ = align_intersection([acs[k]["styles"][st] for k in KEYS])
     srows[st] = combine_returns(al, "equal_weight")
 lst = list(srows.values())
-rows = {**srows, "EW PORT": combine_returns(lst, "equal_weight"), "Inverse Vol": combine_returns(lst, "inverse_vol", vol_window=63)}
+rows = {**srows, "EW PORT": combine_cross_asset(lst), "Inverse Vol": combine_returns(lst, "inverse_vol", vol_window=63)}      # EW PORT with the engine's cumulative-level combine (cross_asset_engine.combine_cross_asset), as the Streamlit hub does: a series' first observation is the level, not a return (only visible now that the book starts inside the reporting window)
 first = max(r.first_valid_index() for r in srows.values())
 res["bystyle"] = dict(windows=win(rows), members=KEYS, common_first=str(first.date()), common_last=str(min(r.index.max() for r in srows.values()).date()))
 res["equity"]["bystyle"] = equity(rows)
@@ -121,7 +127,7 @@ for cons, m in (("EW", "equal_weight"), ("Inverse Vol", "inverse_vol")):
 ROWS = list(STYLES) + ["EW PORT", "Inverse Vol"]
 for key in KEYS:
     d = acs[key]
-    df = pd.concat({**d["styles"], "EW PORT": d["ew"], "Inverse Vol": d["iv"]}, axis=1).loc[REPORT_START:].dropna()
+    df = pd.concat({**d["styles"], "EW PORT": d["ew"], "Inverse Vol": d["iv"]}, axis=1).loc["2017-01-01" if key == "power" else REPORT_START:].dropna()     # Power: from 2017, when every one of its sleeves is live
     res["corr"].setdefault("within", {})[key] = [[round(float(x), 3) for x in r] for r in df[ROWS].corr().values]
 cross = {}
 for r in ROWS:
@@ -139,7 +145,8 @@ for nm in ("ew", "iv"):
     rc_series[nm] = dict(dates=[d.strftime("%Y-%m-%d") for d in df.index], series={k: [round(float(x), 6) for x in df[k]] for k in KEYS})
 assert all(len(v["dates"]) == len(s) for v in rc_series.values() for s in v["series"].values())
 res["corr"]["rolling"] = rc_series
-res["meta"] = dict(data_last={k: res["tabs"][k]["data_last"] for k in KEYS}, labels=LABEL, keys=KEYS, cutoff=CUTOFF,
+iv_power = str(acs["power"]["iv"].first_valid_index().date())     # Power's Inverse Vol portfolio is undefined until its last sleeve (Value, flat until December 2016) has a trailing 63-day volatility
+res["meta"] = dict(iv_start_power=iv_power, data_last={k: min(meta[m]["last"] for m in BUCKETS[k][1]) for k in KEYS}, labels=LABEL, keys=KEYS, cutoff=CUTOFF,
                    rolls={pk(*m): meta[m]["rolls"] for m in meta}, pairs={pk(*m): ["-".join(x) for x in meta[m]["pairs"]] for m in meta})
 json.dump(res, open(OUT / "final_v3.json", "w"))
 print("saved final_v3.json", (OUT / "final_v3.json").stat().st_size // 1024, "KB")

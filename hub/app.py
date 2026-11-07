@@ -34,6 +34,8 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "research", "configs"))
 # 2026-10-31: the Streamlit apps read the latest merged data (29-Oct pull on top of the 24-Sep history), not data/Prices_0924. scripts/rolling_continuous.py reads this env var;
 # the research scripts leave it unset and keep their own data folders.
 os.environ.setdefault("RP_PRICES_DIR", "Prices_1029_merged")
+# US Power joins the Cross-Asset Portfolio (2026-11-07). Its files run to 2026-11-02; every other series ends on 2026-10-29, so the hub cuts Power there as well.
+os.environ.setdefault("RP_POWER_CUTOFF", "2026-10-29")
 
 def _refresh_repo_modules(root=_REPO_ROOT):
     """Streamlit Cloud keeps imported modules alive across a git pull and reloads only files inside the app's own folder, so a push that
@@ -96,9 +98,9 @@ DASHBOARD_LINKS = {
                         "desc": "Ethane, Propane, Butane, Isobutane, Naphtha. Momentum, Carry, Value, Skewness."},
     "Agriculture":    {"url": "https://risk-premia-agri.streamlit.app/", "ready": True,
                         "desc": "Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar. Momentum, Carry, Value, Portfolio."},
-    # Standalone bucket (2026-11-06), main file power_dashboard/app.py; not part of the Cross-Asset Portfolio tab.
+    # Main file power_dashboard/app.py; since 2026-11-07 a seventh bucket of the Cross-Asset Portfolio tab.
     "US Power":       {"url": "https://power-risk-premia.streamlit.app/", "ready": True,
-                        "desc": "PJM, ERCOT and MISO real-time monthly power (ICE), peak and off-peak, from 2017. Standalone, outside the cross-asset book."},
+                        "desc": "PJM, ERCOT and MISO real-time monthly power (ICE), peak and off-peak. Momentum, Carry, Value, Skewness; also the seventh bucket of the Cross-Asset Portfolio."},
 }
 
 # Cached data loaders for the Fundamental Analysis tab. Cached separately from

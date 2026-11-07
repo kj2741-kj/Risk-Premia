@@ -151,6 +151,7 @@ OLDMAIN = {1: ("Metals", "metals"), 2: ("Petroleum", "petroleum"), 3: ("Precious
 for n, (nm_, key) in OLDMAIN.items():
     swap_image(f"Figure {n}. {nm_}", os.path.join(IMG, f"fig_{key}_combined.png"))
 swap_image("Figure 6. Cross-Commodity", os.path.join(IMG, "fig_cross_combined.png"))
+set_text(P(E()[find_p("Figure 6. Cross-Commodity")]), "Figure 6. Cross-Commodity Portfolio: Combined Strategy Performance (Seven Buckets, Cumulative Return, January 2015-2026)")
 for ci_, (nm_, key) in enumerate([("Metals", "metals"), ("Petroleum", "petroleum"), ("Precious Metals", "precious"), ("NGL", "ngl"), ("Agriculture", "agri")]):
     for j, k in enumerate(K):
         swap_image(f"Figure A{ci_ * 5 + j + 1}. {nm_}, {KN[k]}", os.path.join(IMG, f"figA_{key}_{k}.png"))
@@ -174,19 +175,25 @@ for r, k in zip(t13.rows[1:], K):
 _, t18 = tbl_after("Table A18."); BC = {k: bench_corr(BS[k]) for k in SLEEVES + ["EW PORT", "Inverse Vol"]}
 BCOL = ["Equity", "Fixed Income", "Commodity Index", "Gold", "60/40 Portfolio"]
 rebuild_table(t18, [[lab] + [N(BC[k][c]) for c in BCOL] for lab, k in [("Momentum", "Momentum"), ("Carry", "Carry"), ("Carry-Momentum", "CarryMom"), ("Value", "Value"), ("Skewness", "Skewness"), ("EW Portfolio", "EW PORT"), ("Inverse Vol", "Inverse Vol")]])
-set_text(P(E()[find_p("Table A18.")]), "Table A18. Cross-Commodity Portfolio: Correlation vs Traditional Assets (2012 to 30 September 2026)")
+set_text(P(E()[find_p("Table A18.")]), "Table A18. Cross-Commodity Portfolio: Correlation vs Traditional Assets (January 2015 to 30 September 2026)")
 _, t19 = tbl_after("Table A19."); assert labels(t19) == SLN
 for r, k in zip(t19.rows[1:], SLEEVES):
     for c, (_, w) in zip(r.cells[1:], W4): cell_set(c, I(stats(BS[k], w)["ir"]))
-set_text(P(E()[find_p("Table A19.")]), "Table A19. Cross-Commodity Portfolio: Strategy Information Ratios by Period (all six buckets)")
+set_text(P(E()[find_p("Table A19.")]), "Table A19. Cross-Commodity Portfolio: Strategy Information Ratios by Period (all seven buckets)")
+cell_set(t19.rows[0].cells[1], "Full (2015-26)"); cell_set(t19.rows[0].cells[2], "2015-16")
 _, t20 = tbl_after("Table A20.")
 rows20 = [("Equal Weight", BS["EW PORT"]), ("Inverse Vol", BS["Inverse Vol"]), ("Equal Weight (without Skewness)", BS4["EW PORT"]), ("Inverse Vol (without Skewness)", BS4["Inverse Vol"])]
 rebuild_table(t20, [[lab] + [I(stats(s, w)["ir"]) for _, w in W4] for lab, s in rows20])
-set_text(P(E()[find_p("Table A20.")]), "Table A20. Cross-Commodity Portfolio: Construction Information Ratios by Period (all six buckets)")
+set_text(P(E()[find_p("Table A20.")]), "Table A20. Cross-Commodity Portfolio: Construction Information Ratios by Period (all seven buckets)")
+cell_set(t20.rows[0].cells[1], "Full (2015-26)"); cell_set(t20.rows[0].cells[2], "2015-16")
+_nt = copy.deepcopy(E()[find_p("Note: Calendar 2025 only")]); t20._tbl.addnext(_nt)
+set_text(P(_nt), "Note: the cross-commodity book combines seven buckets on their common dates, 7 January 2015 to 30 September 2026 (the first common date follows the start of the US Power data); its P1 is 2015-2016.")
 _, t21 = tbl_after("Table A21.")
 ps_all = pair_stats()
 rebuild_table(t21, [[p["name"], I(p["ew"]["ir"]), I(p["iv"]["ir"])] for p in ps_all])
-set_text(P(E()[find_p("Table A21.")]), "Table A21. Cross-Pair Portfolio: Full-Sample Information Ratios, All Fifteen Bucket Pairs")
+set_text(P(E()[find_p("Table A21.")]), "Table A21. Cross-Pair Portfolio: Full-Sample Information Ratios, All 21 Bucket Pairs")
+_nt = copy.deepcopy(E()[find_p("Note: Calendar 2025 only")]); t21._tbl.addnext(_nt)
+set_text(P(_nt), "Note: the six pairs that include US Power start in January 2015 under Equal Weight and in March 2017 under Inverse Vol (which needs Power's Value sleeve, flat until December 2016, and 63 days of volatility); the other 15 pairs start in 2012. The two columns are therefore not comparable for the Power pairs.")
 # A22 (Energy pairs ex-NatGas) is removed: caption, table, trailing blank
 els = E(); i22 = find_p("Table A22."); assert is_tbl(els[i22 + 1])
 for e in els[i22:i22 + 3]: body.remove(e)
@@ -203,13 +210,13 @@ rebuild_table(t23, rows23)
 _, t24 = tbl_after("Table A24.")
 def four_five(v):
     return [I(st4(v, "EW PORT")["ir"]), I(st(v, "EW PORT")["ir"]), I(st4(v, "Inverse Vol")["ir"]), I(st(v, "Inverse Vol")["ir"])]
-rows24 = [[lab] + four_five(v) for v, lab in ORD] + [["Cross-commodity (six buckets)", I(stats(BS4["EW PORT"])["ir"]), I(stats(BS["EW PORT"])["ir"]), I(stats(BS4["Inverse Vol"])["ir"]), I(stats(BS["Inverse Vol"])["ir"])]]
+rows24 = [[lab] + four_five(v) for v, lab in ORD] + [["US Power (from 2017)", I(stp(EW4_P)["ir"]), I(stp(EW_P)["ir"]), I(stp(IV4_P)["ir"]), I(stp(IV_P)["ir"])], ["Cross-commodity (seven buckets, from January 2015)", I(stats(BS4["EW PORT"])["ir"]), I(stats(BS["EW PORT"])["ir"]), I(stats(BS4["Inverse Vol"])["ir"]), I(stats(BS["Inverse Vol"])["ir"])]]
 rebuild_table(t24, rows24)
 # A25 correlations of Skewness
 _, t25 = tbl_after("Table A25.")
 def corrrow(v):
     c = corr_within(v); return [N(c.loc["Skewness", k]) for k in ("Momentum", "Carry", "CarryMom", "Value", "EW PORT")]
-rebuild_table(t25, [[lab] + corrrow(v) for v, lab in ORD])
+rebuild_table(t25, [[lab] + corrrow(v) for v, lab in ORD + [("power", "US Power (from 2017)")]])
 set_text(P(E()[find_p("Table A25.")]), "Table A25. Skewness: Correlation with the Other Sleeves and with the Equal Weight Portfolio, within Each Bucket")
 # the three "Note: ... still measured to 23 September" paragraphs are no longer true: every row is on the 30 September data
 for e in list(E()):
@@ -222,7 +229,7 @@ liq = pd.read_csv(os.path.join(REPO, "Analysis", "Liquidity_Cal2025_results.csv"
 _pl = pd.read_csv(os.path.join(REPO, "Analysis", "Power_Liquidity_Cal2025_results.csv")).set_index("product").rename(columns={"price_usd_mwh": "price_usd_unit", "mult_mwh": "mult"})
 liq = pd.concat([liq, _pl[[c for c in liq.columns if c in _pl.columns]]])
 GRP = [("Metals", ["Copper", "Aluminium", "Zinc", "Lead"]), ("Petroleum", ["Brent", "WTI", "SingaporeGasoil", "HeatingOil", "RBOB"]), ("Gas and Emissions", ["NatGas", "TTF", "UKGas", "EUA"]),
-       ("Precious Metals", ["Gold", "Silver", "Platinum", "Palladium"]), ("NGL", ["Propane", "Butane", "Ethane", "Naphtha", "Isobutane"]), ("Agriculture", ["Soybean", "Coffee", "Corn", "SoybeanOil", "Wheat", "Sugar"]), ("US Power (Standalone)", ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak", "MISO_OffPeak"])]
+       ("Precious Metals", ["Gold", "Silver", "Platinum", "Palladium"]), ("NGL", ["Propane", "Butane", "Ethane", "Naphtha", "Isobutane"]), ("Agriculture", ["Soybean", "Coffee", "Corn", "SoybeanOil", "Wheat", "Sugar"]), ("US Power", ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak", "MISO_OffPeak"])]
 LN = {"SingaporeGasoil": "Singapore Gasoil†", "HeatingOil": "Heating Oil", "NatGas": "Henry Hub (Nat Gas)", "UKGas": "UK Gas (NBP)", "SoybeanOil": "Soybean Oil", "Propane": "Propane*", "Butane": "Butane*", "Ethane": "Ethane*", "Naphtha": "Naphtha*", "Isobutane": "Isobutane*", "PJM_Peak": "PJM Peak", "ERCOT_Peak": "ERCOT Peak", "PJM_OffPeak": "PJM OffPeak", "ERCOT_OffPeak": "ERCOT OffPeak", "MISO_Peak": "MISO Peak", "MISO_OffPeak": "MISO OffPeak‡"}
 allp = [p for _, ps in GRP for p in ps]
 rank = {p: i + 1 for i, p in enumerate(sorted(allp, key=lambda q: -liq.loc[q, "x_strip"]))}
@@ -260,18 +267,18 @@ assert "34 products" in nt and "Bloomberg series" in nt and "MISO OffPeak (time"
 set_text(P(E()[inote]), nt)
 
 # ----------------------------------------------------------------------------------------------------------------------------- front matter
-set_text(P(E()[1]), "Metals, Petroleum, Gas and Emissions, Precious Metals, NGL, Agriculture, US Power (Standalone), Correlation Analysis, and Cross-Commodity Portfolio")
+set_text(P(E()[1]), "Metals, Petroleum, Gas and Emissions, Precious Metals, NGL, Agriculture, US Power, Correlation Analysis, and Cross-Commodity Portfolio")
 ib = find_p("Basis of all results"); bt = ptext(E()[ib])
 a1 = "1 January 2012 to 30 September 2026 for Metals, Petroleum, Precious Metals and Agriculture (the sections updated in v7) and to 23 September 2026 for everything else (see the version note)."
 a2 = " Energy includes Natural Gas unless stated."
 a3 = "Each asset class has five sleeves:"
 for a in (a1, a2, a3): assert a in bt, a
-bt = bt.replace(a1, "1 January 2012 to 30 September 2026 for all six buckets.").replace(a2, " Naphtha is part of NGL, with Carry and Carry-Momentum on the F2-F4 pair only. US Power is a standalone bucket outside the cross-commodity book and is reported from 2 January 2017 (its data start in 2015 and Value needs two years of F3), so it has no P1.").replace(a3, "Each bucket has five sleeves:")
+bt = bt.replace(a1, "1 January 2012 to 30 September 2026 for the six research buckets, and 7 January 2015 to 30 September 2026 for the cross-commodity book (seven buckets).").replace(a2, " Naphtha is part of NGL, with Carry and Carry-Momentum on the F2-F4 pair only. US Power is the seventh bucket of the cross-commodity book, which therefore starts with the Power data; on its own it is reported from 2 January 2017 (its data start in 2015 and Value needs two years of F3), so it has no P1.").replace(a3, "Each bucket has five sleeves:")
 set_text(P(E()[ib]), bt)
 iv_ = find_p("Version note (v7")
 set_text(P(E()[iv_]), "Version note (v8, 6 November 2026). All six buckets are now on the data to 30 September 2026 and the current bucket definitions. Gas and Emissions (Henry Hub, TTF, UK Gas and EUA) is a new section, with its own appendix tables and figures; "
-         "Henry Hub, previously part of Energy, is in it and UK Gas is new. NGL has five products, with Naphtha added to the four Mont Belvieu products. The Correlation Analysis and the Cross-Commodity Portfolio cover the six buckets and all fifteen bucket pairs, so the Energy-ex-NatGas comparison no longer applies. "
-         "US Power (PJM, ERCOT and MISO real-time monthly futures) is added as a standalone bucket with its own section, appendix tables and figures; it is not part of the cross-commodity book. The Key Findings, the liquidity section and table (34 products, with UK Gas, Naphtha and the US Power series) and every appendix table and figure are redrawn on this basis, all figures as a cumulative return index starting at 100%, and tables and figures are renumbered.")
+         "Henry Hub, previously part of Energy, is in it and UK Gas is new. NGL has five products, with Naphtha added to the four Mont Belvieu products. The Correlation Analysis and the Cross-Commodity Portfolio cover seven buckets (the six research buckets and US Power) and all 21 bucket pairs on common dates from January 2015, so the Energy-ex-NatGas comparison no longer applies and the book's figures are not comparable with those of earlier versions, which started in 2012. "
+         "US Power (PJM, ERCOT and MISO real-time monthly futures) is added as a bucket with its own section (reported from 2017), appendix tables and figures, and as the seventh bucket of the cross-commodity book. The Key Findings, the liquidity section and table (34 products, with UK Gas, Naphtha and the US Power series) and every appendix table and figure are redrawn on this basis, all figures as a cumulative return index starting at 100%, and tables and figures are renumbered.")
 ipet = find_p("Petroleum is the four oil products")
 tp = ptext(E()[ipet]); assert "Power, Emissions and Nat Gas" in tp
 set_text(P(E()[ipet]), tp.replace("Natural Gas has moved to the Power, Emissions and Nat Gas bucket and is not covered here", "Natural Gas has moved to the Gas and Emissions bucket, which has its own section").replace(" (five further trading days, 24 to 30 September, than the previous version)", ""))
@@ -346,26 +353,26 @@ for j, k in enumerate(K):
     f_ = make_figure_para(grp[1 + 2 * j], os.path.join(IMG, f"figA_pen_{k}.png")); anchor.addnext(f_); anchor = f_
     cn = copy.deepcopy(grp[2 + 2 * j]); set_text(P(cn), f"Figure A?. Gas and Emissions, {KN[k]}: Equity Curve by Product (2012-2026)"); anchor.addnext(cn); anchor = cn
 iin = find_p("Individual equity curves underlying")
-set_text(P(E()[iin]), "Individual equity curves underlying the combined-strategy figures above, decomposed by instrument for each strategy within each bucket, and by bucket pair, one chart per construction method, for the Cross-Pair Portfolios (all fifteen pairs). Skewness charts are included for every bucket.")
+set_text(P(E()[iin]), "Individual equity curves underlying the combined-strategy figures above, decomposed by instrument for each strategy within each bucket, and by bucket pair, one chart per construction method, for the Cross-Pair Portfolios (all 21 pairs). Skewness charts are included for every bucket.")
 for e in E():
-    if is_p(e) and ptext(e).startswith("Figure A26. Cross-Pair Portfolios, Equal Weight"): set_text(P(e), "Figure A26. Cross-Pair Portfolios, Equal Weight: Equity Curve by Bucket Pair (2012-2026)")
-    if is_p(e) and ptext(e).startswith("Figure A27. Cross-Pair Portfolios, Inverse Vol"): set_text(P(e), "Figure A27. Cross-Pair Portfolios, Inverse Vol: Equity Curve by Bucket Pair (2012-2026)")
+    if is_p(e) and ptext(e).startswith("Figure A26. Cross-Pair Portfolios, Equal Weight"): set_text(P(e), "Figure A26. Cross-Pair Portfolios, Equal Weight: Equity Curve by Bucket Pair (2012-2026; the six pairs with US Power from January 2015)")
+    if is_p(e) and ptext(e).startswith("Figure A27. Cross-Pair Portfolios, Inverse Vol"): set_text(P(e), "Figure A27. Cross-Pair Portfolios, Inverse Vol: Equity Curve by Bucket Pair (2012-2026; the six pairs with US Power from 2017)")
 
 # ----------------------------------------------------------------------------------------------------------------------------- verification log
 # ----------------------------------------------------------------------------------------------------------------------------- US Power (standalone): section after Agriculture, appendix tables, appendix charts
 els = E(); cap_ag = find_p("Figure 5. Agriculture")
 anchor = E()[cap_ag]
-hp = copy.deepcopy(head_t); set_text(P(hp), "US Power (Standalone)"); anchor.addnext(hp); anchor = hp
+hp = copy.deepcopy(head_t); set_text(P(hp), "US Power"); anchor.addnext(hp); anchor = hp
 for t in B_POWER:
     nb = copy.deepcopy(bullet_t); set_text(P(nb), t); anchor.addnext(nb); anchor = nb
 fg = make_figure_para(img_t, os.path.join(IMG, "fig_power_combined.png")); anchor.addnext(fg); anchor = fg
-ncp = copy.deepcopy(cap_t); set_text(P(ncp), "Figure ?. US Power (Standalone): Combined Strategy Performance (Cumulative Return, 2017-2026)"); anchor.addnext(ncp)
+ncp = copy.deepcopy(cap_t); set_text(P(ncp), "Figure ?. US Power: Combined Strategy Performance (Cumulative Return, 2017-2026)"); anchor.addnext(ncp)
 # appendix tables: after the Agriculture carry tenor-pair table
 els = E(); i17 = find_p("Table A17. Agriculture: Carry Tenor Pairs"); assert is_tbl(els[i17 + 1])
 anchor = els[i17 + 2]
 i13n = find_p("Table A13. NGL: Individual-Product"); ngl_blk = E()[i13n:i13n + 3]
 blocks = [news[0:3], news[3:6], ngl_blk]
-caps = ["Table A?. US Power (Standalone): Strategy Information Ratios by Period (2017 onwards)", "Table A?. US Power (Standalone): Portfolio Construction Information Ratios by Period (2017 onwards)", "Table A?. US Power (Standalone): Individual-Product Information Ratios, All Strategies (Full Sample from 2017)"]
+caps = ["Table A?. US Power: Strategy Information Ratios by Period (2017 onwards)", "Table A?. US Power: Portfolio Construction Information Ratios by Period (2017 onwards)", "Table A?. US Power: Individual-Product Information Ratios, All Strategies (Full Sample from 2017)"]
 pnew = []
 for blk_, cap_ in zip(blocks, caps):
     for e in blk_:
@@ -386,10 +393,10 @@ for r, k in zip(tpi.rows[1:], K):
 # appendix charts: after the Agriculture group, before the Cross-Pair group
 els = E(); icpg = find_p("Cross-Pair Portfolios", find_p("Appendix: Equity-Curve Charts", style="Heading 2"), "Heading 3")
 anchor = E()[icpg - 1]
-hn2 = copy.deepcopy(grp[0]); set_text(P(hn2), "US Power (Standalone)"); anchor.addnext(hn2); anchor = hn2
+hn2 = copy.deepcopy(grp[0]); set_text(P(hn2), "US Power"); anchor.addnext(hn2); anchor = hn2
 for j, k in enumerate(K):
     f_ = make_figure_para(grp[1 + 2 * j], os.path.join(IMG, f"figA_power_{k}.png")); anchor.addnext(f_); anchor = f_
-    cn = copy.deepcopy(grp[2 + 2 * j]); set_text(P(cn), f"Figure A?. US Power (Standalone), {KN[k]}: Equity Curve by Product (2017-2026)"); anchor.addnext(cn); anchor = cn
+    cn = copy.deepcopy(grp[2 + 2 * j]); set_text(P(cn), f"Figure A?. US Power, {KN[k]}: Equity Curve by Product (2017-2026)"); anchor.addnext(cn); anchor = cn
 set_text(P(E()[find_p("Individual equity curves underlying")]), ptext(E()[find_p("Individual equity curves underlying")]).replace("within each bucket, and by bucket pair", "within each bucket and for the standalone US Power bucket (from 2017), and by bucket pair"))
 
 iver = find_p("Appendix: Verification Log"); set_text(P(E()[iver]), "Appendix: Verification Log (v3_2012 to v8)")
@@ -402,13 +409,13 @@ for k in range(iv7, len(els)):
 tver = Table(itab, d)
 vrows = [
     ["v7 NGL figures on the v5 basis (to 23 September 2026): Equal Weight IR +1.25, Inverse Vol +1.16", "Now +1.44 and +1.39 on the 30 September data with Naphtha as the fifth product (four Mont Belvieu products on the same data: +1.26 and +1.16); Naphtha series built from the Bloomberg KI swap sheet with the Bloomberg expiry calendar, Carry on F2-F4 only", "Recomputed; 0930 dashboard dataset"],
-    ["v7: Energy-NGL the best of ten pairs (Equal Weight +1.23, Inverse Vol +1.21; +1.28 and +1.30 without Natural Gas)", "Petroleum-NGL is the best of fifteen pairs (+1.31, +1.38); Gas and Emissions-NGL second (+1.26, +1.35); the Energy-ex-NatGas comparison no longer applies because Natural Gas is in Gas and Emissions", "Recomputed; 0930 dashboard dataset"],
-    ["v7: cross-commodity book Equal Weight IR +0.87, Inverse Vol +0.91 at 4.9% and 5.0% volatility (five asset classes, Energy including Natural Gas)", "Six buckets: +1.06 and +1.12 at 5.4% volatility, positive in every period; commodity-index correlation +0.19 and +0.16 (was +0.18 and +0.15)", "Recomputed; 0930 dashboard dataset"],
-    ["v7: Skewness correlation with the commodity index +0.46 in the five-class book", "+0.42 in the six-bucket book (equity +0.16, gold +0.14)", "Recomputed; ETF file cut at 30 September 2026"],
+    ["v7: Energy-NGL the best of ten pairs (Equal Weight +1.23, Inverse Vol +1.21; +1.28 and +1.30 without Natural Gas)", "Petroleum-NGL is the best of 21 pairs (+1.31, +1.38); Gas and Emissions-NGL second (+1.26, +1.35); the Energy-ex-NatGas comparison no longer applies because Natural Gas is in Gas and Emissions", "Recomputed; 0930 dashboard dataset"],
+    ["v7: cross-commodity book Equal Weight IR +0.87, Inverse Vol +0.91 at 4.9% and 5.0% volatility (five asset classes, Energy including Natural Gas)", "Seven buckets (US Power added), January 2015 to 30 September 2026: +0.99 and +1.05 at 6.5% and 6.6% volatility, positive in every period; the six-bucket book on the same window earns +1.11 and +1.15 (+1.06 and +1.12 from 2012); commodity-index correlation +0.18 and +0.18 (was +0.18 and +0.15)", "Recomputed; 0930 dashboard dataset"],
+    ["v7: Skewness correlation with the commodity index +0.46 in the five-class book", "+0.35 in the seven-bucket book from January 2015 (equity +0.12, gold +0.09; +0.42, +0.16 and +0.14 in the six-bucket book from 2012)", "Recomputed; ETF file cut at 30 September 2026"],
     ["v7: bucket 'Power, Emissions and Nat Gas' (Henry Hub, TTF, EUA)", "Gas and Emissions with UK Gas added (Henry Hub, TTF, UK Gas, EUA); UK Gas from the Bloomberg NBP sheet, Bloomberg expiry history", "Recomputed; 0930 dashboard dataset"],
     ["v7 liquidity section: 26 products, Power, Emissions and Natural Gas 17.1-fold spread", "34 products with UK Gas, Naphtha and the six US Power series (five in the Power results, MISO OffPeak flagged); Gas and Emissions spread 21.3-fold (Henry Hub to UK Gas); Naphtha time to trade one sigma of risk 9.4 days (Bloomberg volume, lower bound); US Power 0.10 to 4.7 days", "Liquidity_Cal2025_results.csv; Power_Liquidity_Cal2025_results.csv"],
-    ["v7 Key Findings marked 'v5 basis' (NGL, Energy-NGL pair, cross-commodity book)", "Rewritten on six buckets; Petroleum, Metals, Precious Metals and Agriculture findings unchanged", "Recomputed"],
-    ["v7: no US Power coverage", "New standalone US Power section (outside the six-bucket book): five ICE series (PJM Peak and OffPeak, ERCOT Peak and OffPeak, MISO Peak; MISO OffPeak excluded at 9.9 days), data to 30 September 2026, reported from 2017 (no P1); Equal Weight IR +0.30, Inverse Vol +0.31", "Recomputed; dashboard Power tab (power_tab_0930.json); Power_Liquidity_Cal2025_results.csv"],
+    ["v7 Key Findings marked 'v5 basis' (NGL, Energy-NGL pair, cross-commodity book)", "Rewritten on seven buckets; Petroleum, Metals, Precious Metals and Agriculture findings unchanged", "Recomputed"],
+    ["v7: no US Power coverage", "New US Power section (reported from 2017, no P1) and seventh bucket of the cross-commodity book: five ICE series (PJM Peak and OffPeak, ERCOT Peak and OffPeak, MISO Peak; MISO OffPeak excluded at 9.9 days), data to 30 September 2026; Equal Weight IR +0.30, Inverse Vol +0.31 on its own window", "Recomputed; dashboard Power tab (power_tab_0930.json); Power_Liquidity_Cal2025_results.csv"],
 ]
 tmpl = copy.deepcopy(tver._tbl.findall(qn("w:tr"))[-1])
 for vr in vrows:

@@ -279,13 +279,13 @@
   "EW (All Products)": 147.5209182433023
  },
  "fig_cross_combined.png": {
-  "Momentum": 261.79272039020606,
-  "Carry": 407.9459101518937,
-  "Carry-Momentum": 286.033833235871,
-  "Value": 90.14397541734377,
-  "Skewness": 200.18403385743372,
-  "EW Portfolio": 222.98145233740613,
-  "Inverse Vol": 234.5787936553988
+  "Momentum": 224.97972398741277,
+  "Carry": 341.99340121122333,
+  "Carry-Momentum": 170.00066631476355,
+  "Value": 137.74581005148332,
+  "Skewness": 194.5185437380761,
+  "EW Portfolio": 203.5983619249516,
+  "Inverse Vol": 210.65418619464782
  },
  "figA_pairs_EW.png": {
   "Metals-Petroleum": 215.21425498963166,
@@ -293,16 +293,22 @@
   "Metals-NGL": 306.60300605725706,
   "Metals-Precious Metals": 85.86152421004233,
   "Metals-Agriculture": 90.4306056077268,
+  "Metals-US Power": 136.7295480802034,
   "Petroleum-Gas and Emissions": 445.4080388224873,
   "Petroleum-NGL": 689.9302219061457,
   "Petroleum-Precious Metals": 193.209000828817,
   "Petroleum-Agriculture": 203.49052866883758,
+  "Petroleum-US Power": 293.95342831266373,
   "Gas and Emissions-NGL": 634.546459906298,
   "Gas and Emissions-Precious Metals": 177.69925654110008,
   "Gas and Emissions-Agriculture": 187.15544049443966,
+  "Gas and Emissions-US Power": 285.42007644847644,
   "NGL-Precious Metals": 275.2534234049152,
   "NGL-Agriculture": 289.9009073402314,
-  "Precious Metals-Agriculture": 81.18424569346236
+  "NGL-US Power": 377.5832908092443,
+  "Precious Metals-Agriculture": 81.18424569346236,
+  "Precious Metals-US Power": 127.39014392099328,
+  "Agriculture-US Power": 124.005940847288
  },
  "figA_pairs_IV.png": {
   "Metals-Petroleum": 154.11734951674822,
@@ -310,15 +316,21 @@
   "Metals-NGL": 198.0095125601948,
   "Metals-Precious Metals": 91.93638857510817,
   "Metals-Agriculture": 93.80540813502195,
+  "Metals-US Power": 115.17153952376083,
   "Petroleum-Gas and Emissions": 386.1789324779412,
   "Petroleum-NGL": 691.8349173141208,
   "Petroleum-Precious Metals": 162.78143145187875,
   "Petroleum-Agriculture": 137.7525551286436,
+  "Petroleum-US Power": 298.57992704613196,
   "Gas and Emissions-NGL": 590.0794216876691,
   "Gas and Emissions-Precious Metals": 118.15595607333674,
   "Gas and Emissions-Agriculture": 131.9797651219893,
+  "Gas and Emissions-US Power": 263.1305482421796,
   "NGL-Precious Metals": 204.0664286049552,
   "NGL-Agriculture": 185.17448875805454,
-  "Precious Metals-Agriculture": 77.13497809415928
+  "NGL-US Power": 412.59063005976884,
+  "Precious Metals-Agriculture": 77.13497809415928,
+  "Precious Metals-US Power": 102.71010010398905,
+  "Agriculture-US Power": 116.03231198801065
  }
 }

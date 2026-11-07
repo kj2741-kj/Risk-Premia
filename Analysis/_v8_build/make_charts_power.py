@@ -37,11 +37,11 @@ def finish(fig, ax, name, loc="upper left"):
     fig.tight_layout(); fig.savefig(os.path.join(OUT, name), dpi=150); plt.close(fig)
 
 
-fn = "fig_power_combined.png"; fig, ax = setup("US Power (Standalone): Combined Strategies")
+fn = "fig_power_combined.png"; fig, ax = setup("US Power: Combined Strategies")
 for k in SLEEVES: plot(ax, STY_P[k], COL[k], 1.4, NICE[k], fn)
 plot(ax, EW_P, EWC, 3.6, "EW Portfolio", fn); plot(ax, IV_P, IVC, 3.6, "Inverse Vol", fn); finish(fig, ax, fn)
 for k in SLEEVES:
-    fn = f"figA_power_{k}.png"; fig, ax = setup(f"US Power (Standalone): {NICE[k]}, Equity by Product")
+    fn = f"figA_power_{k}.png"; fig, ax = setup(f"US Power: {NICE[k]}, Equity by Product")
     for i, p in enumerate(MEMBERS_P): plot(ax, NETS_P[p][k], PROD_COL[i], 1.4, LABEL_P[p], fn)
     plot(ax, STY_P[k], EWC, 3.6, "EW (All Products)", fn); finish(fig, ax, fn, loc="best")
 json.dump(FINAL, open(os.path.join(S, "final_values_power.json"), "w"), indent=1)

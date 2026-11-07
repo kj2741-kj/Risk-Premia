@@ -8,13 +8,13 @@ from rp import *
 
 CORE = ["Momentum", "Carry", "CarryMom", "Value"]
 SER7 = SLEEVES + ["EW PORT", "Inverse Vol"]
-KEYS6 = list(BUCKETS)
-KEYS5 = KEYS6          # v8: the book is the six buckets (name kept for the shared helpers)
+KEYS6 = list(BOOK)
+KEYS5 = KEYS6          # the book is the seven buckets (name kept for the shared helpers)
 KEYS5X = KEYS6
-CS = {v: class_sleeves(v) for v in BUCKETS}
-CS4 = {v: class_sleeves(v, CORE) for v in BUCKETS}
-PORT = {v: class_portfolios(v) for v in BUCKETS}
-PORT4 = {v: class_portfolios(v, CORE) for v in BUCKETS}
+CS = {v: class_sleeves(v) for v in BOOK}
+CS4 = {v: class_sleeves(v, CORE) for v in BOOK}
+PORT = {v: class_portfolios(v) for v in BOOK}
+PORT4 = {v: class_portfolios(v, CORE) for v in BOOK}
 
 
 def series(v, k):
@@ -73,7 +73,7 @@ def chk(cond, msg):
 
 # ---------- correlations
 def corr_within(v):
-    df = pd.concat([CS[v], PORT[v][0].rename("EW PORT"), PORT[v][1].rename("Inverse Vol")], axis=1).loc["2012-01-01":].dropna()
+    df = pd.concat([CS[v], PORT[v][0].rename("EW PORT"), PORT[v][1].rename("Inverse Vol")], axis=1).loc["2017-01-01" if v == "power" else "2012-01-01":].dropna()      # US Power from 2017, when every sleeve is live (as in the dashboard)
     return df.corr()
 
 
@@ -82,7 +82,7 @@ def bystyle(exng=False):
     if exng in _style_cache: return _style_cache[exng]
     keys = KEYS5X if exng else KEYS5
     sdf = pd.DataFrame({k: ew_intersection([CS[t][k].dropna() for t in keys]) for k in SLEEVES}).dropna()
-    sdf["EW PORT"] = sdf[SLEEVES].mean(axis=1, skipna=False)
+    sdf["EW PORT"] = ew_intersection([sdf[k] for k in SLEEVES])        # the engine's cumulative-level combine (first observation is the level, as in the dashboard and the hub)
     sdf["Inverse Vol"] = inverse_vol(sdf[SLEEVES])
     _style_cache[exng] = sdf
     return sdf
@@ -108,8 +108,8 @@ def pair_series(a, b, meth):
     return al.mean(axis=1, skipna=False) if meth == "EW" else inverse_vol(al)
 
 
-PAIR_ORDER = list(combinations(BUCKETS, 2))     # 15 pairs of the six buckets, in bucket order
-SHORT = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture"}
+PAIR_ORDER = list(combinations(BOOK, 2))     # 21 pairs of the seven buckets, in bucket order
+SHORT = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture", "power": "US Power"}
 
 
 def combined_book(exng=False):

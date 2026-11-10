@@ -161,6 +161,17 @@ check("G. twenty-one pair series recomputed equal the dataset (both construction
 mat = D["corr"]["cross"]["EW PORT"]; ix = {b: i for i, b in enumerate(BK)}; cc = corr_cross("EW PORT")
 check("G. EW PORT cross-bucket correlation matrix recomputed equals the dataset", max(abs(mat[ix[a]][ix[b]] - cc.loc[a, b]) for a in BK for b in BK) < 0.0011)
 
+# K. Carry tenor-pair tables of Agriculture and Softs: all cells equal the recomputation (facts_tenor.py) and the two-pair column equals the dataset's bucket Carry and Carry-Momentum IR
+from facts_tenor import bucket_tenor_table
+mm_k = 0; n_k = 0
+for key_, lab_ in (("agri", "Agriculture"), ("softs", "Softs")):
+    rows_k = table_after_kw(f"{lab_}: Carry Tenor Pairs")
+    res_k, _, _ = bucket_tenor_table(key_)
+    for r, sl_ in zip(rows_k[1:], ("Carry", "CarryMom")):
+        for cell, nm_ in zip(r[1:], ("short", "long", "two")):
+            n_k += 1; mm_k += abs(float(cell) - res_k[sl_][nm_]["ir"]) > 0.0055
+        ds_ = next(z for z in D["tabs"][key_]["windows"]["full"] if z["name"] == sl_)["ir"]; n_k += 1; mm_k += abs(float(r[3]) - ds_) > 0.0055
+check(f"K. Carry tenor-pair tables of Agriculture and Softs equal the recomputation and the dataset ({n_k} comparisons)", mm_k == 0 and n_k == 16)
 # H. US Power (standalone) tables against the dashboard's Power tab, and independent recomputation
 PWK = {"Full": "full", "2017-21": "p2", "2022-26": "p3"}
 cells_p = 0; mm_p = []

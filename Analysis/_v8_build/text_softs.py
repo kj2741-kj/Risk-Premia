@@ -1,6 +1,7 @@
 """Softs bucket of v8 (new on 10 November 2026): Sugar No.11, Cocoa, Coffee C and Cotton No.2 (ICE US), split out of the old Agriculture bucket (Sugar and Coffee) plus the new Cocoa and Cotton.
 Every qualitative claim is asserted against the 0930 data before it is printed (chk). The Coffee episodes (July 2021 frost, February 2025 high) are the ones already verified in the Agriculture text of v7."""
 from facts2 import *
+from facts_tenor import bucket_tenor_table
 
 
 def softs():
@@ -79,6 +80,10 @@ def softs():
             f"Coffee is the swing: its Carry IR is {I(cof_c[0])} in P1 and {I(cof_c[1])} in P2 and {I(cof_c[2])} in P3, and its Carry-Momentum IR is {I(cof_cm[1])} in P2, when the July 2021 Brazilian frosts lifted arabica by 34% in a week in our series (19 to 26 July) to its highest front-month price since October 2014 (Reuters, Bloomberg), and {I(cof_cm[2])} in P3, "
             f"after the price reached its high of $4.39/lb in our series on 13 February 2025 (our series is the front-month, March, contract; the most active contract set its record at about $4.30 that month) and fell back to ${cof_end:.2f}/lb by 30 September 2026 in our series. Without Coffee, both sleeves are negative in P2. "
             f"Cotton is the weakest product in both sleeves (Carry {I(cp['Cotton'])}, Carry-Momentum {I(cmp_['Cotton'])}) and is negative in every period."))
+    ten, _, _ = bucket_tenor_table("softs")
+    tc, tm = ten["Carry"], ten["CarryMom"]
+    chk(all(tc[k]["ir"] < 0 and tm[k]["ir"] < 0 for k in ("short", "long", "two")) and tc["long"]["ir"] > tc["two"]["ir"] > tc["short"]["ir"] and tm["short"]["ir"] > tm["long"]["ir"] > tm["two"]["ir"], "softs tenor pairs: every variant negative; Carry best on the long pair, Carry-Momentum best on the short pair, the sum the worst for Carry-Momentum")
+    B(("b", f"The long tenor pair matters differently for the two sleeves. Carry IR: short pair alone (F1-F2) {I(tc['short']['ir'])}, long pair alone {I(tc['long']['ir'])}, two-pair sum {I(tc['two']['ir'])}. Carry-Momentum IR: short pair alone {I(tm['short']['ir'])}, long pair alone {I(tm['long']['ir'])}, two-pair sum {I(tm['two']['ir'])}. The sum improves on the short pair for Carry but not for Carry-Momentum, where it is the weakest variant, and no variant earns a positive IR."))
     B(("b", f"Value ({line(val)}) is the one positive sleeve: IR {I(pv[0])} in P1, {I(pv[1])} in P2 and {I(pv[2])} in P3. By product it is positive in Cotton ({I(vp['Cotton'])}) and Cocoa ({I(vp['Cocoa'])}), flat in Coffee ({I(vp['Coffee'])}) and negative in Sugar ({I(vp['Sugar'])}). Cocoa earns {I(cov[0])} in P1 and {I(cov[1])} in P2 and loses in P3 ({I(cov[2])}); Cotton earns {I(cotv[2])} in P3 and Coffee {I(cofv[0])} in P1. "
             f"The P3 loss comes from 2024 and the cocoa rally: the front-month price in our series reached ${coc_hi:,.0f}/MT on 18 December 2024, Value is short a market that trades more than 10% above its five-year average, and the sleeve loses {abs(vy.loc[2024]):.2f} in log return in 2024 (Cocoa {N(cvy.loc[2024])}), its worst year; it recovers in 2025 and 2026 as Cocoa falls back to ${coc_end:,.0f}/MT by 30 September 2026 (Cocoa {N(cvy.loc[2025])} in 2025 and {N(cvy.loc[2026])} in 2026). "
             f"Value is measured on the F2 contract, as in Precious Metals and Agriculture."))

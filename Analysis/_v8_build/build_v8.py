@@ -16,6 +16,7 @@ from text_front8 import key_findings, liquidity_paragraph
 from text_power import power
 from text_agri import agri, agri_narr
 from text_softs import softs, softs_narr
+from facts_tenor import bucket_tenor_table
 from power_facts import *
 from facts3 import *
 B_POWER, KEY_POWER = power()
@@ -187,10 +188,23 @@ delete_column(t16, 6); delete_column(t16, 5); delete_column(t16, 4)      # Sugar
 add_column(t16, "Live Cattle", [""] * 5)
 for r, k in zip(t16.rows[1:], K):
     for c, (a, p) in zip(r.cells[1:], MEMBERS["agri"]): cell_set(c, I(pst(a, p, k)["ir"]))
+TEN_HDR = ["", "Short pair alone (F1-F2)", "Long pair alone", "Two-pair sum"]
+
+
+def fill_tenor(tb, bucket):
+    res_, _, _ = bucket_tenor_table(bucket)
+    assert [c.text for c in tb.rows[0].cells] in (["", "Previous single pair (F1-F2)", "Long pair alone", "Two-pair sum"], TEN_HDR), [c.text for c in tb.rows[0].cells]
+    for c, x in zip(tb.rows[0].cells, TEN_HDR): cell_set(c, x)
+    assert labels(tb) == ["Carry", "Carry-Momentum"]
+    for r, sl_ in zip(tb.rows[1:], ("Carry", "CarryMom")):
+        for c, nm_ in zip(r.cells[1:], ("short", "long", "two")): cell_set(c, I(res_[sl_][nm_]["ir"]))
+
+
+_, t17 = tbl_after("Table A17. Agriculture: Carry Tenor Pairs"); fill_tenor(t17, "agri")
+set_text(P(E()[find_p("Table A17. Agriculture: Carry Tenor Pairs")]), "Table A17. Agriculture: Carry Tenor Pairs, Full-Sample Information Ratios (long pair F1-F6 for Corn and Wheat, F1-F7 for Soybean and Live Cattle)")
 els = E(); i17_ = find_p("Table A17. Agriculture: Carry Tenor Pairs"); assert is_tbl(els[i17_ + 1])
-for e in els[i17_:i17_ + 3]: body.remove(e)
 els = E(); i14_ = find_p("Table A14. Agriculture: Strategy"); i16_ = find_p("Table A16. Agriculture: Individual-Product")
-blk_a = els[i14_:i16_ + 3]; assert len(blk_a) == 9 and [is_tbl(e) for e in blk_a] == [False, True, False] * 3
+blk_a = els[i14_:i17_ + 3]; assert len(blk_a) == 12 and [is_tbl(e) for e in blk_a] == [False, True, False] * 4
 anchor = blk_a[-1]; softs_tbl = []
 for e in blk_a:
     n_ = copy.deepcopy(e); anchor.addnext(n_); anchor = n_; softs_tbl.append(n_)
@@ -198,6 +212,8 @@ SOFTS_TABLE_ANCHOR = softs_tbl[-1]
 set_text(P(softs_tbl[0]), "Table A?. Softs: Strategy Information Ratios by Period")
 set_text(P(softs_tbl[3]), "Table A?. Softs: Portfolio Construction Information Ratios by Period")
 set_text(P(softs_tbl[6]), "Table A?. Softs: Individual-Product Information Ratios, All Strategies (Full Sample)")
+set_text(P(softs_tbl[9]), "Table A?. Softs: Carry Tenor Pairs, Full-Sample Information Ratios (long pair F1-F6 for all four products)")
+fill_tenor(Table(softs_tbl[10], d), "softs")
 sa_, sb_, sc_ = Table(softs_tbl[1], d), Table(softs_tbl[4], d), Table(softs_tbl[7], d)
 for r, vals in zip(sa_.rows[1:], st_cells("softs", SLEEVES)):
     for c, x in zip(r.cells[1:], vals): cell_set(c, x)
@@ -309,7 +325,7 @@ set_text(P(E()[ib]), bt)
 iv_ = find_p("Version note (v7")
 set_text(P(E()[iv_]), "Version note (v8, 10 November 2026). All seven buckets are on the data to 30 September 2026 and the current bucket definitions. Gas and Emissions (Henry Hub, TTF, UK Gas and EUA) is a new section, with its own appendix tables and figures; "
          "Henry Hub, previously part of Energy, is in it and UK Gas is new. NGL has five products (Ethane, Propane, Butane, Naphtha and Natural Gasoline): Naphtha is added to the three Mont Belvieu products, the CME Mont Belvieu natural gasoline swap (MMB) is added as the fifth on 10 November 2026, and Isobutane, the least liquid product in the data set, is removed from every bucket, pair, correlation and table. "
-         "Agriculture is split in two on 10 November 2026: Agriculture (Corn, Wheat, Soybean and Live Cattle) and Softs (Sugar, Cocoa, Coffee and Cotton), a new section with its own appendix tables and figures; Soybean Oil is dropped, Live Cattle, Cocoa and Cotton are new, and the Carry tenor pairs are F1-F2 plus F1-F6 (F1-F7 for Soybean and Live Cattle). The comparison table of single and two-pair Carry in the earlier Agriculture section is not reproduced, because the pairs were fixed by decision. "
+         "Agriculture is split in two on 10 November 2026: Agriculture (Corn, Wheat, Soybean and Live Cattle) and Softs (Sugar, Cocoa, Coffee and Cotton), a new section with its own appendix tables and figures; Soybean Oil is dropped, Live Cattle, Cocoa and Cotton are new, and the Carry tenor pairs are F1-F2 plus F1-F6 (F1-F7 for Soybean and Live Cattle). The single-pair, long-pair and two-pair Carry comparison of the Agriculture section is recomputed for the new pairs, in Agriculture and in Softs. "
          "The Correlation Analysis and the Cross-Commodity Portfolio cover the seven buckets and all twenty-one bucket pairs, so the Energy-ex-NatGas comparison no longer applies. "
          "US Power (PJM, ERCOT and MISO real-time monthly futures) is added as a standalone bucket with its own section, appendix tables and figures; it is not part of the cross-commodity book. The Key Findings, the liquidity section and table (36 products, with UK Gas, Naphtha, Natural Gasoline, Live Cattle, Cocoa, Cotton and the US Power series) and every appendix table and figure are redrawn on this basis, all figures as a cumulative return index starting at 100%, and tables and figures are renumbered.")
 ipet = find_p("Petroleum is the four oil products")
@@ -489,6 +505,7 @@ _four = MEMBERS["ngl"][:4]
 _cs4 = pd.DataFrame({k: ew_intersection([nets()[m][k] for m in _four]) for k in SLEEVES}); _e4, _i4 = stats(_cs4.mean(axis=1, skipna=False)), stats(inverse_vol(_cs4))
 _aE, _aI, _sE, _sI = st("agri", "EW PORT"), st("agri", "Inverse Vol"), st("softs", "EW PORT"), st("softs", "Inverse Vol")
 _bi = _Fc["best_iv"]
+_tenA = bucket_tenor_table("agri")[0]; _tenS = bucket_tenor_table("softs")[0]
 vrows = [
     ["v7 NGL figures on the v5 basis (to 23 September 2026): Equal Weight IR +1.25, Inverse Vol +1.16", f"Now {I(_nE['ir'])} and {I(_nI['ir'])} on the 30 September data with five products (the three Mont Belvieu products on the same data: {I(_e3['ir'])} and {I(_i3['ir'])}; with Naphtha as the fourth product: {I(_e4['ir'])} and {I(_i4['ir'])}; Natural Gasoline, the CME MMB swap, is the fifth and lowers the bucket IR); Naphtha series from the Bloomberg KI swap sheet with the Bloomberg expiry calendar, Carry on F2-F4 only; Natural Gasoline from the Bloomberg MMB sheet with the Bloomberg expiry history, Carry on F2-F4 and F2-F14", "Recomputed; 0930 dashboard dataset"],
     [f"v8 as first issued (6 November 2026): NGL of five products including Isobutane, Equal Weight IR {I(_oN['EW PORT'])}, Inverse Vol {I(_oN['Inverse Vol'])}", f"Isobutane removed from every bucket, portfolio, pair, correlation and table on 9 November 2026 because it is the least liquid of the 36 products then measured (about 10 lots a day on its 12-month strip, a USD 1 million one-sigma position equals 156 days of its risk turnover): NGL {I(_e4['ir'])} and {I(_i4['ir'])} with four products; six-bucket book {I(_o2_book['EW PORT'])} and {I(_o2_book['Inverse Vol'])} (26 products in the buckets)", "Recomputed; 0930 dashboard dataset; Liquidity_Cal2025_results.csv"],
@@ -500,7 +517,7 @@ vrows = [
     ["v7 liquidity section: 26 products, Power, Emissions and Natural Gas 17.1-fold spread", f"36 products with UK Gas, Naphtha, Natural Gasoline, Live Cattle, Cocoa, Cotton and the six US Power series (five in the Power results, MISO OffPeak flagged); Isobutane, the least liquid product measured (of 40), is outside the table; Cotton ({fx2(liq.loc['Cotton', 'x_strip'])}) is now the least liquid product outside NGL and US Power, ahead of Lead ({fx2(liq.loc['Lead', 'x_strip'])}); Natural Gasoline {liq.loc['NatGasoline', 'L_strip']:.2f} days to trade one sigma of risk; Gas and Emissions spread 21.3-fold (Henry Hub to UK Gas); Naphtha 9.4 days (Bloomberg volume, lower bound); US Power 0.10 to 4.7 days", "Liquidity_Cal2025_results.csv; Power_Liquidity_Cal2025_results.csv; scripts/liquidity_cal2025_1110.py"],
     ["v7 Key Findings marked 'v5 basis' (NGL, Energy-NGL pair, cross-commodity book)", "Rewritten on seven buckets; the Petroleum and Metals findings are unchanged and the Precious Metals and Agriculture finding is replaced by one on Precious Metals, Agriculture and Softs", "Recomputed"],
     ["v7: no US Power coverage", "New standalone US Power section (outside the seven-bucket book): five ICE series (PJM Peak and OffPeak, ERCOT Peak and OffPeak, MISO Peak; MISO OffPeak excluded at 9.9 days), data to 30 September 2026, reported from 2017 (no P1); Equal Weight IR +0.30, Inverse Vol +0.31", "Recomputed; dashboard Power tab (power_tab_0930.json); Power_Liquidity_Cal2025_results.csv"],
-    ["v8 Agriculture section: table of single-pair, long-pair and two-pair Carry and Carry-Momentum IRs", "Not reproduced: the Carry pairs were fixed by decision on 10 November 2026 (F1-F2 plus F1-F6; F1-F7 for Soybean and Live Cattle), so the comparison no longer informs a choice", "Decision of 10 November 2026"],
+    ["v8 Agriculture section: table of single-pair, long-pair and two-pair Carry and Carry-Momentum IRs (six products)", f"Recomputed for the pairs fixed on 10 November 2026 (F1-F2 plus F1-F6; F1-F7 for Soybean and Live Cattle), in Agriculture and in the new Softs bucket; the two-pair series are equal to the reported bucket sleeves (difference below 1e-9). Agriculture Carry {I(_tenA['Carry']['short']['ir'])} / {I(_tenA['Carry']['long']['ir'])} / {I(_tenA['Carry']['two']['ir'])} (short / long / sum); Softs {I(_tenS['Carry']['short']['ir'])} / {I(_tenS['Carry']['long']['ir'])} / {I(_tenS['Carry']['two']['ir'])}", "Recomputed; facts_tenor.py"],
     ["v8 data: Agriculture prices from the 24 September and 29 October pulls (six products)", "Agriculture, Softs and Natural Gasoline from the Bloomberg pull of 10 November 2026, cut at 30 September. Prices of Corn, Wheat, Soybean, Coffee and Sugar equal the earlier files on every overlapping cell (except the 29 October row, an intraday print in the old file, and Soybean F18); calendar last trade dates equal the validated calendars on every overlapping contract; exchange-holiday rows with a blank front month are removed (Wheat 25 May 2009, Soybean 26 November 2009, Cocoa 4 September 2017, Cotton 2007); Cotton rolls about one day before expiry because its last trade date falls on the 6th to 9th of the month", "data/Prices_1110; ENGINE_CHANGELOG 2026-11-10"],
 ]
 tmpl = copy.deepcopy(tver._tbl.findall(qn("w:tr"))[-1])

@@ -1,6 +1,7 @@
 """Agriculture bucket of v8 after the 10 November 2026 split: Corn, Wheat (CBOT SRW), Soybean and Live Cattle (Sugar, Cocoa, Coffee and Cotton are the Softs bucket, text_softs.py).
 Every qualitative claim is asserted against the 0930 data before it is printed (chk); numbers come from the per-product net returns of outputs/final_dashboard_0930/products_nets.pkl."""
 from facts2 import *
+from facts_tenor import bucket_tenor_table
 
 
 def agri():
@@ -66,6 +67,10 @@ def agri():
     B(("b", f"Momentum ({line(mom)}) is negative in every period (P1 {I(pm[0])}, P2 {I(pm[1])}, P3 {I(pm[2])}). By product it is negative in Corn ({I(mp['Corn'])}), Wheat ({I(mp['Wheat'])}) and Soybean ({I(mp['Soybean'])}) and flat in Live Cattle ({I(mp['LiveCattle'])})."))
     B(("b", f"Carry ({line(car)}) and Carry-Momentum ({line(cm)}) are negative in every period (Carry P1 {I(pc[0])}, P2 {I(pc[1])}, P3 {I(pc[2])}; Carry-Momentum {I(pcm[0])}, {I(pcm[1])}, {I(pcm[2])}), Carry-Momentum worst in P3 and Carry worst in P2. "
             f"Live Cattle is the weakest product in both (Carry {I(cpp['LiveCattle'])}, Carry-Momentum {I(cmp_['LiveCattle'])}), with a Carry IR of {I(lcc[0])} in P1 and {I(lcc[1])} in P2; Wheat is the second weakest in Carry-Momentum ({I(cmp_['Wheat'])})."))
+    ten, _, _ = bucket_tenor_table("agri")
+    tc, tm = ten["Carry"], ten["CarryMom"]
+    chk(all(tc[k]["ir"] < 0 and tm[k]["ir"] < 0 for k in ("short", "long", "two")) and tc["short"]["ir"] > tc["long"]["ir"] > tc["two"]["ir"] and tm["short"]["ir"] > tm["long"]["ir"] > tm["two"]["ir"], "agri tenor pairs: every variant negative, the short pair the best and the two-pair sum the worst in both sleeves")
+    B(("b", f"The long tenor pair does not help in Agriculture. Carry IR: short pair alone (F1-F2) {I(tc['short']['ir'])}, long pair alone {I(tc['long']['ir'])}, two-pair sum {I(tc['two']['ir'])}. Carry-Momentum IR: short pair alone {I(tm['short']['ir'])}, long pair alone {I(tm['long']['ir'])}, two-pair sum {I(tm['two']['ir'])}. The two-pair sum, which the bucket uses, is the weakest variant for both sleeves and no variant earns a positive IR."))
     B(("b", f"Value ({line(val)}) is negative in every period: IR {I(pv[0])} in P1, {I(pv[1])} in P2 and {I(pv[2])} in P3. Wheat is the only product with a positive Value IR ({I(vp['Wheat'])}: {I(wv[0])} in P1, {I(wv[1])} in P2, {I(wv[2])} in P3). Corn is the weakest ({I(vp['Corn'])}; {I(cvv[0])} in P1 and {I(cvv[1])} in P2) and loses in every year from 2012 to 2016 (log returns of {', '.join(N(cv.loc[y]) for y in range(2012, 2017))}), "
             f"starting with the 2012 US drought that pushed corn to a record, with USDA projecting record season-average prices of $7.50 to $8.90 per bushel in August 2012; Live Cattle loses most in P3 (IR {I(lcv[2])}). "
             f"Value shorts a market that trades more than 10% above its five-year average, measured on the F2 contract (the previous version used F3), following the 1 November 2026 change to the Precious Metals and Agriculture configuration."))

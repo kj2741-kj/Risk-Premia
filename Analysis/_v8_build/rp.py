@@ -6,7 +6,7 @@ REPO = r"C:\Users\Kartavya\Desktop\NYU\Summer\Risk Premia"
 S = os.path.dirname(os.path.abspath(__file__))
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
 PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
-            "ngl": ["Ethane", "Propane", "Butane", "Isobutane"], "precious": ["Gold", "Silver", "Platinum", "Palladium"],
+            "ngl": ["Ethane", "Propane", "Butane"], "precious": ["Gold", "Silver", "Platinum", "Palladium"],
             "agri": ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]}
 MEMBERS = {"metals": [("metals", p) for p in PRODUCTS["metals"]], "petroleum": [("energy", p) for p in PRODUCTS["petroleum"]],
            "pen": [("energy", "NatGas"), ("emissions", "TTF"), ("emissions", "UKGas"), ("emissions", "EUA")],

@@ -132,53 +132,48 @@
   "EW (All Products)": 396.4076430658189
  },
  "fig_ngl_combined.png": {
-  "Momentum": 4319.07171226075,
-  "Carry": 4207.736023480505,
-  "Carry-Momentum": 1813.1033091407915,
-  "Value": 148.8151940649523,
-  "Skewness": 187.08716442325286,
-  "EW Portfolio": 982.9027357707614,
-  "Inverse Vol": 882.9352331853066
+  "Momentum": 4694.315718241916,
+  "Carry": 3537.842760965382,
+  "Carry-Momentum": 2046.1237149431547,
+  "Value": 138.856089865336,
+  "Skewness": 203.11363380873456,
+  "EW Portfolio": 991.5379560466965,
+  "Inverse Vol": 946.5855194822888
  },
  "figA_ngl_Momentum.png": {
   "Ethane": 8923.489498026373,
   "Propane": 2591.4110521346656,
   "Butane": 14124.414598515345,
-  "Isobutane": 3095.0159767010155,
   "Naphtha": 1486.7833846301764,
-  "EW (All Products)": 4319.07171226075
+  "EW (All Products)": 4694.315718241916
  },
  "figA_ngl_Carry.png": {
   "Ethane": 493.60838319943906,
   "Propane": 8984.728315726805,
   "Butane": 6842.140495565205,
-  "Isobutane": 8419.539198072278,
   "Naphtha": 5162.67330249069,
-  "EW (All Products)": 4207.736023480505
+  "EW (All Products)": 3537.842760965382
  },
  "figA_ngl_CarryMom.png": {
   "Ethane": 269.12409152880696,
   "Propane": 5783.905581645857,
   "Butane": 1293.6545701420193,
-  "Isobutane": 1117.854287585515,
   "Naphtha": 8704.332192957298,
-  "EW (All Products)": 1813.1033091407915
+  "EW (All Products)": 2046.1237149431547
  },
  "figA_ngl_Value.png": {
   "Ethane": 54.02925725301111,
   "Propane": 102.63317829073786,
   "Butane": 294.1366206832548,
-  "Isobutane": 196.32547147877546,
   "Naphtha": 227.92599122392141,
-  "EW (All Products)": 148.8151940649523
+  "EW (All Products)": 138.856089865336
  },
  "figA_ngl_Skewness.png": {
   "Ethane": 508.4122328686272,
   "Propane": 63.578677556114606,
   "Butane": 70.50185789979358,
-  "Isobutane": 134.66776716630613,
   "Naphtha": 746.841186482197,
-  "EW (All Products)": 187.08716442325286
+  "EW (All Products)": 203.11363380873456
  },
  "fig_precious_combined.png": {
   "Momentum": 49.74973911224605,
@@ -279,33 +274,33 @@
   "EW (All Products)": 147.5209182433023
  },
  "fig_cross_combined.png": {
-  "Momentum": 224.97972398741277,
-  "Carry": 341.99340121122333,
-  "Carry-Momentum": 170.00066631476355,
-  "Value": 137.74581005148332,
-  "Skewness": 194.5185437380761,
-  "EW Portfolio": 203.5983619249516,
-  "Inverse Vol": 210.65418619464782
+  "Momentum": 226.42160296042664,
+  "Carry": 326.2838135357125,
+  "Carry-Momentum": 171.32051028119199,
+  "Value": 136.88150023877225,
+  "Skewness": 193.9564700196043,
+  "EW Portfolio": 201.89865338920484,
+  "Inverse Vol": 209.81487293928805
  },
  "figA_pairs_EW.png": {
   "Metals-Petroleum": 215.21425498963166,
   "Metals-Gas and Emissions": 197.9380512535638,
-  "Metals-NGL": 306.60300605725706,
+  "Metals-NGL": 307.9468800555295,
   "Metals-Precious Metals": 85.86152421004233,
   "Metals-Agriculture": 90.4306056077268,
   "Metals-US Power": 136.7295480802034,
   "Petroleum-Gas and Emissions": 445.4080388224873,
-  "Petroleum-NGL": 689.9302219061457,
+  "Petroleum-NGL": 692.9542603778021,
   "Petroleum-Precious Metals": 193.209000828817,
   "Petroleum-Agriculture": 203.49052866883758,
   "Petroleum-US Power": 293.95342831266373,
-  "Gas and Emissions-NGL": 634.546459906298,
+  "Gas and Emissions-NGL": 637.3277453839904,
   "Gas and Emissions-Precious Metals": 177.69925654110008,
   "Gas and Emissions-Agriculture": 187.15544049443966,
   "Gas and Emissions-US Power": 285.42007644847644,
-  "NGL-Precious Metals": 275.2534234049152,
-  "NGL-Agriculture": 289.9009073402314,
-  "NGL-US Power": 377.5832908092443,
+  "NGL-Precious Metals": 276.4598888059115,
+  "NGL-Agriculture": 291.1715742409263,
+  "NGL-US Power": 366.6208971719107,
   "Precious Metals-Agriculture": 81.18424569346236,
   "Precious Metals-US Power": 127.39014392099328,
   "Agriculture-US Power": 124.005940847288
@@ -313,22 +308,22 @@
  "figA_pairs_IV.png": {
   "Metals-Petroleum": 154.11734951674822,
   "Metals-Gas and Emissions": 146.77792645209558,
-  "Metals-NGL": 198.0095125601948,
+  "Metals-NGL": 201.72559146538137,
   "Metals-Precious Metals": 91.93638857510817,
   "Metals-Agriculture": 93.80540813502195,
   "Metals-US Power": 115.17153952376083,
   "Petroleum-Gas and Emissions": 386.1789324779412,
-  "Petroleum-NGL": 691.8349173141208,
+  "Petroleum-NGL": 690.8656935088078,
   "Petroleum-Precious Metals": 162.78143145187875,
   "Petroleum-Agriculture": 137.7525551286436,
   "Petroleum-US Power": 298.57992704613196,
-  "Gas and Emissions-NGL": 590.0794216876691,
+  "Gas and Emissions-NGL": 611.3321823179197,
   "Gas and Emissions-Precious Metals": 118.15595607333674,
   "Gas and Emissions-Agriculture": 131.9797651219893,
   "Gas and Emissions-US Power": 263.1305482421796,
-  "NGL-Precious Metals": 204.0664286049552,
-  "NGL-Agriculture": 185.17448875805454,
-  "NGL-US Power": 412.59063005976884,
+  "NGL-Precious Metals": 209.05246610262162,
+  "NGL-Agriculture": 186.91713274745055,
+  "NGL-US Power": 415.61785857947183,
   "Precious Metals-Agriculture": 77.13497809415928,
   "Precious Metals-US Power": 102.71010010398905,
   "Agriculture-US Power": 116.03231198801065

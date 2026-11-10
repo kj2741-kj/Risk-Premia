@@ -66,8 +66,13 @@ def pper(a, p, k):
     return [pst(a, p, k, w)["ir"] for w in ("p1", "p2", "p3")]
 
 
+SOFT_FAILS = []
+
+
 def chk(cond, msg):
     if not cond:
+        if os.environ.get("CHK_SOFT"):      # trial build only: collect every failing claim in one pass, never used for the final build
+            SOFT_FAILS.append(msg); return
         raise AssertionError("CLAIM FAILED: " + msg)
 
 

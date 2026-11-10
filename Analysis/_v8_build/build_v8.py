@@ -167,6 +167,7 @@ _, t12 = tbl_after("Table A12. NGL: Portfolio"); assert labels(t12) == ["Equal W
 for r, vals in zip(t12.rows[1:], st_cells("ngl", ["EW PORT", "Inverse Vol"])):
     for c, x in zip(r.cells[1:], vals): cell_set(c, x)
 _, t13 = tbl_after("Table A13. NGL: Individual-Product"); assert [c.text for c in t13.rows[0].cells[1:]] == ["Ethane", "Propane", "Butane", "Isobutane"]
+delete_column(t13, 4)      # Isobutane is removed from every output (2026-11-09)
 add_column(t13, "Naphtha", [""] * 5)
 for r, k in zip(t13.rows[1:], K):
     for c, (a, p) in zip(r.cells[1:], MEMBERS["ngl"]): cell_set(c, I(pst(a, p, k)["ir"]))
@@ -229,11 +230,11 @@ liq = pd.read_csv(os.path.join(REPO, "Analysis", "Liquidity_Cal2025_results.csv"
 _pl = pd.read_csv(os.path.join(REPO, "Analysis", "Power_Liquidity_Cal2025_results.csv")).set_index("product").rename(columns={"price_usd_mwh": "price_usd_unit", "mult_mwh": "mult"})
 liq = pd.concat([liq, _pl[[c for c in liq.columns if c in _pl.columns]]])
 GRP = [("Metals", ["Copper", "Aluminium", "Zinc", "Lead"]), ("Petroleum", ["Brent", "WTI", "SingaporeGasoil", "HeatingOil", "RBOB"]), ("Gas and Emissions", ["NatGas", "TTF", "UKGas", "EUA"]),
-       ("Precious Metals", ["Gold", "Silver", "Platinum", "Palladium"]), ("NGL", ["Propane", "Butane", "Ethane", "Naphtha", "Isobutane"]), ("Agriculture", ["Soybean", "Coffee", "Corn", "SoybeanOil", "Wheat", "Sugar"]), ("US Power", ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak", "MISO_OffPeak"])]
+       ("Precious Metals", ["Gold", "Silver", "Platinum", "Palladium"]), ("NGL", ["Propane", "Butane", "Ethane", "Naphtha"]), ("Agriculture", ["Soybean", "Coffee", "Corn", "SoybeanOil", "Wheat", "Sugar"]), ("US Power", ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak", "MISO_OffPeak"])]
 LN = {"SingaporeGasoil": "Singapore Gasoil†", "HeatingOil": "Heating Oil", "NatGas": "Henry Hub (Nat Gas)", "UKGas": "UK Gas (NBP)", "SoybeanOil": "Soybean Oil", "Propane": "Propane*", "Butane": "Butane*", "Ethane": "Ethane*", "Naphtha": "Naphtha*", "Isobutane": "Isobutane*", "PJM_Peak": "PJM Peak", "ERCOT_Peak": "ERCOT Peak", "PJM_OffPeak": "PJM OffPeak", "ERCOT_OffPeak": "ERCOT OffPeak", "MISO_Peak": "MISO Peak", "MISO_OffPeak": "MISO OffPeak‡"}
 allp = [p for _, ps in GRP for p in ps]
 rank = {p: i + 1 for i, p in enumerate(sorted(allp, key=lambda q: -liq.loc[q, "x_strip"]))}
-chk(len(allp) == 34, "34 liquidity products")
+chk(len(allp) == 33, "33 liquidity products")
 def fx(v): return f"{v:,.1f}" if v >= 1 else (f"{v:.3f}")
 def fx2(v): return f"{v:,.1f}" if v >= 10 else (f"{v:.2f}" if v >= 1 else f"{v:.3f}")
 def fL(v): return f"{v:.0f}" if v >= 10 else (f"{v:.1f}" if v >= 1 else (f"{v:.3f}" if v >= 0.01 else f"{v:.4f}"))
@@ -250,8 +251,8 @@ for g, ps in GRP:
     for p in sorted(ps, key=lambda q: -liq.loc[q, "x_strip"]):
         r_ = liq.loc[p]
         add_row(prod_tmpl, [LN.get(p, p), r_["strip"], f"{r_['adv_strip']:,.0f}", fP(r_["price_usd_unit"], p), f"{r_['sigma'] * 100:.2f}", fm(r_["mult"]), f"{r_['risk_per_contract']:,.0f}", fx2(r_["x_strip"]), fL(r_["L_strip"]), str(rank[p]), f"{r_['share_days_print'] * 100:.0f}%"])
-set_text(P(E()[ci26]), "Table A26. Dollar Risk Turnover by Product, Calendar 2025 (34 Products, Six Buckets and US Power)")
-i118 = find_p("Results across 26 products."); _p = P(E()[i118]); _rs = _p.runs; _full = liquidity_paragraph(); _lab = "Results across 34 products."
+set_text(P(E()[ci26]), "Table A26. Dollar Risk Turnover by Product, Calendar 2025 (33 Products, Six Buckets and US Power)")
+i118 = find_p("Results across 26 products."); _p = P(E()[i118]); _rs = _p.runs; _full = liquidity_paragraph(); _lab = "Results across 33 products."
 assert _full.startswith(_lab) and _rs[0].bold and _rs[3].bold is None
 _rs[0].text = _lab + " "
 for _r in _rs[1:3]: _r._r.getparent().remove(_r._r)
@@ -259,11 +260,12 @@ _rs = _p.runs; _rs[0].text = _lab + " "; _rs[1].text = _full[len(_lab) + 1:]
 for _r in _rs[2:]: _r._r.getparent().remove(_r._r)
 inote = find_p("Note: Calendar 2025 only")
 nt = ptext(E()[inote])
-nt = nt.replace("The table covers 26 products: the 25 of the research universe plus Singapore Gasoil†", "The table covers 34 products: the 27 of the six buckets, the five US Power series of the standalone Power section, Singapore Gasoil† and MISO OffPeak‡")
+nt = nt.replace("The table covers 26 products: the 25 of the research universe plus Singapore Gasoil†", "The table covers 33 products: the 26 of the six buckets, the five US Power series of the standalone Power section, Singapore Gasoil† and MISO OffPeak‡")
 nt = nt.replace("* NGL volumes are the CME contracts only (ICE is not included), so NGL figures are lower bounds.", "* NGL volumes are the CME contracts only (ICE is not included) and Naphtha volume is the Bloomberg series, a partial view of the swap market, so these figures are lower bounds.")
+nt = nt.replace("Isobutane printed on only 13% of days with a median daily volume of zero, which is what its very low x reflects. ", "")
 nt = nt.replace("EUA and TTF are converted from EUR at 1.1300", "EUA and TTF are converted from EUR at 1.1300 and UK Gas from pence per therm at 1.3184 USD/GBP (the 2025 mean of the ECB crosses; its lot is 1,000 therms a day over an average month, 30,417 therms)")
 nt = nt.replace("† The series is ICE Low Sulphur Gasoil", "‡ MISO OffPeak (time to trade one sigma of risk 9.9 days) is not in the Power results. US Power lots are 1 MW for every hour of the delivery month (ICE), taken as 340 MWh for peak and 390 MWh for off-peak contracts (304 to 368 and 352 to 417 MWh across the 2025 months). † The series is ICE Low Sulphur Gasoil")
-assert "34 products" in nt and "Bloomberg series" in nt and "MISO OffPeak (time" in nt
+assert "33 products" in nt and "Bloomberg series" in nt and "MISO OffPeak (time" in nt
 set_text(P(E()[inote]), nt)
 
 # ----------------------------------------------------------------------------------------------------------------------------- front matter
@@ -276,9 +278,9 @@ for a in (a1, a2, a3): assert a in bt, a
 bt = bt.replace(a1, "1 January 2012 to 30 September 2026 for the six research buckets, and 7 January 2015 to 30 September 2026 for the cross-commodity book (seven buckets).").replace(a2, " Naphtha is part of NGL, with Carry and Carry-Momentum on the F2-F4 pair only. US Power is the seventh bucket of the cross-commodity book, which therefore starts with the Power data; on its own it is reported from 2 January 2017 (its data start in 2015 and Value needs two years of F3), so it has no P1.").replace(a3, "Each bucket has five sleeves:")
 set_text(P(E()[ib]), bt)
 iv_ = find_p("Version note (v7")
-set_text(P(E()[iv_]), "Version note (v8, 6 November 2026). All six buckets are now on the data to 30 September 2026 and the current bucket definitions. Gas and Emissions (Henry Hub, TTF, UK Gas and EUA) is a new section, with its own appendix tables and figures; "
-         "Henry Hub, previously part of Energy, is in it and UK Gas is new. NGL has five products, with Naphtha added to the four Mont Belvieu products. The Correlation Analysis and the Cross-Commodity Portfolio cover seven buckets (the six research buckets and US Power) and all 21 bucket pairs on common dates from January 2015, so the Energy-ex-NatGas comparison no longer applies and the book's figures are not comparable with those of earlier versions, which started in 2012. "
-         "US Power (PJM, ERCOT and MISO real-time monthly futures) is added as a bucket with its own section (reported from 2017), appendix tables and figures, and as the seventh bucket of the cross-commodity book. The Key Findings, the liquidity section and table (34 products, with UK Gas, Naphtha and the US Power series) and every appendix table and figure are redrawn on this basis, all figures as a cumulative return index starting at 100%, and tables and figures are renumbered.")
+set_text(P(E()[iv_]), "Version note (v8, 9 November 2026). All six buckets are now on the data to 30 September 2026 and the current bucket definitions. Gas and Emissions (Henry Hub, TTF, UK Gas and EUA) is a new section, with its own appendix tables and figures; "
+         "Henry Hub, previously part of Energy, is in it and UK Gas is new. NGL has four products (Ethane, Propane, Butane and Naphtha): Naphtha is added to the three Mont Belvieu products, and Isobutane, the least liquid product in the data set, is removed from every bucket, pair, correlation and table. The Correlation Analysis and the Cross-Commodity Portfolio cover seven buckets (the six research buckets and US Power) and all 21 bucket pairs on common dates from January 2015, so the Energy-ex-NatGas comparison no longer applies and the book's figures are not comparable with those of earlier versions, which started in 2012. "
+         "US Power (PJM, ERCOT and MISO real-time monthly futures) is added as a bucket with its own section (reported from 2017), appendix tables and figures, and as the seventh bucket of the cross-commodity book. The Key Findings, the liquidity section and table (33 products, with UK Gas, Naphtha and the US Power series) and every appendix table and figure are redrawn on this basis, all figures as a cumulative return index starting at 100%, and tables and figures are renumbered.")
 ipet = find_p("Petroleum is the four oil products")
 tp = ptext(E()[ipet]); assert "Power, Emissions and Nat Gas" in tp
 set_text(P(E()[ipet]), tp.replace("Natural Gas has moved to the Power, Emissions and Nat Gas bucket and is not covered here", "Natural Gas has moved to the Gas and Emissions bucket, which has its own section").replace(" (five further trading days, 24 to 30 September, than the previous version)", ""))
@@ -386,7 +388,8 @@ for r, k in zip(tps.rows[1:], SLEEVES):
     for c, (_, w) in zip(r.cells[1:], PWIN): cell_set(c, I(stp(STY_P[k], w)["ir"]))
 for r, k in zip(tpp.rows[1:], ["EW PORT", "Inverse Vol"]):
     for c, (_, w) in zip(r.cells[1:], PWIN): cell_set(c, I(stp(ROWS_P[k], w)["ir"]))
-assert [c.text for c in tpi.rows[0].cells[1:]] == ["Ethane", "Propane", "Butane", "Isobutane", "Naphtha"]
+assert [c.text for c in tpi.rows[0].cells[1:]] == ["Ethane", "Propane", "Butane", "Naphtha"]      # the NGL product table the Power table is cloned from has four products since Isobutane was removed
+add_column(tpi, "", [""] * 5)      # the five Power series need five columns
 for c, p in zip(tpi.rows[0].cells[1:], MEMBERS_P): cell_set(c, LABEL_P[p])
 for r, k in zip(tpi.rows[1:], K):
     for c, p in zip(r.cells[1:], MEMBERS_P): cell_set(c, I(stp(NETS_P[p][k])["ir"]))
@@ -402,18 +405,32 @@ set_text(P(E()[find_p("Individual equity curves underlying")]), ptext(E()[find_p
 iver = find_p("Appendix: Verification Log"); set_text(P(E()[iver]), "Appendix: Verification Log (v3_2012 to v8)")
 iv7 = find_p("v7 (1 November 2026) extends")
 nv = copy.deepcopy(E()[iv7]); E()[iv7].addnext(nv)
-set_text(P(nv), "v8 (6 November 2026) VERIFICATION_PLACEHOLDER")
+set_text(P(nv), "v8 (9 November 2026) VERIFICATION_PLACEHOLDER")
 els = E(); itab = None
 for k in range(iv7, len(els)):
     if is_tbl(els[k]): itab = els[k]; break
 tver = Table(itab, d)
+import json as _json
+from text_cross8 import cross8 as _c8, six_bucket_book as _sb6
+_Bc, _Fc = _c8(); _b6 = _sb6(); _best, _b2 = _Fc["best"], _Fc["b2"]
+def _w12(r):
+    r = r.loc["2012-01-01":].dropna(); ret = (np.exp(252 * r.mean()) - 1) * 100; vol = np.expm1(r).std(ddof=1) * np.sqrt(252) * 100; return ret / vol
+_b6E12, _b6I12 = _w12(_b6["EW PORT"]), _w12(_b6["Inverse Vol"])
+_b6cE, _b6cI = bench_corr(_b6["EW PORT"].loc["2012-01-01":]), bench_corr(_b6["Inverse Vol"].loc["2012-01-01":]); _b6S = bench_corr(_b6["Skewness"].loc["2012-01-01":])
+_old = _json.load(open(os.path.join(REPO, "outputs", "final_dashboard_0930_pre_isobutane", "final_v3.json"), encoding="utf8"))
+_oN = {r["name"]: r["ir"] for r in _old["tabs"]["ngl"]["windows"]["full"]}; _oB = {r["name"]: r["ir"] for r in _old["bystyle"]["windows"]["full"]}
+_nE, _nI = st("ngl", "EW PORT"), st("ngl", "Inverse Vol")
+_three = [m for m in MEMBERS["ngl"] if m[0] == "ngl"]
+_cs3 = pd.DataFrame({k: ew_intersection([nets()[m][k] for m in _three]) for k in SLEEVES}); _e3, _i3 = stats(_cs3.mean(axis=1, skipna=False)), stats(inverse_vol(_cs3))
+_Fe, _Fi = _Fc["ew"], _Fc["iv"]
 vrows = [
-    ["v7 NGL figures on the v5 basis (to 23 September 2026): Equal Weight IR +1.25, Inverse Vol +1.16", "Now +1.44 and +1.39 on the 30 September data with Naphtha as the fifth product (four Mont Belvieu products on the same data: +1.26 and +1.16); Naphtha series built from the Bloomberg KI swap sheet with the Bloomberg expiry calendar, Carry on F2-F4 only", "Recomputed; 0930 dashboard dataset"],
-    ["v7: Energy-NGL the best of ten pairs (Equal Weight +1.23, Inverse Vol +1.21; +1.28 and +1.30 without Natural Gas)", "Petroleum-NGL is the best of 21 pairs (+1.31, +1.38); Gas and Emissions-NGL second (+1.26, +1.35); the Energy-ex-NatGas comparison no longer applies because Natural Gas is in Gas and Emissions", "Recomputed; 0930 dashboard dataset"],
-    ["v7: cross-commodity book Equal Weight IR +0.87, Inverse Vol +0.91 at 4.9% and 5.0% volatility (five asset classes, Energy including Natural Gas)", "Seven buckets (US Power added), January 2015 to 30 September 2026: +0.99 and +1.05 at 6.5% and 6.6% volatility, positive in every period; the six-bucket book on the same window earns +1.11 and +1.15 (+1.06 and +1.12 from 2012); commodity-index correlation +0.18 and +0.18 (was +0.18 and +0.15)", "Recomputed; 0930 dashboard dataset"],
-    ["v7: Skewness correlation with the commodity index +0.46 in the five-class book", "+0.35 in the seven-bucket book from January 2015 (equity +0.12, gold +0.09; +0.42, +0.16 and +0.14 in the six-bucket book from 2012)", "Recomputed; ETF file cut at 30 September 2026"],
+    ["v7 NGL figures on the v5 basis (to 23 September 2026): Equal Weight IR +1.25, Inverse Vol +1.16", f"Now {I(_nE['ir'])} and {I(_nI['ir'])} on the 30 September data with Naphtha as the fourth product (the three Mont Belvieu products on the same data: {I(_e3['ir'])} and {I(_i3['ir'])}); Naphtha series built from the Bloomberg KI swap sheet with the Bloomberg expiry calendar, Carry on F2-F4 only", "Recomputed; 0930 dashboard dataset"],
+    [f"v8 as first issued (6 November 2026): NGL of five products including Isobutane, Equal Weight IR {I(_oN['EW PORT'])}, Inverse Vol {I(_oN['Inverse Vol'])}; seven-bucket book {I(_oB['EW PORT'])} and {I(_oB['Inverse Vol'])}", f"Isobutane removed from every bucket, portfolio, pair, correlation and table on 9 November 2026 because it is the least liquid of the 36 products measured (about 10 lots a day on its 12-month strip, a USD 1 million one-sigma position equals 156 days of its risk turnover): NGL {I(_nE['ir'])} and {I(_nI['ir'])}; seven-bucket book {I(_Fe['ir'])} and {I(_Fi['ir'])} (31 products)", "Recomputed; 0930 dashboard dataset; Liquidity_Cal2025_results.csv"],
+    ["v7: Energy-NGL the best of ten pairs (Equal Weight +1.23, Inverse Vol +1.21; +1.28 and +1.30 without Natural Gas)", f"Petroleum-NGL is the best of 21 pairs ({I(_best['ew']['ir'])}, {I(_best['iv']['ir'])}); Gas and Emissions-NGL second ({I(_b2['ew']['ir'])}, {I(_b2['iv']['ir'])}); the Energy-ex-NatGas comparison no longer applies because Natural Gas is in Gas and Emissions", "Recomputed; 0930 dashboard dataset"],
+    ["v7: cross-commodity book Equal Weight IR +0.87, Inverse Vol +0.91 at 4.9% and 5.0% volatility (five asset classes, Energy including Natural Gas)", f"Seven buckets (US Power added), January 2015 to 30 September 2026: {I(_Fe['ir'])} and {I(_Fi['ir'])} at {V(_Fe['vol'])} and {V(_Fi['vol'])} volatility, positive in every period; the six-bucket book on the same window earns {I(_Fc['e6']['ir'])} and {I(_Fc['i6']['ir'])} ({I(_b6E12)} and {I(_b6I12)} from 2012); commodity-index correlation {N(_Fc['bE']['Commodity Index'])} and {N(_Fc['bI']['Commodity Index'])} ({N(_b6cE['Commodity Index'])} and {N(_b6cI['Commodity Index'])} in the six-bucket book from 2012)", "Recomputed; 0930 dashboard dataset"],
+    ["v7: Skewness correlation with the commodity index +0.46 in the five-class book", f"{N(_Fc['bS']['Commodity Index'])} in the seven-bucket book from January 2015 (equity {N(_Fc['bS']['Equity'])}, gold {N(_Fc['bS']['Gold'])}; {N(_b6S['Commodity Index'])}, {N(_b6S['Equity'])} and {N(_b6S['Gold'])} for the commodity index, equity and gold in the six-bucket book from 2012)", "Recomputed; ETF file cut at 30 September 2026"],
     ["v7: bucket 'Power, Emissions and Nat Gas' (Henry Hub, TTF, EUA)", "Gas and Emissions with UK Gas added (Henry Hub, TTF, UK Gas, EUA); UK Gas from the Bloomberg NBP sheet, Bloomberg expiry history", "Recomputed; 0930 dashboard dataset"],
-    ["v7 liquidity section: 26 products, Power, Emissions and Natural Gas 17.1-fold spread", "34 products with UK Gas, Naphtha and the six US Power series (five in the Power results, MISO OffPeak flagged); Gas and Emissions spread 21.3-fold (Henry Hub to UK Gas); Naphtha time to trade one sigma of risk 9.4 days (Bloomberg volume, lower bound); US Power 0.10 to 4.7 days", "Liquidity_Cal2025_results.csv; Power_Liquidity_Cal2025_results.csv"],
+    ["v7 liquidity section: 26 products, Power, Emissions and Natural Gas 17.1-fold spread", "33 products with UK Gas, Naphtha and the six US Power series (five in the Power results, MISO OffPeak flagged); Isobutane, the least liquid product measured, is outside the table; Gas and Emissions spread 21.3-fold (Henry Hub to UK Gas); Naphtha time to trade one sigma of risk 9.4 days (Bloomberg volume, lower bound); US Power 0.10 to 4.7 days", "Liquidity_Cal2025_results.csv; Power_Liquidity_Cal2025_results.csv"],
     ["v7 Key Findings marked 'v5 basis' (NGL, Energy-NGL pair, cross-commodity book)", "Rewritten on seven buckets; Petroleum, Metals, Precious Metals and Agriculture findings unchanged", "Recomputed"],
     ["v7: no US Power coverage", "New US Power section (reported from 2017, no P1) and seventh bucket of the cross-commodity book: five ICE series (PJM Peak and OffPeak, ERCOT Peak and OffPeak, MISO Peak; MISO OffPeak excluded at 9.9 days), data to 30 September 2026; Equal Weight IR +0.30, Inverse Vol +0.31 on its own window", "Recomputed; dashboard Power tab (power_tab_0930.json); Power_Liquidity_Cal2025_results.csv"],
 ]
@@ -452,3 +469,7 @@ for e in E():
 print("captions renumbered:", {k: v for k, v in counter.items()}, "| references fixed in", nfix, "paragraphs")
 d.save(OUT)
 print("saved", OUT)
+
+import facts as _f
+if _f.SOFT_FAILS:
+    print("TRIAL BUILD: failing claims:"); [print("  -", m) for m in _f.SOFT_FAILS]

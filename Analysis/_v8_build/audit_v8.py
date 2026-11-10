@@ -67,7 +67,7 @@ for k, x, _ in body:
         check(f"B. {cap[:22]} lists the products of the bucket", prods == D["tabs"][b]["products"], f"{prods}")
         for r in rows[1:]:
             for p, cell in zip(prods, r[1:]): cmp(f"{cap[:22]} {r[0]} {p}", cell, D["products"][keymap[p]][NAME[r[0]]]["full"]["ir"])
-check(f"B. {cells} cells of the bucket appendix tables equal the dataset", not mism and cells > 300, f"{len(mism)}: {mism[:4]}")
+check(f"B. {cells} cells of the bucket appendix tables equal the dataset", not mism and cells == 298, f"{len(mism)}: {mism[:4]}")      # 303 before Isobutane was removed (five sleeve cells of its column)
 
 # C. cross-commodity tables
 def table_after(prefix):
@@ -206,15 +206,15 @@ for r, p in zip(prow, keys_):
     _b = badl
     badl += abs(num(r[2]) - round(c_["adv_strip"])) > 0.5 or abs(num(r[7]) - c_["x_strip"]) > 0.5 * 10 ** -(len(r[7].split(".")[1]) if "." in r[7] else 0) + 1e-9 or abs(num(r[8]) - c_["L_strip"]) > 0.5 * 10 ** -(len(r[8].split(".")[1]) if "." in r[8] else 0) + 1e-9 or int(r[9]) != rk[p] or abs(num(r[10]) - round(c_["share_days_print"] * 100)) > 0.5 or abs(num(r[4]) - c_["sigma"] * 100) > 0.0051 or abs(num(r[5]) - c_["mult"]) > 0.51
     if badl > _b: print("   liquidity row differs:", r, dict(adv=round(c_["adv_strip"]), x=round(c_["x_strip"], 4), L=round(c_["L_strip"], 4), rank=rk[p], days=round(c_["share_days_print"] * 100), sigma=round(c_["sigma"] * 100, 3), mult=c_["mult"]))
-check(f"I. liquidity table: {len(prow)} products, ADV, x, L, rank, days traded, sigma and multiplier equal the two result files", badl == 0 and len(prow) == 34, f"{badl} differ")
+check(f"I. liquidity table: {len(prow)} products, ADV, x, L, rank, days traded, sigma and multiplier equal the two result files", badl == 0 and len(prow) == 33, f"{badl} differ")
 # J. text hygiene of the whole document
 allt = [x for k, x, _ in body if k == "p"] + [c.text for k, x, _ in body if k == "t" for r in x.rows for c in r.cells]
 iss = [t[:80] for t in allt if "  " in t.replace("\u00a0", " ").strip() and not t.startswith("\t") and not t.startswith("\u2022")]
 bal = [t[:80] for t in allt if t.count("(") != t.count(")")]
 punc = [t[:80] for t in allt if re.search(r" ,|(?<!\.)\.\.(?!\.)|,,| \.(?![\d.])|\(\s|\s\)", t)]
 check("J. no double spaces, unbalanced brackets or stray punctuation in the document", not (iss or bal or punc), f"spaces {iss[:2]} brackets {bal[:2]} punct {punc[:2]}")
-# F. 27 products named in the buckets; sleeves
-check("F. the dataset has 27 products in the six research bucket tabs", sum(len(D["tabs"][b]["products"]) for b in BK if b != "power") == 27)
+# F. 26 products named in the buckets (27 before Isobutane was removed); sleeves
+check("F. the dataset has 26 products in the six research bucket tabs", sum(len(D["tabs"][b]["products"]) for b in BK if b != "power") == 26)
 check("F. the book is the seven-bucket book from 2015-01-07 (dataset and text)", BK[-1] == "power" and len(BK) == 7 and D["bystyle"]["common_first"] == "2015-01-07" and "7 January 2015" in text, f"{D['bystyle']['common_first']}")
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

@@ -20,7 +20,7 @@ def key_findings(old_kf):
     chk(all(x > 0 for x in pn + pc_ + pcm), "NGL Momentum, Carry and Carry-Momentum positive in every period")
     kf = []
     kf.append(f"NGL is the strongest bucket in the research: Equal Weight (IR {I(ngl_ew['ir'])}) and Inverse Vol (IR {I(ngl_iv['ir'])}) are well ahead of every other bucket (the best of the rest is Petroleum at {I(best_other[0])} and {I(best_other_iv[0])}), and Momentum, Carry, and Carry-Momentum are each positive in every period, as they are in Petroleum. "
-              f"Naphtha, added as the fifth product in v8, lifts the Equal Weight IR from {I(ew_4p['ir'])} (the four Mont Belvieu products) to {I(ngl_ew['ir'])}. Value (IR {I(st('ngl', 'Value')['ir'])}) and Skewness (IR {I(st('ngl', 'Skewness')['ir'])}) are the exceptions: Value is negative in P1 ({I(pv[0])}), and Skewness is negative in P1 ({I(ps[0])}) and strongly positive in P2 ({I(ps[1])}).")
+              f"Naphtha, added as the fourth product in v8, lifts the Equal Weight IR from {I(ew_4p['ir'])} (the three Mont Belvieu products) to {I(ngl_ew['ir'])}. Value (IR {I(st('ngl', 'Value')['ir'])}) and Skewness (IR {I(st('ngl', 'Skewness')['ir'])}) are the exceptions: Value is negative in P1 ({I(pv[0])}), and Skewness is negative in P1 ({I(ps[0])}) and strongly positive in P2 ({I(ps[1])}).")
     # Gas and Emissions
     ge, gi = st("pen", "EW PORT"), st("pen", "Inverse Vol")
     gp = {p: stats(ew_intersection([nets()[(a, p)][k] for k in SLEEVES]))["ir"] for a, p in MEMBERS["pen"]}
@@ -64,30 +64,34 @@ def liquidity_paragraph():
     liq = pd.read_csv(os.path.join(REPO, "Analysis", "Liquidity_Cal2025_results.csv")).set_index("product")
     pl = pd.read_csv(os.path.join(REPO, "Analysis", "Power_Liquidity_Cal2025_results.csv")).set_index("product")
     grp = {"Metals": ["Copper", "Aluminium", "Zinc", "Lead"], "Petroleum": ["Brent", "WTI", "HeatingOil", "RBOB"], "Gas and Emissions": ["NatGas", "TTF", "UKGas", "EUA"], "Precious Metals": ["Gold", "Silver", "Platinum", "Palladium"],
-           "NGL": ["Propane", "Butane", "Ethane", "Isobutane", "Naphtha"], "Agriculture": ["Soybean", "Coffee", "Corn", "SoybeanOil", "Wheat", "Sugar"]}
+           "NGL": ["Propane", "Butane", "Ethane", "Naphtha"], "Agriculture": ["Soybean", "Coffee", "Corn", "SoybeanOil", "Wheat", "Sugar"]}
     pw_ = ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak"]
     prod = [p for g in grp.values() for p in g]
-    chk(len(prod) == 27 and len(pw_) == 5, "27 bucket products and 5 Power series")
+    chk(len(prod) == 26 and len(pw_) == 5, "26 bucket products and 5 Power series")
     x = liq["x_strip"]; L = liq["L_strip"]; xp = pl["x_strip"]; Lp = pl["L_strip"]
     allx = pd.concat([x.loc[prod + ["SingaporeGasoil"]], xp])
-    chk(allx.idxmax() == "Brent" and allx.idxmin() == "Isobutane", "Brent most liquid, Isobutane least liquid of the table")
-    chk(len(allx) == 34, "34 products in the table")
+    chk(allx.idxmax() == "Brent" and allx.idxmin() == "MISO_OffPeak", "Brent most liquid, MISO OffPeak least liquid of the table")
+    chk(len(allx) == 33, "33 products in the table")
+    chk(x.loc[prod].idxmin() == "Naphtha", "Naphtha is the least liquid product of the six research buckets")
+    chk(3.5 < np.log10(float(allx.max() / allx.min())) < 4.5, "four orders of magnitude between Brent and MISO OffPeak")
+    allm = pd.concat([x, xp]); chk(len(allm) == 36 and allm.idxmin() == "Isobutane" and float(allm.min()) < float(allx.min()), "Isobutane is the least liquid of the 36 products measured and lies outside the table")
     sp = {g: (x.loc[ps].max() / x.loc[ps].min()) for g, ps in grp.items()}
     nn = [p for p in prod if p not in grp["NGL"]]
     chk(x.loc[nn].idxmin() == "Lead", "Lead is the least liquid product outside NGL and US Power")
-    chk(float(xp.loc[pw_].max()) < float(x["Lead"]) and float(xp.loc[pw_].min()) > float(x.loc[grp["NGL"]].min()), "US Power sits below Lead and above Isobutane in turnover")
+    chk(float(xp.loc[pw_].max()) < float(x["Lead"]) and float(xp.loc[pw_].min()) > float(x.loc[grp["NGL"]].min()), "US Power sits below Lead and above Naphtha in turnover")
     Lmax_nn = float(L.loc[nn].max()); chk(round(Lmax_nn, 2) == 0.05, "at most 0.05 days outside NGL and Power")
     sp_pw = float(xp.loc[pw_].max() / xp.loc[pw_].min()); chk(round(sp_pw, 1) == 46.8, "Power spread 46.8-fold")
     f1 = lambda v: f"{v:,.1f}"
-    s = (f"Results across 34 products. Dollar risk turnover ranges from USD {f1(x['Brent'])} million per day for Brent, the most liquid, to USD {x['Isobutane']:.3f} million for Isobutane, the least liquid, a span of five orders of magnitude. "
+    s = (f"Results across 33 products. Dollar risk turnover ranges from USD {f1(x['Brent'])} million per day for Brent, the most liquid, to USD {xp['MISO_OffPeak']:.3f} million for MISO OffPeak, the least liquid and the series excluded from the Power bucket on that ground, a span of four orders of magnitude. Naphtha (USD {x['Naphtha']:.3f} million) is the least liquid product inside the six research buckets. "
          f"Within buckets, the spread between the most and least liquid products is narrow in Agriculture ({sp['Agriculture']:.1f}-fold; Soybean {f1(x['Soybean'])} to Sugar {f1(x['Sugar'])}) and Petroleum ({sp['Petroleum']:.1f}-fold; Brent {f1(x['Brent'])} to RBOB {f1(x['RBOB'])}), "
          f"intermediate in Metals ({sp['Metals']:.1f}-fold; Copper {f1(x['Copper'])} to Lead {f1(x['Lead'])}) and in Gas and Emissions ({sp['Gas and Emissions']:.1f}-fold; Henry Hub {f1(x['NatGas'])} to UK Gas {f1(x['UKGas'])}), and wide in Precious Metals ({sp['Precious Metals']:.1f}-fold; Gold {f1(x['Gold'])} to Palladium {f1(x['Palladium'])}). "
-         f"NGL is the outlier, with a spread of {sp['NGL']:,.1f}-fold (Propane {x['Propane']:.2f} to Isobutane {x['Isobutane']:.3f}) and a level far below the other buckets: Propane, the most liquid NGL product, trades about one quarter of the risk turnover of Lead ({f1(x['Lead'])}), the least liquid product outside NGL and US Power. "
+         f"NGL is the outlier, with a spread of {sp['NGL']:,.1f}-fold (Propane {x['Propane']:.2f} to Naphtha {x['Naphtha']:.3f}) and a level far below the other buckets: Propane, the most liquid NGL product, trades about one quarter of the risk turnover of Lead ({f1(x['Lead'])}), the least liquid product outside NGL and US Power. "
          f"The US Power series lie between the two groups: PJM Peak ({xp['PJM_Peak']:.2f}) trades about half the risk turnover of Lead, ERCOT Peak and PJM OffPeak {xp['ERCOT_Peak']:.2f} and {xp['PJM_OffPeak']:.2f}, and ERCOT OffPeak and MISO Peak {xp['ERCOT_OffPeak']:.2f} and {xp['MISO_Peak']:.2f}, below Ethane ({x['Ethane']:.2f}); the spread across the five series is {sp_pw:.1f}-fold. "
          f"In terms of the reference position, a USD 1 million one-sigma position equals at most {Lmax_nn:.2f} days of market risk turnover in any product outside NGL and US Power, against {Lp['PJM_Peak']:.2f}, {Lp['ERCOT_Peak']:.2f}, {Lp['PJM_OffPeak']:.2f}, {Lp['ERCOT_OffPeak']:.1f} and {Lp['MISO_Peak']:.1f} days in PJM Peak, ERCOT Peak, PJM OffPeak, ERCOT OffPeak and MISO Peak, "
-         f"{L['Propane']:.2f} days in Propane, {L['Ethane']:.1f} in Ethane, {L['Naphtha']:.1f} in Naphtha and {L['Isobutane']:.0f} in Isobutane. "
-         f"Isobutane averages {liq.loc['Isobutane', 'adv_strip']:.0f} lots per day and trades on only {liq.loc['Isobutane', 'share_days_print'] * 100:.0f}% of 2025 days, and Naphtha averages {liq.loc['Naphtha', 'adv_strip']:.0f} lots per day on the Bloomberg series and prints on {liq.loc['Naphtha', 'share_days_print'] * 100:.0f}% of days, so neither can absorb a position of meaningful size. "
-         f"This bears on the main results, since NGL is the bucket in which the premium is strongest: the returns reported there may not be capturable at a scale comparable to that of the other buckets. The same limit applies to US Power, where ERCOT OffPeak and MISO Peak need {Lp['ERCOT_OffPeak']:.1f} days of market turnover per USD 1 million of one-sigma risk. "
+         f"and {L['Propane']:.2f} days in Propane, {L['Ethane']:.1f} in Ethane and {L['Naphtha']:.1f} in Naphtha. "
+         f"Naphtha averages {liq.loc['Naphtha', 'adv_strip']:.0f} lots per day on the Bloomberg series and prints on {liq.loc['Naphtha', 'share_days_print'] * 100:.0f}% of days, so it cannot absorb a position of meaningful size. "
+         f"Isobutane, outside the table, is the least liquid of the 36 products measured: its 12-month strip averages {liq.loc['Isobutane', 'adv_strip']:.0f} lots per day and prints on {liq.loc['Isobutane', 'share_days_print'] * 100:.0f}% of days, so a USD 1 million one-sigma position equals {L['Isobutane']:.0f} days of its risk turnover. It is removed from every bucket, portfolio and table of this report for that reason. "
+         f"The same capacity limit applies to the remaining thin series. Returns in NGL and US Power may not be capturable at a scale comparable to that of the other buckets: ERCOT OffPeak and MISO Peak need {Lp['ERCOT_OffPeak']:.1f} days of market turnover per USD 1 million of one-sigma risk. "
          f"NGL volumes refer to CME only, and Naphtha volume is the Bloomberg series, a partial view of the swap market, so both are lower bounds. The product-level results are reported in Table A26.")
     chk(0.22 < x["Propane"] / x["Lead"] < 0.27 and 0.45 < xp["PJM_Peak"] / x["Lead"] < 0.55 and xp["ERCOT_OffPeak"] < x["Ethane"] and xp["MISO_Peak"] < x["Ethane"], "Propane about one quarter of Lead; PJM Peak about half; the two low Power series below Ethane")
     return s

@@ -6,6 +6,17 @@ that led to it.
 
 ---
 
+## 2026-11-09: Isobutane removed from every output (NGL bucket = Ethane, Propane, Butane, Naphtha; 31 products)
+
+- **Decision (user, 2026-11-09), reason: liquidity.** In the Calendar-2025 snapshot Isobutane is the least liquid of the 36 products measured (12-month strip about 10 lots a day, prints on 13% of days, a USD 1M one-sigma risk budget equals about 156 days of its risk turnover). Hidden, not deleted: it stays in `research/configs/ngl.py` and the price files (like Ethylene and Propylene), so `run_regime_table.py`, the tradebooks and the earlier research still run.
+- **Code.** `fd_config.BUCKETS["ngl"]`, `compute_products_v3.PRODUCTS["ngl"]`, `rankings_page_v3` (product list), `cross_asset_engine.DASHBOARD_PRODUCTS["ngl"]`, `hub/app.py` (NGL card), `ngl_dashboard/app.py` (`PRODUCT_ORDER`, `PRODUCT_SOURCE`, `NGL_PORTFOLIO_EXCLUDED` gains Isobutane, captions); the Notes tab states the exclusion and the reason. The three check scripts now expect 31 products and the new NGL lists.
+- **Rebuilt, both tags (0930 and 1029):** research dashboards, rankings pages, Skewness and VTI pages. Backups of the previous outputs: `outputs/final_dashboard_<tag>_pre_isobutane`. The Streamlit-engine cache `outputs/final_dashboard_<tag>/engine_per_product*.pkl` must be deleted whenever a product list changes (the checks compared against a stale cache until it was deleted).
+- **Numbers (0930).** NGL bucket Equal Weight IR +1.43, Inverse Vol +1.41 (were +1.44 and +1.39 with Isobutane; the three Mont Belvieu products alone +1.20 and +1.12). Seven-bucket book Equal Weight +0.98, Inverse Vol +1.04 (were +0.99 and +1.05); six-bucket book on the same window +1.09 and +1.14; Petroleum-NGL still the best pair (+1.30, +1.36), Gas and Emissions-NGL second (+1.25, +1.35). NGL stays the strongest bucket at Equal Weight, well ahead of Petroleum (+0.84).
+- **Checks (both tags): ALL PASS, 71 passes each.** Streamlit engine equals the dashboard for all 31 products x 5 sleeves, the bucket tabs, the book, 21 pairs and the correlation matrix; the rankings page equals the dashboard and the engine (including the liquidity columns). Headless Streamlit runs: NGL app (four products, Isobutane only in the exclusion notes) and hub: no exceptions.
+- **Report v8 (`Analysis/Risk Premia Analysis v8_2012.docx`, rebuilt 9 November 2026, 0930 basis).** The NGL section, the Key Findings, the Correlation Analysis, the Cross-Commodity Portfolio, Table A13 (four products), the liquidity paragraph and Table A26 (33 products; MISO OffPeak, not Isobutane, is now the least liquid series in the table, Naphtha the least liquid inside the buckets) and the verification log are updated; every sentence-level claim is asserted against the 0930 data before it is written. `audit_v8.py` ALL PASS (54 text lines, 298 bucket-appendix cells, 168 + 44 recomputed cells, 21 pairs, 33 liquidity rows). The verification log gains a row for the first-issue-to-reissue change.
+
+---
+
 ## 2026-11-07: US Power joins the cross-commodity book (seven buckets, common dates) in the research dashboards, rankings page, Streamlit hub and report v8
 
 - **Decision (user, 2026-11-07).** Common dates: the book starts with the Power data (first common day 2015-01-07), so By Style, the combined book and the cross-bucket correlations are measured from 2015 (P1 = 2015-2016); the 15 pairs without Power keep their 2012 start. Reports stay on the 0930 basis.

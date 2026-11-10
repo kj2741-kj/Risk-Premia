@@ -9,7 +9,7 @@ from rp import *
 CORE = ["Momentum", "Carry", "CarryMom", "Value"]
 SER7 = SLEEVES + ["EW PORT", "Inverse Vol"]
 KEYS6 = list(BUCKETS)
-KEYS5 = KEYS6          # v8: the book is the six buckets (name kept for the shared helpers)
+KEYS5 = KEYS6          # the book is all research buckets (seven since 2026-11-10; the name is kept for the shared helpers)
 KEYS5X = KEYS6
 CS = {v: class_sleeves(v) for v in BUCKETS}
 CS4 = {v: class_sleeves(v, CORE) for v in BUCKETS}
@@ -113,8 +113,8 @@ def pair_series(a, b, meth):
     return al.mean(axis=1, skipna=False) if meth == "EW" else inverse_vol(al)
 
 
-PAIR_ORDER = list(combinations(BUCKETS, 2))     # 15 pairs of the six buckets, in bucket order
-SHORT = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture"}
+PAIR_ORDER = list(combinations(BUCKETS, 2))     # 21 pairs of the seven buckets, in bucket order
+SHORT = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture", "softs": "Softs"}
 
 
 def combined_book(exng=False):

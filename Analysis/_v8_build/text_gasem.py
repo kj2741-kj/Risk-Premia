@@ -72,7 +72,7 @@ def gasem():
     chk(ew["ir"] > ew4["ir"] and iv["ir"] > iv4["ir"] and ewD[0] > ew4D[0] and ewD[2] > ew4D[2], "Skewness lifts the bucket")
     chk(ew["ret"] > iv["ret"] and ew["ir"] > iv["ir"] and iv["vol"] < ew["vol"] and iv["mdd"] > ew["mdd"], "EW ahead on return and IR; IV lower volatility and shallower drawdown")
     dd = sorted(((st(t, "EW PORT")["mdd"], t) for t in BUCKETS))
-    chk({dd[0][1], dd[1][1]} == {"pen", "precious"}, "Gas and Emissions and Precious Metals have the deepest Equal Weight drawdowns")
+    chk([x[1] for x in dd[:4]] == ["softs", "agri", "pen", "precious"] or [x[1] for x in dd[:4]] == ["softs", "agri", "precious", "pen"], "Softs and Agriculture have the deepest Equal Weight drawdowns, then Gas and Emissions and Precious Metals")
     cs_ = CS[v][SLEEVES].loc["2012-01-01":].dropna().corr().values; cmin, cmax = float(np.min(cs_[np.triu_indices(5, 1)])), float(np.max(cs_[np.triu_indices(5, 1)]))
     chk(round(cmin, 2) == -0.41 and round(cmax, 2) == 0.44, "pairwise sleeve correlations -0.41 to +0.44")
     B = []
@@ -95,5 +95,5 @@ def gasem():
              f"It is positive in TTF ({I(skp['TTF'])}), UK Gas ({I(skp['UKGas'])}) and EUA ({I(skp['EUA'])}) and negative in Henry Hub ({I(skp['NatGas'])}), where the long leg loses {abs(lg['NatGas']['full']['long_pnl']):.2f}. "
              f"Adding it lifts the bucket's Equal Weight IR from {I(ew4['ir'])} to {I(ew['ir'])} (Inverse Vol {I(iv4['ir'])} to {I(iv['ir'])}), with P1 rising from {I(ew4D[0])} to {I(ewD[0])} and P3 from {I(ew4D[2])} to {I(ewD[2])}.")
     B.append(f"The two portfolio constructions are close. Equal Weight is ahead on return and IR: it returns {R(ew['ret'])} against {R(iv['ret'])} for Inverse Vol, with an IR of {I(ew['ir'])} against {I(iv['ir'])}. Inverse Vol has the lower volatility ({V(iv['vol'])} against {V(ew['vol'])}) and the shallower maximum drawdown ({M(iv['mdd'])} against {M(ew['mdd'])}); "
-             f"its Equal Weight maximum drawdown of {M(ew['mdd'])} is, with Precious Metals ({M(st('precious', 'EW PORT')['mdd'])}), the deepest of the six buckets.")
+             f"its Equal Weight maximum drawdown of {M(ew['mdd'])} is, with Precious Metals ({M(st('precious', 'EW PORT')['mdd'])}), the third deepest of the seven buckets, behind Softs ({M(st('softs', 'EW PORT')['mdd'])}) and Agriculture ({M(st('agri', 'EW PORT')['mdd'])}).")
     return B

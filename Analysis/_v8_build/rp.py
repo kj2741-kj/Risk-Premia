@@ -7,16 +7,16 @@ S = os.path.dirname(os.path.abspath(__file__))
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
 PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
             "ngl": ["Ethane", "Propane", "Butane"], "precious": ["Gold", "Silver", "Platinum", "Palladium"],
-            "agri": ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]}
+            "agri": ["Corn", "Wheat", "Soybean", "LiveCattle"], "softs": ["Sugar", "Cocoa", "Coffee", "Cotton"]}   # 2026-11-10: Agriculture split into Agriculture and Softs
 MEMBERS = {"metals": [("metals", p) for p in PRODUCTS["metals"]], "petroleum": [("energy", p) for p in PRODUCTS["petroleum"]],
            "pen": [("energy", "NatGas"), ("emissions", "TTF"), ("emissions", "UKGas"), ("emissions", "EUA")],
-           "ngl": [("ngl", p) for p in PRODUCTS["ngl"]] + [("naphtha", "Naphtha")],
-           "precious": [("precious", p) for p in PRODUCTS["precious"]], "agri": [("agri", p) for p in PRODUCTS["agri"]]}
-BUCKETS = ["metals", "petroleum", "pen", "ngl", "precious", "agri"]
+           "ngl": [("ngl", p) for p in PRODUCTS["ngl"]] + [("naphtha", "Naphtha"), ("mmb", "NatGasoline")],
+           "precious": [("precious", p) for p in PRODUCTS["precious"]], "agri": [("agri", p) for p in PRODUCTS["agri"]], "softs": [("softs", p) for p in PRODUCTS["softs"]]}
+BUCKETS = ["metals", "petroleum", "pen", "ngl", "precious", "agri", "softs"]
 VARIANTS = {"metals": ("metals", PRODUCTS["metals"]), "petroleum": ("energy", PRODUCTS["petroleum"]), "energy": ("energy", PRODUCTS["energy"]),
             "energy_exng": ("energy", [p for p in PRODUCTS["energy"] if p != "NatGas"]), "ngl": ("ngl", PRODUCTS["ngl"]),
-            "precious": ("precious", PRODUCTS["precious"]), "agri": ("agri", PRODUCTS["agri"])}
-LABEL = {"pen": "Gas and Emissions", "petroleum": "Petroleum", "metals": "Metals", "energy": "Energy", "energy_exng": "Energy ex-NatGas", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture"}
+            "precious": ("precious", PRODUCTS["precious"]), "agri": ("agri", PRODUCTS["agri"]), "softs": ("softs", PRODUCTS["softs"])}
+LABEL = {"pen": "Gas and Emissions", "petroleum": "Petroleum", "metals": "Metals", "energy": "Energy", "energy_exng": "Energy ex-NatGas", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture", "softs": "Softs"}
 WINDOWS = {"full": ("2012-01-01", None), "p1": ("2012-01-01", "2016-12-31"), "p2": ("2017-01-01", "2021-12-31"), "p3": ("2022-01-01", None)}
 D = json.load(open(os.path.join(REPO, "outputs", "final_dashboard_0930", "final_v3.json")))
 _nets = None

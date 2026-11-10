@@ -132,48 +132,53 @@
   "EW (All Products)": 396.4076430658189
  },
  "fig_ngl_combined.png": {
-  "Momentum": 4694.315718241916,
-  "Carry": 3537.842760965382,
-  "Carry-Momentum": 2046.1237149431547,
-  "Value": 138.856089865336,
-  "Skewness": 203.11363380873456,
-  "EW Portfolio": 991.5379560466965,
-  "Inverse Vol": 946.5855194822888
+  "Momentum": 2290.470543303784,
+  "Carry": 2194.1380735359858,
+  "Carry-Momentum": 2565.9291701660504,
+  "Value": 137.76723380711303,
+  "Skewness": 234.48091766281124,
+  "EW Portfolio": 839.3389057656714,
+  "Inverse Vol": 837.1882015939561
  },
  "figA_ngl_Momentum.png": {
   "Ethane": 8923.489498026373,
   "Propane": 2591.4110521346656,
   "Butane": 14124.414598515345,
   "Naphtha": 1486.7833846301764,
-  "EW (All Products)": 4694.315718241916
+  "Natural Gasoline": 129.817838813134,
+  "EW (All Products)": 2290.470543303784
  },
  "figA_ngl_Carry.png": {
   "Ethane": 493.60838319943906,
   "Propane": 8984.728315726805,
   "Butane": 6842.140495565205,
   "Naphtha": 5162.67330249069,
-  "EW (All Products)": 3537.842760965382
+  "Natural Gasoline": 324.6128146776003,
+  "EW (All Products)": 2194.1380735359858
  },
  "figA_ngl_CarryMom.png": {
   "Ethane": 269.12409152880696,
   "Propane": 5783.905581645857,
   "Butane": 1293.6545701420193,
   "Naphtha": 8704.332192957298,
-  "EW (All Products)": 2046.1237149431547
+  "Natural Gasoline": 6345.9371121173845,
+  "EW (All Products)": 2565.9291701660504
  },
  "figA_ngl_Value.png": {
   "Ethane": 54.02925725301111,
   "Propane": 102.63317829073786,
   "Butane": 294.1366206832548,
   "Naphtha": 227.92599122392141,
-  "EW (All Products)": 138.856089865336
+  "Natural Gasoline": 133.49652655230756,
+  "EW (All Products)": 137.76723380711303
  },
  "figA_ngl_Skewness.png": {
   "Ethane": 508.4122328686272,
   "Propane": 63.578677556114606,
   "Butane": 70.50185789979358,
   "Naphtha": 746.841186482197,
-  "EW (All Products)": 203.11363380873456
+  "Natural Gasoline": 416.4676012546852,
+  "EW (All Products)": 234.48091766281124
  },
  "fig_precious_combined.png": {
   "Momentum": 49.74973911224605,
@@ -220,100 +225,146 @@
   "EW (All Products)": 129.53444141889105
  },
  "fig_agri_combined.png": {
-  "Momentum": 76.72388961958696,
-  "Carry": 98.38847578204954,
-  "Carry-Momentum": 53.81550638704713,
-  "Value": 76.2618162591994,
-  "Skewness": 147.5209182433023,
-  "EW Portfolio": 85.50442787280066,
-  "Inverse Vol": 85.19279583679281
+  "Momentum": 56.68408050528768,
+  "Carry": 53.21173513692832,
+  "Carry-Momentum": 25.366236810637055,
+  "Value": 66.86843841914047,
+  "Skewness": 209.3736265269211,
+  "EW Portfolio": 63.96958676210615,
+  "Inverse Vol": 67.00398941472102
  },
  "figA_agri_Momentum.png": {
-  "Corn": 38.96336278720283,
-  "Wheat": 34.81606338681499,
-  "Soybean": 74.92323889521755,
-  "Soybean Oil": 153.33504516648645,
-  "Coffee": 171.22960032572234,
-  "Sugar": 76.43825476129933,
-  "EW (All Products)": 76.72388961958696
+  "Corn": 38.96336278720335,
+  "Wheat": 34.81606338681502,
+  "Soybean": 74.92323889521654,
+  "Live Cattle": 101.57615859058996,
+  "EW (All Products)": 56.68408050528768
  },
  "figA_agri_Carry.png": {
-  "Corn": 66.18484174742298,
-  "Wheat": 73.13777613473826,
-  "Soybean": 64.9760247565237,
-  "Soybean Oil": 211.29324241012765,
-  "Coffee": 169.2525969983703,
-  "Sugar": 80.64752124212201,
-  "EW (All Products)": 98.38847578204954
+  "Corn": 66.18484174742292,
+  "Wheat": 73.13777613473937,
+  "Soybean": 68.8613791788222,
+  "Live Cattle": 24.052137645785205,
+  "EW (All Products)": 53.21173513692832
  },
  "figA_agri_CarryMom.png": {
-  "Corn": 50.041732887778565,
-  "Wheat": 8.381752297696707,
-  "Soybean": 79.26282596862751,
-  "Soybean Oil": 55.462684747658045,
-  "Coffee": 158.7047415984601,
-  "Sugar": 83.0074517720241,
-  "EW (All Products)": 53.81550638704713
+  "Corn": 50.04173288777773,
+  "Wheat": 8.381752297696849,
+  "Soybean": 45.84712902968732,
+  "Live Cattle": 21.53004128271615,
+  "EW (All Products)": 25.366236810637055
  },
  "figA_agri_Value.png": {
-  "Corn": 32.647295311799645,
-  "Wheat": 180.15842166265617,
-  "Soybean": 62.47954376447872,
-  "Soybean Oil": 66.7203738839687,
-  "Coffee": 100.76909995614196,
-  "Sugar": 79.61912290385042,
-  "EW (All Products)": 76.2618162591994
+  "Corn": 32.64729531179953,
+  "Wheat": 180.15842166265583,
+  "Soybean": 62.47954376447833,
+  "Live Cattle": 54.40578729014693,
+  "EW (All Products)": 66.86843841914047
  },
  "figA_agri_Skewness.png": {
-  "Corn": 235.33222404934247,
-  "Wheat": 249.93240044360635,
-  "Soybean": 266.16476238005265,
-  "Soybean Oil": 407.1256036256192,
-  "Coffee": 21.906928071696047,
-  "Sugar": 73.81714191478203,
-  "EW (All Products)": 147.5209182433023
+  "Corn": 235.33222404934477,
+  "Wheat": 249.9324004436057,
+  "Soybean": 266.16476238005504,
+  "Live Cattle": 122.7533586558196,
+  "EW (All Products)": 209.3736265269211
+ },
+ "fig_softs_combined.png": {
+  "Momentum": 66.64330971076514,
+  "Carry": 62.72799540024822,
+  "Carry-Momentum": 63.39170280009654,
+  "Value": 131.2382315311937,
+  "Skewness": 45.1226099732814,
+  "EW Portfolio": 69.04639256719823,
+  "Inverse Vol": 73.52222409160251
+ },
+ "figA_softs_Momentum.png": {
+  "Sugar": 76.43825476129922,
+  "Cocoa": 43.43749913660918,
+  "Coffee": 171.22960032572067,
+  "Cotton": 34.69539293435178,
+  "EW (All Products)": 66.64330971076514
+ },
+ "figA_softs_Carry.png": {
+  "Sugar": 78.18746515463484,
+  "Cocoa": 42.80502556599552,
+  "Coffee": 169.25259699837164,
+  "Cotton": 27.332439819904973,
+  "EW (All Products)": 62.72799540024822
+ },
+ "figA_softs_CarryMom.png": {
+  "Sugar": 94.41008252751188,
+  "Cocoa": 84.33915021072967,
+  "Coffee": 158.7047415984587,
+  "Cotton": 12.778861719405421,
+  "EW (All Products)": 63.39170280009654
+ },
+ "figA_softs_Value.png": {
+  "Sugar": 79.61912290385072,
+  "Cocoa": 200.94333438421265,
+  "Coffee": 100.76909995614241,
+  "Cotton": 184.00223785901954,
+  "EW (All Products)": 131.2382315311937
+ },
+ "figA_softs_Skewness.png": {
+  "Sugar": 73.81714191478197,
+  "Cocoa": 33.14797703169548,
+  "Coffee": 21.906928071696065,
+  "Cotton": 77.33589408281046,
+  "EW (All Products)": 45.1226099732814
  },
  "fig_cross_combined.png": {
-  "Momentum": 265.4531476256798,
-  "Carry": 396.32450292978865,
-  "Carry-Momentum": 291.85622625164063,
-  "Value": 89.10928992169134,
-  "Skewness": 202.945121933617,
-  "EW Portfolio": 223.3067614183725,
-  "Inverse Vol": 236.50964678650914
+  "Momentum": 188.33806592753038,
+  "Carry": 260.56011541001044,
+  "Carry-Momentum": 217.67841603948338,
+  "Value": 92.32069057879293,
+  "Skewness": 175.6826843872248,
+  "EW Portfolio": 176.9040938012078,
+  "Inverse Vol": 185.05421315037947
  },
  "figA_pairs_EW.png": {
   "Metals-Petroleum": 215.21425498963166,
   "Metals-Gas and Emissions": 197.9380512535638,
-  "Metals-NGL": 307.9468800555295,
+  "Metals-NGL": 283.3282073452134,
   "Metals-Precious Metals": 85.86152421004233,
-  "Metals-Agriculture": 90.4306056077268,
+  "Metals-Agriculture": 78.21821651612495,
+  "Metals-Softs": 81.2627720868372,
   "Petroleum-Gas and Emissions": 445.4080388224873,
-  "Petroleum-NGL": 692.9542603778021,
+  "Petroleum-NGL": 637.5563484509631,
   "Petroleum-Precious Metals": 193.209000828817,
-  "Petroleum-Agriculture": 203.49052866883758,
-  "Gas and Emissions-NGL": 637.3277453839904,
+  "Petroleum-Agriculture": 176.0097272757829,
+  "Petroleum-Softs": 182.86070674763747,
+  "Gas and Emissions-NGL": 586.3768697979677,
   "Gas and Emissions-Precious Metals": 177.69925654110008,
-  "Gas and Emissions-Agriculture": 187.15544049443966,
-  "NGL-Precious Metals": 276.4598888059115,
-  "NGL-Agriculture": 291.1715742409263,
-  "Precious Metals-Agriculture": 81.18424569346236
+  "Gas and Emissions-Agriculture": 161.8806450358877,
+  "Gas and Emissions-Softs": 168.18166596920128,
+  "NGL-Precious Metals": 254.35842923335082,
+  "NGL-Agriculture": 231.71569423582034,
+  "NGL-Softs": 240.73496543796793,
+  "Precious Metals-Agriculture": 70.22055049476458,
+  "Precious Metals-Softs": 72.95380596528845,
+  "Agriculture-Softs": 66.45953054256285
  },
  "figA_pairs_IV.png": {
   "Metals-Petroleum": 154.11734951674822,
   "Metals-Gas and Emissions": 146.77792645209558,
-  "Metals-NGL": 201.72559146538137,
+  "Metals-NGL": 194.59806414075646,
   "Metals-Precious Metals": 91.93638857510817,
-  "Metals-Agriculture": 93.80540813502195,
+  "Metals-Agriculture": 84.3338210031549,
+  "Metals-Softs": 85.37011323242348,
   "Petroleum-Gas and Emissions": 386.1789324779412,
-  "Petroleum-NGL": 690.8656935088078,
+  "Petroleum-NGL": 659.2049748551344,
   "Petroleum-Precious Metals": 162.78143145187875,
-  "Petroleum-Agriculture": 137.7525551286436,
-  "Gas and Emissions-NGL": 611.3321823179197,
+  "Petroleum-Agriculture": 114.99366040186989,
+  "Petroleum-Softs": 128.17592240664837,
+  "Gas and Emissions-NGL": 571.6220108659508,
   "Gas and Emissions-Precious Metals": 118.15595607333674,
-  "Gas and Emissions-Agriculture": 131.9797651219893,
-  "NGL-Precious Metals": 209.05246610262162,
-  "NGL-Agriculture": 186.91713274745055,
-  "Precious Metals-Agriculture": 77.13497809415928
+  "Gas and Emissions-Agriculture": 110.33094229882985,
+  "Gas and Emissions-Softs": 114.4953859047791,
+  "NGL-Precious Metals": 200.18615974814122,
+  "NGL-Agriculture": 149.45020417748336,
+  "NGL-Softs": 181.89191564673737,
+  "Precious Metals-Agriculture": 68.84755656328132,
+  "Precious Metals-Softs": 69.2899806172058,
+  "Agriculture-Softs": 67.9432834104222
  }
 }

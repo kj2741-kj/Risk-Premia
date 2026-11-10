@@ -7,20 +7,24 @@ W3 = ("p1", "p2", "p3")
 
 
 def key_findings(old_kf):
-    """Nine Key Findings. old_kf[1:4] are the v7 bullets on Petroleum, Metals and Precious Metals / Agriculture (0930 basis, unchanged); the rest is rewritten on six buckets."""
+    """Nine Key Findings. old_kf[1:3] are the v7 bullets on Petroleum and Metals (0930 basis, unchanged); old_kf[3] (Precious Metals and Agriculture) is replaced by a bullet on Precious Metals, Agriculture and Softs;
+    the rest is rewritten on the seven buckets (Agriculture split into Agriculture and Softs, Natural Gasoline in NGL, 10 November 2026)."""
     assert len(old_kf) == 8 and old_kf[1].startswith("Petroleum's") and old_kf[2].startswith("In Metals") and old_kf[3].startswith("Precious Metals and Agriculture")
     ngl_ew, ngl_iv = st("ngl", "EW PORT"), st("ngl", "Inverse Vol")
-    four = [m for m in MEMBERS["ngl"] if m[0] == "ngl"]
-    cs4 = pd.DataFrame({k: ew_intersection([nets()[m][k] for m in four]) for k in SLEEVES})
-    ew_4p = stats(cs4.mean(axis=1, skipna=False))
+    M5 = MEMBERS["ngl"]
+    def basis(members):
+        cs = pd.DataFrame({k: ew_intersection([nets()[m][k] for m in members]) for k in SLEEVES})
+        return stats(cs.mean(axis=1, skipna=False)), stats(inverse_vol(cs))
+    e3, i3 = basis(M5[:3]); e4, i4 = basis(M5[:4])
     best_other = max((st(t, "EW PORT")["ir"], t) for t in BUCKETS if t != "ngl")
     best_other_iv = max((st(t, "Inverse Vol")["ir"], t) for t in BUCKETS if t != "ngl")
     chk(best_other[1] == "petroleum" and best_other_iv[1] == "petroleum", "Petroleum is the best other bucket")
     pn, pc_, pcm, pv, ps = (per("ngl", k) for k in ("Momentum", "Carry", "CarryMom", "Value", "Skewness"))
     chk(all(x > 0 for x in pn + pc_ + pcm), "NGL Momentum, Carry and Carry-Momentum positive in every period")
+    chk(round(e3["ir"], 2) == 1.20 and round(e4["ir"], 2) == 1.43 and e4["ir"] > ngl_ew["ir"] and i4["ir"] > ngl_iv["ir"], "NGL: three-product 1.20, four-product 1.43, five-product lower than the four-product")
     kf = []
     kf.append(f"NGL is the strongest bucket in the research: Equal Weight (IR {I(ngl_ew['ir'])}) and Inverse Vol (IR {I(ngl_iv['ir'])}) are well ahead of every other bucket (the best of the rest is Petroleum at {I(best_other[0])} and {I(best_other_iv[0])}), and Momentum, Carry, and Carry-Momentum are each positive in every period, as they are in Petroleum. "
-              f"Naphtha, added as the fourth product in v8, lifts the Equal Weight IR from {I(ew_4p['ir'])} (the three Mont Belvieu products) to {I(ngl_ew['ir'])}. Value (IR {I(st('ngl', 'Value')['ir'])}) and Skewness (IR {I(st('ngl', 'Skewness')['ir'])}) are the exceptions: Value is negative in P1 ({I(pv[0])}), and Skewness is negative in P1 ({I(ps[0])}) and strongly positive in P2 ({I(ps[1])}).")
+              f"Naphtha, added as the fourth product in v8, lifted the Equal Weight IR from {I(e3['ir'])} (the three Mont Belvieu products) to {I(e4['ir'])}; Natural Gasoline (CME MMB), added as the fifth product on 10 November 2026, lowers it to {I(ngl_ew['ir'])} (Inverse Vol {I(i4['ir'])} to {I(ngl_iv['ir'])}) because its Momentum and Carry are close to zero, while the Equal Weight volatility and maximum drawdown are lower. Value (IR {I(st('ngl', 'Value')['ir'])}) and Skewness (IR {I(st('ngl', 'Skewness')['ir'])}) are the exceptions: Value is negative in P1 ({I(pv[0])}), and Skewness is negative in P1 ({I(ps[0])}) and strongly positive in P2 ({I(ps[1])}).")
     # Gas and Emissions
     ge, gi = st("pen", "EW PORT"), st("pen", "Inverse Vol")
     gp = {p: stats(ew_intersection([nets()[(a, p)][k] for k in SLEEVES]))["ir"] for a, p in MEMBERS["pen"]}
@@ -31,32 +35,41 @@ def key_findings(old_kf):
     chk(round(yl[2021] / ewp.sum() * 100) == 42 and round(ir_ex, 2) == 0.30, "Gas and Emissions crisis concentration")
     kf.append(f"Gas and Emissions (Henry Hub, TTF, UK Gas and EUA) earns Equal Weight IR {I(ge['ir'])} and Inverse Vol IR {I(gi['ir'])} at {V(ge['vol'])} volatility, with Carry the strongest sleeve (IR {I(st('pen', 'Carry')['ir'])}) and Value (IR {I(st('pen', 'Value')['ir'])}) the only negative one. The edge sits in European gas, TTF (combined IR {I(gp['TTF'])}) and UK Gas ({I(gp['UKGas'])}), not in Henry Hub ({I(gp['NatGas'])}) or EUA ({I(gp['EUA'])}), "
               f"and in one episode: 2021 alone is {yl[2021] / ewp.sum() * 100:.0f}% of the Equal Weight log return, and excluding July 2021 to June 2023 the IR falls to {I(ir_ex)}.")
-    kf.append(old_kf[1]); kf.append(old_kf[2]); kf.append(old_kf[3])
+    kf.append(old_kf[1]); kf.append(old_kf[2])
+    # Precious Metals, Agriculture and Softs
+    pe, pi = st("precious", "EW PORT"), st("precious", "Inverse Vol"); ae, ai = st("agri", "EW PORT"), st("agri", "Inverse Vol"); se, si = st("softs", "EW PORT"), st("softs", "Inverse Vol")
+    neg_both = [t for t in BUCKETS if st(t, "EW PORT")["ir"] < 0 and st(t, "Inverse Vol")["ir"] < 0]
+    chk(neg_both == ["precious", "agri", "softs"], f"buckets where neither portfolio earns a positive IR {neg_both}")
+    chk(all(st(t, k)["ir"] < 0 for t in ("precious", "agri") for k in ("Momentum", "Carry", "CarryMom", "Value")) and st("softs", "Value")["ir"] > 0 and all(st("softs", k)["ir"] < 0 for k in ("Momentum", "Carry", "CarryMom")), "Precious Metals and Agriculture core strategies all negative; Softs only Value positive")
+    chk(st("precious", "Skewness")["ir"] > 0 and st("agri", "Skewness")["ir"] > 0.4 and st("softs", "Skewness")["ir"] < -0.3, "Skewness positive in Precious Metals and Agriculture, clearly negative in Softs")
+    chk(st("softs", "EW PORT")["ir"] < st4("softs", "EW PORT")["ir"] and st("agri", "EW PORT")["ir"] > st4("agri", "EW PORT")["ir"] and st("precious", "EW PORT")["ir"] > st4("precious", "EW PORT")["ir"], "Skewness trims the loss in Precious Metals and Agriculture and deepens it in Softs")
+    kf.append(f"Precious Metals, Agriculture and Softs are the three buckets where portfolio construction fails: neither earns a positive IR (Precious Metals Equal Weight {I(pe['ir'])}, Inverse Vol {I(pi['ir'])}; Agriculture {I(ae['ir'])} and {I(ai['ir'])}; Softs {I(se['ir'])} and {I(si['ir'])}), and in Precious Metals and Agriculture every core strategy is net negative full-sample, "
+              f"while in Softs only Value is positive (IR {I(st('softs', 'Value')['ir'])}). Skewness is the only sleeve with a positive full-sample IR in Precious Metals ({I(st('precious', 'Skewness')['ir'])}) and Agriculture ({I(st('agri', 'Skewness')['ir'])}), where it trims the loss but does not reverse it; in Softs it is the weakest sleeve ({I(st('softs', 'Skewness')['ir'])}) and lowers the portfolio IR (Equal Weight {I(st4('softs', 'EW PORT')['ir'])} to {I(se['ir'])}).")
     # Skewness
     sk_ir = {t: st(t, "Skewness")["ir"] for t in BUCKETS}
     sk_p = {t: per(t, "Skewness") for t in BUCKETS}
     neg_full = [t for t in BUCKETS if sk_ir[t] < 0]; neg_p1 = [t for t in BUCKETS if sk_p[t][0] < 0]; pos_p3 = [t for t in BUCKETS if sk_p[t][2] > 0]
-    chk(neg_full == ["metals"] and set(neg_p1) == {"metals", "petroleum", "ngl", "precious"}, f"Skewness P1 negative buckets {neg_p1}")
+    chk(neg_full == ["metals", "softs"] and set(neg_p1) == {"metals", "petroleum", "ngl", "precious", "softs"} and set(pos_p3) == {"petroleum", "pen", "ngl", "precious", "agri"}, f"Skewness by bucket: negative full {neg_full}, P1 negative {neg_p1}, P3 positive {pos_p3}")
     n_p1, n_p3 = len(neg_p1), len(pos_p3)
     pet_long = [legs("energy", p)["p3"]["long_pct"] for p in PRODUCTS["petroleum"]]
     chk(round(min(pet_long)) == 89 and round(max(pet_long)) == 100, "four oil products long on 89% to 100% of P3 days")
     bs = bystyle(); bS = bench_corr(bs["Skewness"])
     ttf_long = legs("emissions", "TTF")["full"]["long_pct"]
-    nw = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
-    kf.append(f"Skewness is a different kind of premium from the other four. It is positive in {nw[len(BUCKETS) - len(neg_full)]} of the six buckets (Petroleum, Gas and Emissions, NGL, Precious Metals and Agriculture) and negative in Metals, it is negative in P1 in {nw[n_p1]} buckets and positive in P3 in {nw[n_p3]}. "
-              f"Its gains in Petroleum, NGL and Precious Metals are largely long positions held after crashes (the four oil products were long on {min(pet_long):.0f}% to {max(pet_long):.0f}% of P3 days), consistent with its {N(bS['Commodity Index'])} correlation with a passive commodity index in the six-bucket book, unlike Momentum, Carry and Carry-Momentum. "
+    nw = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven"}
+    kf.append(f"Skewness is a different kind of premium from the other four. It is positive in {nw[len(BUCKETS) - len(neg_full)]} of the seven buckets (Petroleum, Gas and Emissions, NGL, Precious Metals and Agriculture) and negative in Metals and Softs, it is negative in P1 in {nw[n_p1]} buckets and positive in P3 in {nw[n_p3]}. "
+              f"Its gains in Petroleum, NGL and Precious Metals are largely long positions held after crashes (the four oil products were long on {min(pet_long):.0f}% to {max(pet_long):.0f}% of P3 days), consistent with its {N(bS['Commodity Index'])} correlation with a passive commodity index in the seven-bucket book, unlike Momentum, Carry and Carry-Momentum. "
               f"Gas and Emissions is the exception to the long bias: Skewness is long on only {ttf_long:.0f}% of TTF days and earns its gain on the short side.")
     # pairs
     c8 = corr8(); B, F = cross8()
-    best, b2 = F["best"], F["b2"]; ew, iv = F["ew"], F["iv"]
-    ps_ = c8["pairs"]
+    best, b2 = F["best"], F["b2"]; best_iv = F["best_iv"]; ew, iv = F["ew"], F["iv"]
     cx = corr_cross("EW PORT")
+    chk(best_iv["name"] == b2["name"] == "Gas and Emissions-NGL", "Gas and Emissions-NGL is second under Equal Weight and first under Inverse Vol")
     kf.append(f"Petroleum-NGL is the most correlated pair of buckets for all seven series types (EW PORT correlation {U(cx.loc['petroleum', 'ngl'])}); Gas and Emissions-NGL ({U(cx.loc['pen', 'ngl'])}), Petroleum-Gas and Emissions ({U(cx.loc['petroleum', 'pen'])}) and Metals-Precious Metals ({U(cx.loc['metals', 'precious'])}) follow, and no other pair exceeds 0.08. "
-              f"Yet standalone Petroleum-NGL is the best-performing of the fifteen pairs (Equal Weight IR {I(best['ew']['ir'])}, Inverse Vol IR {I(best['iv']['ir'])}), proving correlation and performance are separate questions.")
-    kf.append(f"The cross-commodity portfolio (each strategy equal-weighted across the six buckets, then the five strategies combined) delivers Equal Weight IR {I(ew['ir'])} and Inverse Vol IR {I(iv['ir'])} at a volatility of {V(ew['vol'])} and {V(iv['vol'])}, and is positive in every period under both constructions. "
+              f"Yet standalone Petroleum-NGL is the best-performing of the twenty-one pairs under Equal Weight (IR {I(best['ew']['ir'])}, Inverse Vol IR {I(best['iv']['ir'])}) and second under Inverse Vol, behind Gas and Emissions-NGL ({I(best_iv['iv']['ir'])}), proving correlation and performance are separate questions.")
+    kf.append(f"The cross-commodity portfolio (each strategy equal-weighted across the seven buckets, then the five strategies combined) delivers Equal Weight IR {I(ew['ir'])} and Inverse Vol IR {I(iv['ir'])} at a volatility of {V(ew['vol'])} and {V(iv['vol'])}, and is positive in every period under both constructions. "
               f"It is negatively correlated with equity (Equal Weight {N(F['bE']['Equity'])}, Inverse Vol {N(F['bI']['Equity'])}) and a traditional 60/40 portfolio ({N(F['bE']['60/40 Portfolio'])}, {N(F['bI']['60/40 Portfolio'])}), but with Skewness included it is positively correlated with a passive commodity index ({N(F['bE']['Commodity Index'])}, {N(F['bI']['Commodity Index'])}; {N(F['b4E']['Commodity Index'])} and {N(F['b4I']['Commodity Index'])} without Skewness), so it diversifies equity and bonds but is no longer free of commodity beta.")
-    kf.append(f"Diversifying across all six buckets lowers volatility but not risk-adjusted return: the Petroleum-NGL and Gas and Emissions-NGL pairs earn more per unit of risk (IR {I(best['ew']['ir'])} and {I(best['iv']['ir'])}; {I(b2['ew']['ir'])} and {I(b2['iv']['ir'])}) than the six-bucket book (IR {I(ew['ir'])} and {I(iv['ir'])}), at about {V(best['ew']['vol'])} volatility against {V(ew['vol'])}, "
-              f"because the extra diversification comes from Metals, Precious Metals and Agriculture, where the core signals earn little or nothing.")
+    kf.append(f"Diversifying across all seven buckets lowers volatility but not risk-adjusted return: the Petroleum-NGL and Gas and Emissions-NGL pairs earn more per unit of risk (IR {I(best['ew']['ir'])} and {I(best['iv']['ir'])}; {I(b2['ew']['ir'])} and {I(b2['iv']['ir'])}) than the seven-bucket book (IR {I(ew['ir'])} and {I(iv['ir'])}), at about {V(best['ew']['vol'])} volatility against {V(ew['vol'])}, "
+              f"because the extra diversification comes from Metals, Precious Metals, Agriculture and Softs, where the core signals earn little or nothing.")
     chk(len(kf) == 9, "nine key findings")
     return kf
 
@@ -65,34 +78,38 @@ def liquidity_paragraph():
     liq = pd.read_csv(os.path.join(REPO, "Analysis", "Liquidity_Cal2025_results.csv")).set_index("product")
     pl = pd.read_csv(os.path.join(REPO, "Analysis", "Power_Liquidity_Cal2025_results.csv")).set_index("product")
     grp = {"Metals": ["Copper", "Aluminium", "Zinc", "Lead"], "Petroleum": ["Brent", "WTI", "HeatingOil", "RBOB"], "Gas and Emissions": ["NatGas", "TTF", "UKGas", "EUA"], "Precious Metals": ["Gold", "Silver", "Platinum", "Palladium"],
-           "NGL": ["Propane", "Butane", "Ethane", "Naphtha"], "Agriculture": ["Soybean", "Coffee", "Corn", "SoybeanOil", "Wheat", "Sugar"]}
+           "NGL": ["Propane", "Butane", "Ethane", "Naphtha", "NatGasoline"], "Agriculture": ["Soybean", "Corn", "Wheat", "LiveCattle"], "Softs": ["Sugar", "Cocoa", "Coffee", "Cotton"]}
     pw_ = ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak"]
     prod = [p for g in grp.values() for p in g]
-    chk(len(prod) == 26 and len(pw_) == 5, "26 bucket products and 5 Power series")
+    chk(len(prod) == 29 and len(pw_) == 5, "29 bucket products and 5 Power series")
     x = liq["x_strip"]; L = liq["L_strip"]; xp = pl["x_strip"]; Lp = pl["L_strip"]
     allx = pd.concat([x.loc[prod + ["SingaporeGasoil"]], xp])
     chk(allx.idxmax() == "Brent" and allx.idxmin() == "MISO_OffPeak", "Brent most liquid, MISO OffPeak least liquid of the table")
-    chk(len(allx) == 33, "33 products in the table")
-    chk(x.loc[prod].idxmin() == "Naphtha", "Naphtha is the least liquid product of the six research buckets")
+    chk(len(allx) == 36, "36 products in the table")
+    chk(x.loc[prod].idxmin() == "Naphtha", "Naphtha is the least liquid product of the seven research buckets")
     chk(3.5 < np.log10(float(allx.max() / allx.min())) < 4.5, "four orders of magnitude between Brent and MISO OffPeak")
-    allm = pd.concat([x, xp]); chk(len(allm) == 36 and allm.idxmin() == "Isobutane" and float(allm.min()) < float(allx.min()), "Isobutane is the least liquid of the 36 products measured and lies outside the table")
+    allm = pd.concat([x, xp]); chk(len(allm) == 40 and allm.idxmin() == "Isobutane" and float(allm.min()) < float(allx.min()), "Isobutane is the least liquid of the 40 products measured and lies outside the table")
     sp = {g: (x.loc[ps].max() / x.loc[ps].min()) for g, ps in grp.items()}
     nn = [p for p in prod if p not in grp["NGL"]]
-    chk(x.loc[nn].idxmin() == "Lead", "Lead is the least liquid product outside NGL and US Power")
-    chk(float(xp.loc[pw_].max()) < float(x["Lead"]) and float(xp.loc[pw_].min()) > float(x.loc[grp["NGL"]].min()), "US Power sits below Lead and above Naphtha in turnover")
-    Lmax_nn = float(L.loc[nn].max()); chk(round(Lmax_nn, 2) == 0.05, "at most 0.05 days outside NGL and Power")
+    chk(x.loc[nn].idxmin() == "Cotton" and float(x["Cotton"]) < float(x["Lead"]), "Cotton is the least liquid product outside NGL and US Power (Lead the second)")
+    chk(float(xp.loc[pw_].max()) < float(x["Cotton"]) and float(xp.loc[pw_].min()) > float(x.loc[grp["NGL"]].min()), "US Power sits below Cotton and above Naphtha in turnover")
+    Lmax_nn = float(L.loc[nn].max()); chk(round(Lmax_nn, 2) == 0.06, "at most 0.06 days outside NGL and Power")
     sp_pw = float(xp.loc[pw_].max() / xp.loc[pw_].min()); chk(round(sp_pw, 1) == 46.8, "Power spread 46.8-fold")
+    r_prop = float(x["Propane"] / x["Cotton"]); r_pjm = float(xp["PJM_Peak"] / x["Cotton"])
+    chk(0.28 < r_prop < 0.35 and 0.6 < r_pjm < 0.7 and xp["ERCOT_OffPeak"] < x["Ethane"] and xp["MISO_Peak"] < x["Ethane"], "Propane about 31% of Cotton; PJM Peak about 64%; the two low Power series below Ethane")
+    chk(sp["Agriculture"] < sp["Petroleum"] < sp["Softs"] < sp["Metals"] < sp["Gas and Emissions"] < sp["Precious Metals"], "spreads order: Agriculture, Petroleum, Softs, Metals, Gas and Emissions, Precious Metals")
+    chk(float(x["NatGasoline"]) > float(x["Ethane"]) > float(x["Naphtha"]) and float(x["NatGasoline"]) < float(x["Butane"]), "Natural Gasoline between Butane and Ethane in turnover")
     f1 = lambda v: f"{v:,.1f}"
-    s = (f"Results across 33 products. Dollar risk turnover ranges from USD {f1(x['Brent'])} million per day for Brent, the most liquid, to USD {xp['MISO_OffPeak']:.3f} million for MISO OffPeak, the least liquid and the series excluded from the Power bucket on that ground, a span of four orders of magnitude. Naphtha (USD {x['Naphtha']:.3f} million) is the least liquid product inside the six research buckets. "
-         f"Within buckets, the spread between the most and least liquid products is narrow in Agriculture ({sp['Agriculture']:.1f}-fold; Soybean {f1(x['Soybean'])} to Sugar {f1(x['Sugar'])}) and Petroleum ({sp['Petroleum']:.1f}-fold; Brent {f1(x['Brent'])} to RBOB {f1(x['RBOB'])}), "
+    s = (f"Results across 36 products. Dollar risk turnover ranges from USD {f1(x['Brent'])} million per day for Brent, the most liquid, to USD {xp['MISO_OffPeak']:.3f} million for MISO OffPeak, the least liquid and the series excluded from the Power bucket on that ground, a span of four orders of magnitude. Naphtha (USD {x['Naphtha']:.3f} million) is the least liquid product inside the seven research buckets. "
+         f"Within buckets, the spread between the most and least liquid products is narrow in Agriculture ({sp['Agriculture']:.1f}-fold; Soybean {f1(x['Soybean'])} to Wheat {f1(x['Wheat'])}), Petroleum ({sp['Petroleum']:.1f}-fold; Brent {f1(x['Brent'])} to RBOB {f1(x['RBOB'])}) and Softs ({sp['Softs']:.1f}-fold; Coffee {f1(x['Coffee'])} to Cotton {f1(x['Cotton'])}), "
          f"intermediate in Metals ({sp['Metals']:.1f}-fold; Copper {f1(x['Copper'])} to Lead {f1(x['Lead'])}) and in Gas and Emissions ({sp['Gas and Emissions']:.1f}-fold; Henry Hub {f1(x['NatGas'])} to UK Gas {f1(x['UKGas'])}), and wide in Precious Metals ({sp['Precious Metals']:.1f}-fold; Gold {f1(x['Gold'])} to Palladium {f1(x['Palladium'])}). "
-         f"NGL is the outlier, with a spread of {sp['NGL']:,.1f}-fold (Propane {x['Propane']:.2f} to Naphtha {x['Naphtha']:.3f}) and a level far below the other buckets: Propane, the most liquid NGL product, trades about one quarter of the risk turnover of Lead ({f1(x['Lead'])}), the least liquid product outside NGL and US Power. "
-         f"The US Power series lie between the two groups: PJM Peak ({xp['PJM_Peak']:.2f}) trades about half the risk turnover of Lead, ERCOT Peak and PJM OffPeak {xp['ERCOT_Peak']:.2f} and {xp['PJM_OffPeak']:.2f}, and ERCOT OffPeak and MISO Peak {xp['ERCOT_OffPeak']:.2f} and {xp['MISO_Peak']:.2f}, below Ethane ({x['Ethane']:.2f}); the spread across the five series is {sp_pw:.1f}-fold. "
+         f"NGL is the outlier, with a spread of {sp['NGL']:,.1f}-fold (Propane {x['Propane']:.2f} to Naphtha {x['Naphtha']:.3f}) and a level far below the other buckets: Propane, the most liquid NGL product, trades about {r_prop * 100:.0f}% of the risk turnover of Cotton ({f1(x['Cotton'])}), the least liquid product outside NGL and US Power, and Natural Gasoline ({x['NatGasoline']:.2f}) sits between Butane ({x['Butane']:.2f}) and Ethane ({x['Ethane']:.2f}). "
+         f"The US Power series lie between the two groups: PJM Peak ({xp['PJM_Peak']:.2f}) trades about {r_pjm * 100:.0f}% of the risk turnover of Cotton, ERCOT Peak and PJM OffPeak {xp['ERCOT_Peak']:.2f} and {xp['PJM_OffPeak']:.2f}, and ERCOT OffPeak and MISO Peak {xp['ERCOT_OffPeak']:.2f} and {xp['MISO_Peak']:.2f}, below Ethane ({x['Ethane']:.2f}); the spread across the five series is {sp_pw:.1f}-fold. "
          f"In terms of the reference position, a USD 1 million one-sigma position equals at most {Lmax_nn:.2f} days of market risk turnover in any product outside NGL and US Power, against {Lp['PJM_Peak']:.2f}, {Lp['ERCOT_Peak']:.2f}, {Lp['PJM_OffPeak']:.2f}, {Lp['ERCOT_OffPeak']:.1f} and {Lp['MISO_Peak']:.1f} days in PJM Peak, ERCOT Peak, PJM OffPeak, ERCOT OffPeak and MISO Peak, "
-         f"and {L['Propane']:.2f} days in Propane, {L['Ethane']:.1f} in Ethane and {L['Naphtha']:.1f} in Naphtha. "
+         f"and {L['Propane']:.2f} days in Propane, {L['NatGasoline']:.2f} in Natural Gasoline, {L['Ethane']:.1f} in Ethane and {L['Naphtha']:.1f} in Naphtha. "
          f"Naphtha averages {liq.loc['Naphtha', 'adv_strip']:.0f} lots per day on the Bloomberg series and prints on {liq.loc['Naphtha', 'share_days_print'] * 100:.0f}% of days, so it cannot absorb a position of meaningful size. "
-         f"Isobutane, outside the table, is the least liquid of the 36 products measured: its 12-month strip averages {liq.loc['Isobutane', 'adv_strip']:.0f} lots per day and prints on {liq.loc['Isobutane', 'share_days_print'] * 100:.0f}% of days, so a USD 1 million one-sigma position equals {L['Isobutane']:.0f} days of its risk turnover. It is removed from every bucket, portfolio and table of this report for that reason. "
+         f"Isobutane, outside the table, is the least liquid of the 40 products measured: its 12-month strip averages {liq.loc['Isobutane', 'adv_strip']:.0f} lots per day and prints on {liq.loc['Isobutane', 'share_days_print'] * 100:.0f}% of days, so a USD 1 million one-sigma position equals {L['Isobutane']:.0f} days of its risk turnover. It is removed from every bucket, portfolio and table of this report for that reason. "
          f"The same capacity limit applies to the remaining thin series. Returns in NGL and US Power may not be capturable at a scale comparable to that of the other buckets: ERCOT OffPeak and MISO Peak need {Lp['ERCOT_OffPeak']:.1f} days of market turnover per USD 1 million of one-sigma risk. "
          f"NGL volumes refer to CME only, and Naphtha volume is the Bloomberg series, a partial view of the swap market, so both are lower bounds. The product-level results are reported in Table A26.")
-    chk(0.22 < x["Propane"] / x["Lead"] < 0.27 and 0.45 < xp["PJM_Peak"] / x["Lead"] < 0.55 and xp["ERCOT_OffPeak"] < x["Ethane"] and xp["MISO_Peak"] < x["Ethane"], "Propane about one quarter of Lead; PJM Peak about half; the two low Power series below Ethane")
+    chk(0.28 < x["Propane"] / x["Cotton"] < 0.35, "Propane share of Cotton")
     return s

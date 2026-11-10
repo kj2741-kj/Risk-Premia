@@ -27,22 +27,23 @@ CUTOFF = pd.Timestamp(TAGS[TAG]["cutoff"])
 TC = 5
 SKEW_WINDOW, SKEW_SHIFT_N = 252, 1
 VALUE_MIN = 504
-cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "emissions", "ngl", "naphtha", "precious", "agri", "power")}
+cfgs = {a: importlib.import_module(a) for a in ("metals", "energy", "emissions", "ngl", "naphtha", "mmb", "precious", "agri", "softs", "power")}
 import rolling_continuous as rc
 from carry_zsum import carry_z, carry_slope_change, summed_signal
 OUT.mkdir(parents=True, exist_ok=True)
 
 LONG = {"precious": {"Gold": "F7", "Silver": "F6", "Platinum": "F5", "Palladium": "F5"},
-        "agri": {"Corn": "F6", "Wheat": "F6", "Soybean": "F8", "SoybeanOil": "F8", "Coffee": "F6", "Sugar": "F5"}}
+        "agri": {"Corn": "F6", "Wheat": "F6", "Soybean": "F7", "LiveCattle": "F7"},                       # user decision 2026-11-10 (F1-F2 short pair for all)
+        "softs": {"Sugar": "F6", "Cocoa": "F6", "Coffee": "F6", "Cotton": "F6"}}
 PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "emissions": ["EUA", "TTF", "UKGas"],
-            "ngl": ["Ethane", "Propane", "Butane"], "naphtha": ["Naphtha"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"]),
+            "ngl": ["Ethane", "Propane", "Butane"], "naphtha": ["Naphtha"], "mmb": ["NatGasoline"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"]), "softs": list(LONG["softs"]),
             "power": ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]}      # US Power: the five series with Calendar-2025 L below 5 days (MISO OffPeak, 9.9 days, is out)
 
 
 def pairs_for(a, p):
     if a in ("metals", "energy"):
         return [("F1", "F3"), ("F1", "F13")]
-    if a in ("emissions", "naphtha", "power"):
+    if a in ("emissions", "naphtha", "mmb", "power"):
         return cfgs[a].carry_pairs(p)
     if a == "ngl":
         return [("F2", "F4"), ("F2", "F14")]

@@ -64,7 +64,7 @@ ac = {}
 for k, (label, members) in BUCKETS.items():
     ac[k] = {s: (combine_cross_asset([nets[m][s] for m in members]) if len(members) > 1 else nets[members[0]][s]) for s in OLD + ("Skewness",)}
     groups[label] = ac[k]
-groups["By Style, six buckets"] = {s: combine_returns(align([ac[k][s] for k in KEYS]), "equal_weight") for s in OLD + ("Skewness",)}
+groups["By Style, seven buckets"] = {s: combine_returns(align([ac[k][s] for k in KEYS]), "equal_weight") for s in OLD + ("Skewness",)}
 
 f = lambda v, n=2: "" if v is None or pd.isna(v) else f"{v:.{n}f}"
 cls = lambda v: "" if v is None or pd.isna(v) else (" pos" if v > 0.3 else (" neg" if v < -0.1 else ""))
@@ -106,7 +106,7 @@ method = ("<p>VTI (Kirby and Ostdiek 2012; Fernandez-Perez, Fuertes and Miffre 2
           f"to {CFG['long']} in three periods; the sleeves are the Final dashboard's, with Skewness as a possible fifth.</p>")
 html = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>VTI Research</title>"
         f"<style>{CSS}</style></head><body><div class='wrap'><h1>Volatility-timing integration (VTI): research page</h1><p class='note'>Separate from the Final dashboard. "
-        f"Six buckets, data to {CFG['cutoff']}. Generated 2026-10-31.</p><h2>Method</h2>{method}<h2>Performance: EW, Inverse Vol and VTI</h2>{table(H, perf)}"
+        f"Seven buckets, data to {CFG['cutoff']}. Generated 2026-10-31.</p><h2>Method</h2>{method}<h2>Performance: EW, Inverse Vol and VTI</h2>{table(H, perf)}"
         f"<h2>Average VTI weights since 2012</h2><p class='note'>Mean weight on each style over all days from 1 Jan 2012; the last column is the share of days on the equal-weight fallback.</p>{table(WH, wrows)}"
         f"</div></body></html>")
 _out = Path(f"Analysis/VTI_Research_{TAG}.html")

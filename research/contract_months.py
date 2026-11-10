@@ -19,8 +19,8 @@ def _contracts(asset: str, product: str):
     import importlib
     if asset == "precious":
         cfgmod = importlib.import_module("precious"); code = cfgmod.METAL_CODES[product]; cfg = rc.PRECIOUS_CONFIG[code]; f = rc.PRECIOUS_CALENDAR_FILE
-    elif asset == "agri":
-        cfgmod = importlib.import_module("agri"); code = cfgmod.AGRI_CODES[product]; cfg = rc.AGRI_BBG_CONFIG[code]; f = rc.AGRI_CALENDAR_FILE_BBG
+    elif asset in ("agri", "softs"):   # 2026-11-10: Agriculture and Softs both read the 11-Nov calendar (AGRI1110_CONFIG)
+        cfgmod = importlib.import_module("agri"); code = cfgmod.AGRI_CODES[product]; cfg = rc.AGRI1110_CONFIG[code]; f = rc.AGRI1110_CALENDAR_FILE
     else:
         raise ValueError(asset)
     cal = pd.read_excel(f, sheet_name=cfg["calendar_sheet"])

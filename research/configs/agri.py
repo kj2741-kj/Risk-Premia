@@ -1,51 +1,28 @@
 """
 research/configs/agri.py
 ===========================
-Ex-ante config for the Agriculture asset class. UPDATED 2026-10-11 to six
-products (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar No.11), the book in
-Analysis/Final_Research_Dashboard.html, on the Bloomberg-matched roll calendar
-(Agri_Rolling_Calendar_bloomberg_matched.xlsx, which also supplies a clean Sugar
-calendar). Carry default is F1-F2 (see below). The text below describes the
-original 14-product build of 2026-09-29 and is kept for history. Built 2026-09-29,
-mirroring research/configs/metals.py's structure -- same engine
-(rolling_continuous.get_metal_rolling_f1 / ratio_continuous, both reused
-unchanged, zero new roll-adjustment logic written for this asset class).
+Agriculture bucket, REDEFINED 2026-11-10: Corn, Wheat (CBOT SRW), Soybean, Live Cattle. The old six-product Agriculture (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar, decided 2026-10-11)
+was split in two: Coffee and Sugar moved to the Softs bucket (research/configs/softs.py: Sugar, Cocoa, Coffee, Cotton) and Soybean Oil was dropped; Live Cattle (Agriculture) and Cocoa and
+Cotton (Softs) are new. This module also holds the loaders of all eight products (AGRI_CODES), which softs.py reuses, so the two buckets cannot drift apart.
 
-Data source: data/Prices_0924/ (2026-09-24 Bloomberg pull), NOT data/06-30/
-like the other 4 asset classes -- this is a separate, newer data drop.
-  - Prices: Agriculture_Futures_Updated.xlsx, simple single-header-row
-    format, f1_col=1/f2_col=2/data_start_row=2 -- verified directly against
-    the raw sheet layout, same convention as Metals/Energy/Precious (no
-    NGL-style front-month skip).
-  - Calendar: Agri_Rolling_Calendar.xlsx, a CONVERTED workbook (not the raw
-    Prices_0924 drop) -- reshaped from Expiry_Calendars_Updated_2.xlsx's
-    consolidated "Agriculture" sheet into the one-sheet-per-product schema
-    scripts/rolling_continuous.py's load_metal_calendar() expects. See
-    scripts/rolling_continuous.py's AGRI_CONFIG comment block and the
-    project_agri_expiry_calendar_source_errors memory for the two source
-    data errors found and handled: one bad Cocoa row dropped (contract J23,
-    a Bloomberg ticker-lookup collision), Sugar No.11 excluded entirely
-    (confirmed systemic date corruption). Sugar is NOT in this file's
-    PRODUCTS list -- it has no working calendar sheet to build a
-    continuous series from, not just a dashboard-display exclusion like
-    Energy's Singapore Gasoil/Fuel Oil.
+DATA (2026-11-10 Bloomberg drop, scripts/new_products_1110.py): Agri_Softs_Futures_1110.xlsx + Agri_Softs_Calendar_1110.xlsx in the price folder (RP_PRICES_DIR). For the five products that
+existed before (Corn, Wheat, Soybean, Coffee, Sugar) the prices equal the old Agriculture_Futures_Updated.xlsx on every overlapping cell (except the 2026-10-29 row, an intraday print in the old file,
+and Soybean F18) and the calendar's last trade dates equal the validated Bloomberg-matched calendar on every overlapping contract, so their rolling series are unchanged (checked, see ENGINE_CHANGELOG).
+The drop is deeper (Corn F13, Wheat F14, Soybean F18, Cotton F15 instead of F6-F8 history) and adds Live Cattle, Cocoa and Cotton on a clean calendar.
 
-Product depth varies 6-12 tenors across this asset class (Oats/Rough
-Rice/Cotton to F6, Corn/Wheat/Soybean-complex/livestock to F8, Coffee/
-Cocoa to F10), unlike Metals' uniform F1-F27 -- there is no single
-Carry tenor pair that's valid for every product here the way F1-F3/F1-F13
-works for Metals. CARRY_TENOR_PAIRS is left EMPTY below, pending a
-per-product-family liquidity/depth study (user's explicit decision,
-2026-09-29: "we decide carry tenor pairs later on, leave that as
-pending for now"). Momentum/Value parameters ARE locked already, since
-those are asset-independent engine conventions (identical across all 4
-existing asset classes, not re-derived per asset) -- see
-feedback_risk_premia_shift_n1_locked memory.
+ROLL: unchanged engine, 5th trading day of the month in which each contract's last trade date falls (ROLL_RULE below); the day after the last trade date is the bridge. Verified for every product
+that Bloomberg's generic F1 switches contract on exactly the day after the calendar's last trade date (aggregate shift test, ENGINE_CHANGELOG 2026-11-10).
 
-Nothing here is hardcoded into the shared engine (research/engine.py,
-regimes.py, stats.py, common_engine.py) -- this file is the ONLY place
-Agri-specific values live, same discipline as every other asset class's
-config.
+CARRY TENOR PAIRS (user decision 2026-11-10): F1-F2 short pair for every product; long pair F1-F6 for Corn, Wheat, Sugar, Cocoa, Coffee and Cotton, F1-F7 for Live Cattle and Soybean
+(CARRY_LONG_FAR_BY_PRODUCT). Spans in months: F1-F2 is 2-3 (Corn, Wheat, Cocoa, Coffee, Cotton), 1-2 (Soybean), 2 (Live Cattle), 2-5 (Sugar); F1-F6 is exactly 12 for Corn, Wheat, Cocoa, Coffee, Cotton
+and 14-17 for Sugar; F1-F7 is exactly 12 for Live Cattle and 10-11 for Soybean (shown to and accepted by the user together with the volumes of each leg).
+Below is the older text of the 14-product build, kept for history.
+
+Original docstring (2026-09-29, 14 products):
+Ex-ante config for the Agriculture asset class, mirroring research/configs/metals.py's structure -- same engine
+(rolling_continuous.get_metal_rolling_f1 / ratio_continuous, both reused unchanged, zero new roll-adjustment logic written for this asset class).
+Momentum/Value parameters are asset-independent engine conventions (identical across all asset classes, see feedback_risk_premia_shift_n1_locked).
+Nothing here is hardcoded into the shared engine (research/engine.py, regimes.py, stats.py, common_engine.py): this file is the ONLY place Agri-specific values live.
 """
 
 from __future__ import annotations
@@ -63,28 +40,26 @@ _SCRIPTS_DIR = os.path.join(_REPO_ROOT, "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
-from rolling_continuous import (apply_data_fixes, AGRI_CALENDAR_FILE_BBG, AGRI_BBG_CONFIG as AGRI_CONFIG,  # noqa: E402
-                                 AGRI_FUTURES_FILE, get_metal_rolling_f1,
+from rolling_continuous import (apply_data_fixes, AGRI1110_CALENDAR_FILE, AGRI1110_CONFIG as AGRI_CONFIG,  # noqa: E402
+                                 AGRI1110_FUTURES_FILE, get_metal_rolling_f1,
                                  reanchor_f1_continuous)
 from ratio_continuous import get_metal_rolling_f1_ratio, reanchor_f1_continuous_ratio  # noqa: E402
 
 ASSET_CLASS = "Agriculture"
 
-# Six products only (user's decision 2026-10-11, matching Analysis/Final_Research_Dashboard.html's
-# Agriculture book). The other nine (Oats, Rough Rice, Soybean Meal, Cocoa, Orange Juice, Cotton,
-# Feeder Cattle, Live Cattle, Lean Hogs) are dropped from this config; their data and the original
-# 14-product AGRI_CONFIG / Agri_Rolling_Calendar.xlsx still exist in scripts/rolling_continuous.py.
-PRODUCTS = ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]
+# Four products in the Agriculture bucket (user's decision 2026-11-10). AGRI_CODES also lists the Softs products: softs.py imports them from here.
+PRODUCTS = ["Corn", "Wheat", "Soybean", "LiveCattle"]
+SOFTS_PRODUCTS = ["Sugar", "Cocoa", "Coffee", "Cotton"]
 
 AGRI_CODES = {
-    "Corn": "C", "Wheat": "W", "Soybean": "S", "SoybeanOil": "BO",
-    "Coffee": "KC", "Sugar": "SB",
+    "Corn": "C", "Wheat": "W", "Soybean": "S", "LiveCattle": "LC",
+    "Sugar": "SB", "Cocoa": "CC", "Coffee": "KC", "Cotton": "CT",
 }
 
 SHEET_NAMES = {product: AGRI_CONFIG[code]["price_sheet"] for product, code in AGRI_CODES.items()}
 
-CURVE_FILE = AGRI_FUTURES_FILE
-CALENDAR_FILE = AGRI_CALENDAR_FILE_BBG  # Bloomberg-matched, 6 products incl. Sugar
+CURVE_FILE = AGRI1110_FUTURES_FILE
+CALENDAR_FILE = AGRI1110_CALENDAR_FILE
 
 # Standardized analysis start (matches Metals/Energy/Precious's own 2026-07-23
 # decision to use 2006 uniformly rather than each file's true earliest date --
@@ -98,9 +73,8 @@ ANALYSIS_START = "2006-01-01"
 MOMENTUM_PAIRS: tuple[tuple[int, int], ...] = ((1, 20), (5, 60), (20, 250))
 MOMENTUM_SHIFT_N = 1
 
-# Carry: F1-F2 only, the pair locked in Analysis/Final_Research_Dashboard.html ("Agriculture: F1-F2
-# only, no long pair defined yet"). Set 2026-10-11 as the DEFAULT; the Streamlit Carry and Portfolio
-# tabs let the user pick any other (near, far) pair. All six products have at least F8 of depth.
+# Carry: F1-F2 is the short pair of every product (CARRY_TENOR_PAIRS, also what the Streamlit Carry tab starts on); each product's long pair comes from carry_pairs() below
+# (user decision 2026-11-10). The Streamlit Carry and Portfolio tabs let the user pick any other (near, far) pair.
 CARRY_TENOR_PAIRS: list[tuple[str, str]] = [("F1", "F2")]
 CARRY_ZSCORE_WINDOW = 252
 CARRY_SHIFT_N = 1
@@ -116,7 +90,8 @@ ROLL_N = 5
 # each product's contract cycle: Corn/Wheat/Coffee five contracts a year (F6), Soybean seven (F8), Sugar four (F5), Soybean Oil eight
 # (F8 is only 10-11 months: its price file stops at F8). CARRY_TENOR_PAIRS holds the uniform SHORT pair (also what the Streamlit app
 # shows); the long pairs come from carry_pairs(product). Agriculture has had no liquidity study.
-CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"Corn": "F6", "Wheat": "F6", "Soybean": "F8", "SoybeanOil": "F8", "Coffee": "F6", "Sugar": "F5"}
+CARRY_LONG_FAR_BY_PRODUCT: dict[str, str] = {"Corn": "F6", "Wheat": "F6", "Soybean": "F7", "LiveCattle": "F7",
+                                              "Sugar": "F6", "Cocoa": "F6", "Coffee": "F6", "Cotton": "F6"}   # user decision 2026-11-10
 
 
 def carry_pairs(product: str) -> list[tuple[str, str]]:
@@ -154,7 +129,7 @@ def load_curve(product: str) -> pd.DataFrame:
     data from row 2) used by Agriculture_Futures_Updated.xlsx -- same
     format as Metals_Futures_Curve_Updated.xlsx."""
     if product not in SHEET_NAMES:
-        raise ValueError(f"Unknown Agri product {product!r}; valid: {PRODUCTS}")
+        raise ValueError(f"Unknown Agri/Softs product {product!r}; valid: {list(AGRI_CODES)}")
     raw = pd.read_excel(CURVE_FILE, sheet_name=SHEET_NAMES[product], header=None, skiprows=2)
     dates = pd.to_datetime(raw[0], errors="coerce")
     n_tenors = raw.shape[1] - 1
@@ -171,7 +146,7 @@ def load_f1_series(product: str) -> pd.DataFrame:
     F1_continuous to the sliced window's first day per that function's own
     documented convention (cosmetic only, zero effect on PnL/Sharpe)."""
     if product not in AGRI_CODES:
-        raise ValueError(f"Unknown Agri product {product!r}; valid: {PRODUCTS}")
+        raise ValueError(f"Unknown Agri/Softs product {product!r}; valid: {list(AGRI_CODES)}")
     df = get_metal_rolling_f1(AGRI_CODES[product], futures_file=CURVE_FILE,
                                calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False,
                                roll_day=ROLL_N, roll_rule=ROLL_RULE)
@@ -186,7 +161,7 @@ def load_f1_series_logret(product: str) -> pd.DataFrame:
     additively-adjusted F1_continuous (fine for dollar PnL within a single
     product, not for combining log returns across products/asset classes)."""
     if product not in AGRI_CODES:
-        raise ValueError(f"Unknown Agri product {product!r}; valid: {PRODUCTS}")
+        raise ValueError(f"Unknown Agri/Softs product {product!r}; valid: {list(AGRI_CODES)}")
     df = get_metal_rolling_f1_ratio(AGRI_CODES[product], futures_file=CURVE_FILE,
                                      calendar_file=CALENDAR_FILE, config=AGRI_CONFIG, verbose=False,
                                roll_day=ROLL_N, roll_rule=ROLL_RULE)

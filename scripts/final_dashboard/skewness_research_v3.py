@@ -1,5 +1,5 @@
 """Skewness style (Fernandez-Perez, Fuertes and Miffre 2021, Table 1), time-series version, as a fifth sleeve -> Analysis/Skewness_Research_<tag>.html (2026-10-31 rebuild).
-Rebuilt for the new buckets (Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture) and the tag's data (0930: cut at 2026-09-30, 1029: latest data), from
+Rebuilt for the new buckets (Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture, Softs) and the tag's data (0930: cut at 2026-09-30, 1029: latest data), from
 outputs/final_dashboard_<tag>/products_nets.pkl, which already holds the Skewness sleeve of every product (compute_products_v3.py: minus the sign of the 252-observation rolling
 skewness of the continuous series' daily log returns, +1 if negative, -1 if positive, the same two-day execution lag, 5 bps costs with the roll-day charge, 504-observation Value).
 Aggregation exactly as the Final dashboard: products equal-weighted on common dates inside a bucket, sleeves combined by EW and Inverse Vol (63 days, lagged one day).
@@ -72,7 +72,7 @@ def perf_rows(series_dict):
 H = ["Series", "Return %", "Vol %", "MDD %"] + [f"IR {w}" for w in W4]
 sec = []
 sec.append(f"<h2>Skewness sleeve by bucket</h2><p class='note'>Equal-weighted across the bucket's products; Return, Vol and MDD are full-sample (2012 to {CFG['long']}), IR by period.</p>"
-           + table(H, perf_rows({BUCKETS[k][0]: acs[k]["styles"]["Skewness"] for k in KEYS} | {"Cross-bucket EW (six buckets)": book["sty"]["Skewness"]})))
+           + table(H, perf_rows({BUCKETS[k][0]: acs[k]["styles"]["Skewness"] for k in KEYS} | {"Cross-bucket EW (seven buckets)": book["sty"]["Skewness"]})))
 rows = []
 for k, (label, members) in BUCKETS.items():
     for a, p in members:
@@ -87,15 +87,15 @@ for k in KEYS:
 sec.append("<h2>Does a fifth sleeve help? Bucket portfolios</h2><p class='note'>EW PORT and Inverse Vol of the four existing sleeves against the same with Skewness added.</p>" + table(H, perf_rows(cmp_rows)))
 bk = {}
 for nm, key in (("EW 4 styles", "ew4"), ("EW 5 styles (+ Skewness)", "ew5"), ("Inverse Vol 4 styles", "iv4"), ("Inverse Vol 5 styles", "iv5")):
-    bk[f"By Style, six buckets: {nm}"] = book[key]
-sec.append("<h2>Does a fifth style help? By-Style book</h2><p class='note'>Each style equal-weighted across the six buckets, then combined by EW or Inverse Vol (as the By Style tab of the dashboard).</p>" + table(H, perf_rows(bk)))
+    bk[f"By Style, seven buckets: {nm}"] = book[key]
+sec.append("<h2>Does a fifth style help? By-Style book</h2><p class='note'>Each style equal-weighted across the seven buckets, then combined by EW or Inverse Vol (as the By Style tab of the dashboard).</p>" + table(H, perf_rows(bk)))
 names = list(OLD)
 crow = []
 for k in KEYS:
     df = pd.concat({s: acs[k]["styles"][s] for s in OLD + ("Skewness",)}, axis=1).loc[START:].dropna()
     crow.append([BUCKETS[k][0]] + [f"{df['Skewness'].corr(df[s]):.2f}" for s in names])
 df = pd.concat(book["sty"], axis=1).loc[START:].dropna()
-crow.append(["Cross-bucket (six buckets)"] + [f"{df['Skewness'].corr(df[s]):.2f}" for s in names])
+crow.append(["Cross-bucket (seven buckets)"] + [f"{df['Skewness'].corr(df[s]):.2f}" for s in names])
 sec.append("<h2>Correlation of Skewness with the other sleeves</h2><p class='note'>Pearson, daily net log returns from 2012-01-01.</p>" + table(["Bucket"] + names, crow))
 
 method = ("<p>Per product, each day: signal = minus the skewness of the continuous series' daily log returns over the past 252 observations. Position +1 when skewness "
@@ -103,10 +103,10 @@ method = ("<p>Per product, each day: signal = minus the skewness of the continuo
           "other sleeves: two-day execution lag, 5 bps round-trip costs plus the roll-day charge, roll-adjusted continuous series, 5th-trading-day-of-expiry-month roll. "
           f"Products equal-weighted within the bucket; portfolios by Equal Weight or Inverse Vol (trailing 63 days, lagged one day). Basis: the 2012-start dashboard "
           f"(Value needs 504 observations), reported from 1 Jan 2012 to {CFG['long']} in three periods. Buckets: Metals, Petroleum, Gas and Emissions (Henry Hub, TTF, UK Gas, EUA), "
-          "NGL, Precious, Agriculture. The paper's own version is cross-sectional (long/short sort across "
+          "NGL, Precious, Agriculture, Softs. The paper's own version is cross-sectional (long/short sort across "
           "contracts, held a month); this is the time-series version used by all our sleeves, so numbers are not comparable with the paper's.</p>")
 html = (f"<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>Skewness Research</title>"
-        f"<style>{PAGE_CSS}</style></head><body><div class='wrap'><h1>Skewness style: research page</h1><p class='note'>Separate from the Final dashboard. Six buckets, data to {CFG['cutoff']}. Generated 2026-10-31.</p>"
+        f"<style>{PAGE_CSS}</style></head><body><div class='wrap'><h1>Skewness style: research page</h1><p class='note'>Separate from the Final dashboard. Seven buckets, data to {CFG['cutoff']}. Generated 2026-10-31.</p>"
         f"<h2>Method</h2>{method}{''.join(sec)}</div></body></html>")
 out = Path(f"Analysis/Skewness_Research_{TAG}.html")
 out.write_text(html, encoding="utf8")

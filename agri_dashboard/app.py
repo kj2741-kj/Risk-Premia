@@ -1,25 +1,16 @@
 """
 Agriculture Dashboard - Stage 2
 ==================================
-Standalone Streamlit app, its own separate deployment. Six products only
-(Corn, Wheat, Soybean, Soybean Oil, Coffee C, Sugar No.11), the Agriculture
-book in Analysis/Final_Research_Dashboard.html. Momentum / Carry / Value /
-Comparison tabs plus a Portfolio tab, same format as the Metals, Energy,
-Precious Metals and NGL dashboards -- reuses the identical shared engine
-(common_engine.py, dashboard_portfolio_tab.py).
+Standalone Streamlit app, its own separate deployment. Four products (Corn, Wheat, Soybean, Live Cattle) since the 2026-11-10 split of the old six-product
+Agriculture book into Agriculture and Softs (Sugar, Cocoa, Coffee, Cotton; softs_dashboard/app.py). Momentum / Carry / Value / Comparison tabs plus a
+Portfolio tab, same format as the Metals, Petroleum, NGL and Precious dashboards -- reuses the identical shared engine (common_engine.py,
+dashboard_portfolio_tab.py).
 
-Data source: data/Prices_0924/ (2026-09-24 Bloomberg pull). Roll calendar:
-Agri_Rolling_Calendar_bloomberg_matched.xlsx (contract months Bloomberg's
-generic F1..Fn actually uses; F1 rebuilt from it matches Bloomberg 100%).
-This also supplies a clean Sugar calendar, so Sugar is back in.
+Data source: the 2026-11-10 Bloomberg drop, Agri_Softs_Futures_1110.xlsx + Agri_Softs_Calendar_1110.xlsx in the price folder (scripts/new_products_1110.py;
+AGRI1110_CONFIG in scripts/rolling_continuous.py). Corn, Wheat and Soybean are identical to the earlier files on every overlapping cell.
 
-Carry tenor pair: F1-F2 is the default (the pair locked in the final
-dashboard, "no long pair defined yet"). It is only a default: the Carry tab
-and the Portfolio tab both let the user pick any (Near, Far) pair for V1, V2
-and V3. The other nine products of the original 14-product build (Oats,
-Rough Rice, Soybean Meal, Cocoa, Orange Juice, Cotton, Feeder/Live Cattle,
-Lean Hogs) are dropped from this dashboard; their calendar and data still
-exist in scripts/rolling_continuous.py's AGRI_CONFIG.
+Carry tenor pairs (user decision 2026-11-10): F1-F2 short pair for every product, long pair F1-F6 (Corn, Wheat) and F1-F7 (Soybean, Live Cattle), used by the
+Portfolio tab (research/configs/agri.py carry_pairs). The Carry tab lets the user pick any (Near, Far) pair for V1, V2 and V3.
 """
 
 import os
@@ -66,8 +57,8 @@ from common_curve_loader import load_curve_simple
 from common_engine import (render_momentum_tab, render_carry_tab, render_value_tab, render_skewness_tab,
                            render_comparison_tab)
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
-                                 AGRI_BBG_CONFIG as AGRI_CONFIG, AGRI_FUTURES_FILE,
-                                 AGRI_CALENDAR_FILE_BBG as AGRI_CALENDAR_FILE)
+                                 AGRI1110_CONFIG as AGRI_CONFIG, AGRI1110_FUTURES_FILE as AGRI_FUTURES_FILE,
+                                 AGRI1110_CALENDAR_FILE as AGRI_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 from dashboard_portfolio_tab import render_portfolio_tab
 import agri as agri_research_cfg
@@ -83,9 +74,9 @@ inject_css()
 # unit_label: the product's natural pricing unit, used only for the
 # TC-per-flip $ display in the sidebar -- has no effect on the Sharpe/PnL math.
 PRODUCT_UNITS = {
-    "C": "¢/bu", "W": "¢/bu", "S": "¢/bu", "BO": "¢/lb", "KC": "¢/lb", "SB": "¢/lb",
+    "C": "¢/bu", "W": "¢/bu", "S": "¢/bu", "LC": "¢/lb",
 }
-PRODUCT_ORDER = ["C", "W", "S", "BO", "KC", "SB"]
+PRODUCT_ORDER = ["C", "W", "S", "LC"]
 
 with st.sidebar:
     st.markdown('<p class="main-title">🌾 Agriculture Dashboard</p>', unsafe_allow_html=True)
@@ -161,8 +152,8 @@ with tab_compare:
                                             "Value": value_positions, "Skewness": skew_positions})
 
 with tab_portfolio:
-    st.caption("Combines the 6 Agriculture products (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar) "
+    st.caption("Combines the 4 Agriculture products (Corn, Wheat, Soybean, Live Cattle) "
                "into one asset-class-level portfolio, independent of the sidebar's Product selection above, "
-               "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. Carry and Carry momentum default "
-               "to the F1-F2 pair; change Near/Far in Portfolio Construction below to use another tenor.")
+               "which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. Carry and Carry momentum use each product's "
+               "F1-F2 pair plus its long pair (F1-F6 Corn and Wheat, F1-F7 Soybean and Live Cattle); change Near/Far in Portfolio Construction below to use another tenor.")
     render_portfolio_tab(agri_research_cfg, key_prefix="agri_portfolio")

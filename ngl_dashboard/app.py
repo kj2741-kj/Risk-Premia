@@ -2,7 +2,7 @@
 NGL / Refined Products Dashboard - Stage 2
 ============================================
 Standalone Streamlit app, its own separate deployment. Ethane, Propane,
-Butane (Mt Belvieu NGL swaps) and Naphtha (CIF NWE average-price swap). Isobutane removed 2026-11-09 (the least liquid product in the data set; it stays in research/configs/ngl.py).
+Butane (Mt Belvieu NGL swaps), Naphtha (CIF NWE average-price swap) and Natural Gasoline (CME MMB, added 2026-11-10). Isobutane removed 2026-11-09 (the least liquid product in the data set; it stays in research/configs/ngl.py).
 Momentum / Carry / Value
 only, same format as the Metals and Energy Stage 2 rebuilds -- reuses
 the identical shared engine (common_engine.py) so all three dashboards
@@ -79,7 +79,8 @@ from common_engine import (render_momentum_tab, render_carry_tab, render_value_t
                            render_comparison_tab)
 from rolling_continuous import (get_metal_rolling_f1, reanchor_f1_continuous,
                                  NGL_CONFIG, NGL_FUTURES_FILE, NGL_CALENDAR_FILE,
-                                 NAPHTHA_CONFIG, NAPHTHA_FUTURES_FILE, NAPHTHA_CALENDAR_FILE)
+                                 NAPHTHA_CONFIG, NAPHTHA_FUTURES_FILE, NAPHTHA_CALENDAR_FILE,
+                                 MMB_CONFIG, MMB_FUTURES_FILE, MMB_CALENDAR_FILE)
 from rolling_continuous_5td import get_rolling_f1 as get_rolling_f1_5td
 from dashboard_portfolio_tab import render_portfolio_tab
 import ngl_bucket as ngl_research_cfg                # Mont Belvieu products (configs/ngl.py) + Naphtha (configs/naphtha.py)
@@ -97,12 +98,13 @@ inject_css()
 # Ethylene (PCW) and Propylene (PGP) removed 2026-08-03 -- see module
 # docstring. Both remain in research/configs/ngl.py's own PRODUCTS list.
 PRODUCT_UNITS = {
-    "CAP": "/gal", "BAP": "/gal", "DAE": "/gal", "IBD": "/gal", "KI": "/t",
+    "CAP": "/gal", "BAP": "/gal", "DAE": "/gal", "IBD": "/gal", "KI": "/t", "MMB": "/gal",
 }
-PRODUCT_ORDER = ["CAP", "BAP", "DAE", "KI"]      # IBD (Isobutane) removed 2026-11-09, dashboard-only exclusion like Ethylene and Propylene
+PRODUCT_ORDER = ["CAP", "BAP", "DAE", "KI", "MMB"]      # IBD (Isobutane) removed 2026-11-09, dashboard-only exclusion like Ethylene and Propylene
 # Per-product source: config registry, price file, calendar file (Naphtha has its own, see research/configs/naphtha.py)
 PRODUCT_SOURCE = {c: dict(config=NGL_CONFIG, futures=NGL_FUTURES_FILE, calendar=NGL_CALENDAR_FILE) for c in ("CAP", "BAP", "DAE")}
 PRODUCT_SOURCE["KI"] = dict(config=NAPHTHA_CONFIG, futures=NAPHTHA_FUTURES_FILE, calendar=NAPHTHA_CALENDAR_FILE)
+PRODUCT_SOURCE["MMB"] = dict(config=MMB_CONFIG, futures=MMB_FUTURES_FILE, calendar=MMB_CALENDAR_FILE)   # CME natural gasoline, added 2026-11-10 (F2-F4 + F2-F14 like the Mont Belvieu products, research/configs/mmb.py)
 NGL_PORTFOLIO_EXCLUDED = ("Ethylene", "Propylene", "Isobutane")
 
 # ── Defaults tuned for NGL/petrochemical products (2026-07-10, re-checked
@@ -164,7 +166,7 @@ with st.sidebar:
         index=1, key="ngl_roll_method",   # default: Nth trading day of the expiry month (same roll as the research numbers), 2026-10-11
     )
     roll_n = st.number_input("N", min_value=1, max_value=10, value=5, step=1, key="ngl_roll_n")
-    st.caption("Ethane/Propane/Butane are Mt Belvieu NGL swaps; Naphtha is the CIF NWE average-price swap (USD per tonne, Bloomberg KI). Ethylene and Propylene "
+    st.caption("Ethane/Propane/Butane are Mt Belvieu NGL swaps; Naphtha is the CIF NWE average-price swap (USD per tonne, Bloomberg KI); Natural Gasoline is the CME Mont Belvieu 5-decimal OPIS swap (USD per gallon, Bloomberg MMB). Ethylene and Propylene "
                "(the Mt Belvieu / Polymer Grade petrochemicals) are excluded from this dashboard as "
                "of 2026-08-03, and Isobutane as of 2026-11-09 (the least liquid product in the data set); all three remain in the underlying research config and engine. Same "
                "Momentum/Carry/Value format as the Metals and Energy dashboards.")
@@ -230,12 +232,12 @@ with tab_compare:
                                             "Value": value_positions, "Skewness": skew_positions})
 
 with tab_portfolio:
-    st.caption("Combines 4 NGL products (Ethane, Propane, Butane, Naphtha) into one "
+    st.caption("Combines 5 NGL products (Ethane, Propane, Butane, Naphtha, Natural Gasoline) into one "
                "asset-class-level portfolio, independent of the sidebar's Product selection "
                "above, which only affects the Momentum/Carry/Value/Skewness/Comparison tabs. Ethylene, "
                "Propylene and Isobutane are excluded here too (dashboard-only, see sidebar note); all three still "
                "exist in research/configs/ngl.py's own PRODUCTS list for the research pipeline. "
-               "Carry and Carry momentum use F2-F4 + F2-F14 for the Mont Belvieu products and F2-F4 for Naphtha. Does not include the StatArb sleeve (the 8-spread cross-asset "
+               "Carry and Carry momentum use F2-F4 + F2-F14 for the Mont Belvieu products and Natural Gasoline, and F2-F4 for Naphtha. Does not include the StatArb sleeve (the 8-spread cross-asset "
                "book, shared with Energy); this tab covers Momentum, Carry, Carry momentum, and "
                "Value only.")
     render_portfolio_tab(ngl_research_cfg, key_prefix="ngl_portfolio",

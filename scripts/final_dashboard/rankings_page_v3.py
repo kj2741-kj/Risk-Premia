@@ -1,5 +1,5 @@
 """Commodity and bucket rankings by Sharpe ratio (return / volatility, no risk-free rate) -> Analysis/Commodity_Rankings_<tag>.html (2026-10-31; new buckets)
-Derived from rankings_page.py: reads outputs/final_dashboard_<tag>/final_v3.json and products_nets.pkl (tag 0930 or 1029, env FD_TAG) (analyze_v3.py, compute_products_v3.py); sectors = the seven buckets (the six research buckets and US Power).
+Derived from rankings_page.py: reads outputs/final_dashboard_<tag>/final_v3.json and products_nets.pkl (tag 0930 or 1029, env FD_TAG) (analyze_v3.py, compute_products_v3.py); sectors = the eight buckets (the seven research buckets and US Power).
 Per commodity: each risk-premium sleeve (Momentum, Carry V2, Carry-Momentum V3, Value, Skewness) and two mini-portfolios of the five sleeves (Equal Weight, Inverse Vol 63d, lagged).
 Per asset class: the same sleeves plus EW PORT and Inverse Vol, from the dashboards' own series. Coloured by sector (= asset class). Basis: the 2012-start variant (P1-P3). Reads outputs/final_dashboard*/final_v2.json and the products pickles. Run from the repo root."""
 import sys, json, pickle
@@ -16,10 +16,10 @@ from engine import combine_returns
 from run_regime_table import _metrics
 
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
-BUCKETS = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture", "power": "US Power"}
+BUCKETS = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture", "softs": "Softs", "power": "US Power"}
 PRODUCTS = [("metals", "metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]] + [("petroleum", "energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]] \
-    + [("pen", "energy", "NatGas"), ("pen", "emissions", "TTF"), ("pen", "emissions", "UKGas"), ("pen", "emissions", "EUA")] + [("ngl", "ngl", p) for p in ["Ethane", "Propane", "Butane"]] + [("ngl", "naphtha", "Naphtha")] \
-    + [("precious", "precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]] + [("agri", "agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]] \
+    + [("pen", "energy", "NatGas"), ("pen", "emissions", "TTF"), ("pen", "emissions", "UKGas"), ("pen", "emissions", "EUA")] + [("ngl", "ngl", p) for p in ["Ethane", "Propane", "Butane"]] + [("ngl", "naphtha", "Naphtha"), ("ngl", "mmb", "NatGasoline")] \
+    + [("precious", "precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]] + [("agri", "agri", p) for p in ["Corn", "Wheat", "Soybean", "LiveCattle"]] + [("softs", "softs", p) for p in ["Sugar", "Cocoa", "Coffee", "Cotton"]] \
     + [("power", "power", p) for p in ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]]
 CLASSES = list(BUCKETS.items())
 import os
@@ -58,8 +58,8 @@ for name, d, pkl, wins in BASES:
 
 PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Commodity Rankings (2012 start)</title>
 <style>
-:root{--bg:#fff;--fg:#1f2d3d;--muted:#667;--line:#d5dbe2;--card:#f6f8fa;--c0:#2f6fb5;--c1:#d9792b;--c2:#c9a227;--c3:#8a5fb0;--c4:#3f9b5a;--c5:#c2185b;--c6:#00897b}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12171d;--fg:#dfe5ec;--muted:#98a4b3;--line:#333d49;--card:#1b222b;--c0:#5b97dd;--c1:#f0954a;--c2:#e0bd4a;--c3:#b48cd8;--c4:#5cbf7b;--c5:#e0608f;--c6:#36b3a6}}
+:root{--bg:#fff;--fg:#1f2d3d;--muted:#667;--line:#d5dbe2;--card:#f6f8fa;--c0:#2f6fb5;--c1:#d9792b;--c2:#c9a227;--c3:#8a5fb0;--c4:#3f9b5a;--c5:#c2185b;--c6:#00897b;--c7:#8d6e63}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12171d;--fg:#dfe5ec;--muted:#98a4b3;--line:#333d49;--card:#1b222b;--c0:#5b97dd;--c1:#f0954a;--c2:#e0bd4a;--c3:#b48cd8;--c4:#5cbf7b;--c5:#e0608f;--c6:#36b3a6;--c7:#b89a8e}}
 body{margin:0;background:var(--bg);color:var(--fg);font-family:Calibri,Arial,sans-serif}.wrap{max-width:1180px;margin:0 auto;padding:18px 16px}
 h1{font-size:23px;margin:0 0 4px}h2{font-size:17px;margin:26px 0 6px}.note{color:var(--muted);font-size:13px;margin:2px 0 8px}
 .ctl{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:8px 0}button{font:inherit;padding:2px 8px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:4px;cursor:pointer}select{font:inherit;padding:3px 6px;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:4px}
@@ -68,17 +68,17 @@ h1{font-size:23px;margin:0 0 4px}h2{font-size:17px;margin:26px 0 6px}.note{color
 th{background:var(--card)}th.srt{cursor:pointer;user-select:none}th.srt:hover{text-decoration:underline}td:first-child,th:first-child{text-align:left}td.nm i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
 svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}.axis{stroke:var(--line)}.dl{margin:2px 0 6px}.dl button{margin-right:6px;font-size:12px}
 </style></head><body><div class="wrap"><h1>Commodity and asset-class rankings by Sharpe ratio</h1>
-<p class="note">Sharpe ratio here is annualised return divided by annualised volatility (no risk-free rate), net of costs, as in the dashboards. Colour = sector (bucket: Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture, US Power). Basis: the 2012-start dashboard (see its Notes tab for the data end date); US Power reports from 2017 (its data start in 2015 and Value needs two years of F3), so its Full column starts in 2017 and its P1 cells are empty. Ranks are 1 = best. Mini-portfolios blend a commodity's five sleeves by Equal Weight (EW-5) or Inverse Vol (IV-5, 63-day, lagged one day).</p>
+<p class="note">Sharpe ratio here is annualised return divided by annualised volatility (no risk-free rate), net of costs, as in the dashboards. Colour = sector (bucket: Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture, Softs, US Power). Basis: the 2012-start dashboard (see its Notes tab for the data end date); US Power reports from 2017 (its data start in 2015 and Value needs two years of F3), so its Full column starts in 2017 and its P1 cells are empty. Ranks are 1 = best. Mini-portfolios blend a commodity's five sleeves by Equal Weight (EW-5) or Inverse Vol (IV-5, 63-day, lagged one day).</p>
 <div class="ctl"><label>Period <select id="period"></select></label></div>
 <div class="leg" id="leg"></div>
-<h2>1. Buckets (sector portfolios)</h2><p class="note">Equal-weighted across each bucket's commodities, from the dashboard tabs. Click any column heading to sort (click again to reverse); the table starts sorted by the EW PORT. The small number is the rank among the seven rows for that column (six in P1, where US Power has no value).</p><div class="ts" id="cheat"></div>
+<h2>1. Buckets (sector portfolios)</h2><p class="note">Equal-weighted across each bucket's commodities, from the dashboard tabs. Click any column heading to sort (click again to reverse); the table starts sorted by the EW PORT. The small number is the rank among the eight rows for that column (seven in P1, where US Power has no value).</p><div class="ts" id="cheat"></div>
 <h2>2. Commodities</h2><p class="note">Click any column heading to sort by it (click again to reverse); the table starts sorted by the EW mini-portfolio. Cell colour: green positive, red negative; the small number is the rank among the __NPROD__ commodities for that column (27 in P1, where the five US Power series have no value). The last two columns are the Calendar-2025 liquidity snapshot and do not depend on the Period: Time to trade 1 sigma risk (in Days) = K / x with K = USD 1M of one-sigma daily risk, and Risk Millions per day = x, the USD millions of one-sigma risk the market trades per day (average daily volume x price x volatility x contract multiplier). For both, rank 1 = most liquid (fewest days, most risk per day), and the cells are not coloured.</p><div class="ts" id="heat"></div>
 <h2>3. Bar charts by risk premium</h2><div class="ctl"><label>Risk premium <select id="prem"></select></label></div><h3>Buckets</h3><div id="cbars"></div><h3>Commodities</h3><div id="bars"></div>
 <h2>4. Liquidity (Calendar 2025)</h2><p class="note">Calendar-2025 snapshot, the same figures as the last two columns of the Commodities table; it does not depend on the Period or Risk premium selections. Both charts use a log scale (each gridline is ten times the previous one) because the commodities span more than five orders of magnitude. Time to trade 1 sigma risk (in Days) = K / x with K = USD 1M of one-sigma daily risk; sorted from the fewest days (most liquid, shortest bar). Risk Millions per day = x, the USD millions of one-sigma risk the market trades per day; sorted from the most (most liquid, longest bar).</p>
 <h3>Time to trade 1 sigma risk (in Days)</h3><div id="lbars"></div><h3>Risk Millions per day</h3><div id="xbars"></div>
 </div><script>
 const DATA=__DATA__;
-const SECT=["Metals","Petroleum","Gas and Emissions","NGL","Precious","Agriculture","US Power"],COL={"Metals":"var(--c0)","Petroleum":"var(--c1)","Gas and Emissions":"var(--c5)","NGL":"var(--c3)","Precious":"var(--c2)","Agriculture":"var(--c4)","US Power":"var(--c6)"};
+const SECT=["Metals","Petroleum","Gas and Emissions","NGL","Precious","Agriculture","Softs","US Power"],COL={"Metals":"var(--c0)","Petroleum":"var(--c1)","Gas and Emissions":"var(--c5)","NGL":"var(--c3)","Precious":"var(--c2)","Agriculture":"var(--c4)","Softs":"var(--c7)","US Power":"var(--c6)"};
 const PREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Momentum (V3)"],["Value","Value"],["Skewness","Skewness"],["EW-5","Mini-portfolio EW (5 sleeves)"],["IV-5","Mini-portfolio Inverse Vol (5 sleeves)"]];
 const CPREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Momentum (V3)"],["Value","Value"],["Skewness","Skewness"],["EW PORT","EW PORT (5 sleeves)"],["Inverse Vol","Inverse Vol (5 sleeves)"]];
 const $=id=>document.getElementById(id),f2=v=>v==null?"":v.toFixed(2);

@@ -93,9 +93,12 @@ DASHBOARD_LINKS = {
     "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
                         "desc": "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value."},
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
-                        "desc": "Ethane, Propane, Butane, Naphtha. Momentum, Carry, Value, Skewness."},
+                        "desc": "Ethane, Propane, Butane, Naphtha, Natural Gasoline (CME MMB). Momentum, Carry, Value, Skewness."},
     "Agriculture":    {"url": "https://risk-premia-agri.streamlit.app/", "ready": True,
-                        "desc": "Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar. Momentum, Carry, Value, Portfolio."},
+                        "desc": "Corn, Wheat, Soybean, Live Cattle. Momentum, Carry, Value, Portfolio."},
+    # Softs bucket split out of Agriculture 2026-11-10, main file softs_dashboard/app.py. The Streamlit Cloud app has not been created yet, so the card shows "Coming Soon" until the URL is added here.
+    "Softs":          {"url": "", "ready": False,
+                        "desc": "Sugar, Cocoa, Coffee, Cotton. Momentum, Carry, Value, Portfolio."},
     # Standalone bucket (2026-11-06), main file power_dashboard/app.py; not part of the Cross-Asset Portfolio tab.
     "US Power":       {"url": "https://power-risk-premia.streamlit.app/", "ready": True,
                         "desc": "PJM, ERCOT and MISO real-time monthly power (ICE), peak and off-peak, from 2017. Standalone, outside the cross-asset book."},
@@ -201,7 +204,7 @@ def _cached_cross_commodity_skew(tc_bps: int, specs_key=()):
 
 @st.cache_data(ttl=3600, show_spinner="Computing all cross-pair portfolios...")
 def _cached_cross_pairs(tc_bps: int, specs_key=(), with_skew: bool = False):
-    """Every pair of the live buckets (cae.cross_pairs, generated from cae.ALL_ASSET_CLASSES, so 15 pairs for six buckets and a new bucket adds its own),
+    """Every pair of the live buckets (cae.cross_pairs, generated from cae.ALL_ASSET_CLASSES, so 21 pairs for seven buckets and a new bucket adds its own),
     gross and net, each pair 50/50 of the two buckets' own Equal Weight portfolios."""
     return cae.cross_pair_portfolios_dynamic(tc_bps, tuple(cae.ALL_ASSET_CLASSES), per_product_fetcher=_carry_fetcher(specs_key),
                                             styles=cae.ALL_STYLE_NAMES if with_skew else cae.STYLE_NAMES)
@@ -215,7 +218,7 @@ def _cached_benchmark_returns():
 PALETTE = ["#B87333", "#C9A84C", "#3D8F8A", "#5BAD72", "#B85450",
            "#A07898", "#6A6460", "#9BAAB3", "#7A8E9A", "#C8D0D8"]
 
-ASSET_LABEL_TO_KEY = {v: k for k, v in cae.LIVE_ASSET_CLASS_LABELS.items()}      # the six live buckets (2026-10-31); 'Energy' is no longer offered
+ASSET_LABEL_TO_KEY = {v: k for k, v in cae.LIVE_ASSET_CLASS_LABELS.items()}      # the seven live buckets (2026-11-10); 'Energy' is no longer offered
 STYLE_LABEL_TO_KEY = {"Momentum": "Momentum", "Carry": "Combined Carry",
                        "CarryMom": "Combined CarryMom", "Value": "Value", "Skewness": "Skewness"}
 
@@ -544,7 +547,7 @@ with tab_fund:
             mime="text/csv",
         )
 
-# TAB 3: Cross-Asset Portfolio (Metals + Petroleum + Gas/Emissions + Precious + NGL + Agriculture combined)
+# TAB 3: Cross-Asset Portfolio (Metals + Petroleum + Gas/Emissions + Precious + NGL + Agriculture + Softs combined)
 with tab_crossasset:
     st.markdown('<p class="main-title">🌐 Cross-Asset Portfolio</p>', unsafe_allow_html=True)
     st.caption(
@@ -570,8 +573,8 @@ with tab_crossasset:
                    "customise; every portfolio and the correlation section on this tab then use it. "
                    "Tenor pairs apply to both Carry and Carry momentum. Momentum and Value are unaffected. "
                    "With the pairs left at their defaults, Precious and Agriculture also blend each product's own long "
-                   "pair (Gold F1-F7, Silver F1-F6, Platinum/Palladium F1-F5; Corn/Wheat/Coffee F1-F6, Soybean/Soybean Oil "
-                   "F1-F8, Sugar F1-F5) with the F1-F2 shown, exactly as in the Final Research Dashboard. Gas and Emissions uses "
+                   "pair (Gold F1-F7, Silver F1-F6, Platinum/Palladium F1-F5; Corn, Wheat, Sugar, Cocoa, Coffee and Cotton F1-F6, Soybean and Live Cattle "
+                   "F1-F7) with the F1-F2 shown, exactly as in the Final Research Dashboard. Gas and Emissions uses "
                    "F1-F2 plus F1-F13 for TTF and UK Gas, F1-F2 plus F1-F5 for EUA and F1-F3 plus F1-F13 for Henry Hub. Editing any pair "
                    "below replaces that with one uniform pair list for the asset class.")
         k1, k2, k3 = st.columns([2, 1, 1])

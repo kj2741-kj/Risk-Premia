@@ -118,11 +118,11 @@ check("pen app: UK Gas product wired", '"FN"' in app and "UKGas" in app and 'PRO
 check("pen app: no old name in UI strings", "Power, Emissions &" not in app and "Power, Emissions &amp;" not in app)
 check("hub: bucket entry renamed", '"Gas & Emissions"' in hub and '"Power, Emissions & Nat Gas"' not in hub)
 # 7. Naphtha in the NGL bucket (2026-11-04) ------------------------------------------------------------------------------------------------------------------
-check("ngl tab products (dashboard)", emb["tabs"]["ngl"]["products"] == ["Ethane", "Propane", "Butane", "Naphtha"], str(emb["tabs"]["ngl"]["products"]))
+check("ngl tab products (dashboard)", emb["tabs"]["ngl"]["products"] == ["Ethane", "Propane", "Butane", "Naphtha", "NatGasoline"], str(emb["tabs"]["ngl"]["products"]))
 check("Naphtha L in dashboard == liquidity CSV", abs(emb["meta"]["liq"]["naphtha|Naphtha"] - float(liq["Naphtha"]["L_strip"])) < 1e-12, f"{emb['meta']['liq']['naphtha|Naphtha']:.3f}")
 if m:
     names = [p["name"] for p in blk["products"] if p["asset"] == "NGL"]
-    check("Rankings: NGL products", names == ["Ethane", "Propane", "Butane", "Naphtha"], str(names))
+    check("Rankings: NGL products", names == ["Ethane", "Propane", "Butane", "Naphtha", "NatGasoline"], str(names))
     bad = 0
     for p in blk["products"]:
         if p["name"] == "Naphtha":
@@ -130,12 +130,12 @@ if m:
                 for w, v in p["vals"][s_].items():
                     bad += v != pk(res["products"]["naphtha|Naphtha"][s_][w])
     check("Rankings Naphtha rows == final_v3.json", bad == 0, f"{bad} differences")
-check("cross-asset engine: NGL products", cae.DASHBOARD_PRODUCTS["ngl"] == ["Ethane", "Propane", "Butane", "Naphtha"])
+check("cross-asset engine: NGL products", cae.DASHBOARD_PRODUCTS["ngl"] == ["Ethane", "Propane", "Butane", "Naphtha", "NatGasoline"])
 ngl_app = open("ngl_dashboard/app.py", encoding="utf8").read()
-check("ngl app: Naphtha wired", 'PRODUCT_ORDER = ["CAP", "BAP", "DAE", "KI"]' in ngl_app and 'NGL_PORTFOLIO_EXCLUDED = ("Ethylene", "Propylene", "Isobutane")' in ngl_app and "NAPHTHA_CONFIG" in ngl_app and "import ngl_bucket" in ngl_app)
+check("ngl app: Naphtha wired", 'PRODUCT_ORDER = ["CAP", "BAP", "DAE", "KI", "MMB"]' in ngl_app and 'NGL_PORTFOLIO_EXCLUDED = ("Ethylene", "Propylene", "Isobutane")' in ngl_app and "NAPHTHA_CONFIG" in ngl_app and "import ngl_bucket" in ngl_app)
 # 8. the standalone Power tab of the 0930 and 1029 pages must stay in place (built by scripts/power + power_tab_v3.py, not by the pipeline above) -------------------------------------------
 if TAG in ("0930", "1029"):
     pw_ok = "power" in emb["tabs"] and emb["tabs"]["power"]["pkeys"] == ["power|PJM_Peak", "power|PJM_OffPeak", "power|ERCOT_Peak", "power|ERCOT_OffPeak", "power|MISO_Peak"]
-    check(f"{TAG} page keeps the standalone Power tab (5 series), outside the six-bucket book", pw_ok and "power" not in emb["meta"]["keys"] and "power" not in emb["combined"]["members"])
+    check(f"{TAG} page keeps the standalone Power tab (5 series), outside the seven-bucket book", pw_ok and "power" not in emb["meta"]["keys"] and "power" not in emb["combined"]["members"])
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

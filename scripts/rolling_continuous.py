@@ -496,6 +496,28 @@ AGRI_BBG_CONFIG: dict[str, dict] = {
 }
 
 
+# 2026-11-10: Agriculture and Softs split, and CME natural gasoline (MMB). Files are written by scripts/new_products_1110.py from the 2026-11-10 Bloomberg drop (data/Prices_1110).
+# Sheet names equal the old Agriculture_Futures_Updated.xlsx names, so DATA_FIXES (Sugar F1 2025-06-30) applies unchanged. Calendars = Bloomberg expiry history of the same pull;
+# their last trade dates are identical to the validated calendars already in use on every overlapping contract.
+AGRI1110_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Agri_Softs_Futures_1110.xlsx")
+AGRI1110_CALENDAR_FILE = os.path.join(DATA_DIR, PRICES_DIR_NAME, "Agri_Softs_Calendar_1110.xlsx")
+AGRI1110_CONFIG: dict[str, dict] = {
+    code: {"name": name, "price_sheet": sheet, "calendar_sheet": cal, "f1_col": 1, "f2_col": 2, "data_start_row": 2}
+    for code, name, sheet, cal in [
+        ("C", "Corn (CBOT)", "Corn CBOT", "C - Corn (CBOT)"), ("W", "Wheat SRW (CBOT)", "Wheat CBOT", "W - Wheat (CBOT)"),
+        ("S", "Soybeans (CBOT)", "Soybean CBOT", "S - Soybean (CBOT)"), ("LC", "Live Cattle (CME)", "Live Cattle CME", "LC - Live Cattle (CME)"),
+        ("SB", "Sugar No.11 (ICE US)", "Sugar No.11 ICE", "SB - Sugar No.11 (ICE)"), ("CC", "Cocoa (ICE US)", "Cocoa ICE", "CC - Cocoa (ICE)"),
+        ("KC", "Coffee C (ICE US)", "Coffee C ICE", "KC - Coffee C (ICE)"), ("CT", "Cotton No.2 (ICE US)", "Cotton No.2 ICE", "CT - Cotton No.2 (ICE)")]
+}
+# MMB: monthly average-price swap, same swap convention as the Mont Belvieu NGL swaps and Naphtha (sheet F2/F3 = effective front/next; F1 is the month being priced).
+MMB_FUTURES_FILE  = os.path.join(DATA_DIR, PRICES_DIR_NAME, "NGL_MMB_Futures.xlsx")
+MMB_CALENDAR_FILE = os.path.join(DATA_DIR, PRICES_DIR_NAME, "NGL_MMB_Expiry_Calendars.xlsx")
+MMB_CONFIG = {
+    "MMB": {"name": "Natural Gasoline Mt Belvieu 5-decimal OPIS swap (CME)", "price_sheet": "Natural Gasoline MMB (CME)", "calendar_sheet": "MMB - Nat Gasoline Mt Belvieu",
+            "f1_col": 2, "f2_col": 3, "data_start_row": 2},
+}
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. Data loaders
 # ─────────────────────────────────────────────────────────────────────────────
@@ -506,6 +528,12 @@ AGRI_BBG_CONFIG: dict[str, dict] = {
 DATA_FIXES = {
     "Sugar No.11 ICE": {"set_f1": {"2025-06-30": 15.48}},
     "Brent Crude (ICE)": {"drop_dates": ["2017-01-02"]},
+    # 2026-11-10: exchange-holiday rows of the 11-Nov Agriculture/Softs pull (F1 blank, 1 to 12 stale far tenors). With such a row in, the continuous series loses the move across the holiday
+    # (the day after has no previous F1 to difference against), exactly the Brent 2017-01-02 case, so the dates are removed. Wheat 2009-05-25 (Memorial Day) is also absent from the old workbook.
+    "Wheat CBOT": {"drop_dates": ["2009-05-25"]},
+    "Soybean CBOT": {"drop_dates": ["2009-11-26"]},
+    "Cocoa ICE": {"drop_dates": ["2017-09-04"]},
+    "Cotton No.2 ICE": {"drop_dates": ["2007-04-06", "2007-11-22", "2007-11-23"]},
 }
 
 

@@ -16,8 +16,8 @@ html = open(f"Analysis/Commodity_Rankings_{TAG}.html", encoding="utf8").read()
 DATA = json.loads(re.search(r"const DATA=(\{.*?\});\n", html, re.S).group(1)); blk = DATA[list(DATA)[0]]
 WIN = {"full": ("2012-01-01", None), "p1": ("2012-01-01", "2016-12-31"), "p2": ("2017-01-01", "2021-12-31"), "p3": ("2022-01-01", None), "y26": ("2026-01-01", None)}
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
-BK = ["metals", "petroleum", "pen", "ngl", "precious", "agri"]
-LABEL = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture"}
+BK = ["metals", "petroleum", "pen", "ngl", "precious", "agri", "softs"]
+LABEL = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture", "softs": "Softs"}
 fails = []
 def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail else ""), flush=True)
@@ -28,8 +28,8 @@ sl = lambda s, w: s.loc[WIN[w][0]:WIN[w][1]] if WIN[w][1] else s.loc[WIN[w][0]:]
 close = lambda a, b, tol=0.0011: all((x is None and y is None) or (x is not None and y is not None and abs(x - y) <= tol) for x, y in zip(a, b))
 prods = blk["products"]
 prods_all = prods
-prods = [p for p in prods_all if p["asset"] != "US Power"]          # the six research buckets; US Power is a standalone bucket on the page (own windows, from 2017) and is checked against its own tab below
-check(f"page lists the expected products ({len(prods)} of the six research buckets and {len(prods_all) - len(prods)} US Power series)", len(prods) == 26 and len(prods_all) == 31, ", ".join(f"{LABEL_} {sum(p['asset'] == LABEL_ for p in prods)}" for LABEL_ in LABEL.values()))
+prods = [p for p in prods_all if p["asset"] != "US Power"]          # the seven research buckets; US Power is a standalone bucket on the page (own windows, from 2017) and is checked against its own tab below
+check(f"page lists the expected products ({len(prods)} of the seven research buckets and {len(prods_all) - len(prods)} US Power series)", len(prods) == 29 and len(prods_all) == 34, ", ".join(f"{LABEL_} {sum(p['asset'] == LABEL_ for p in prods)}" for LABEL_ in LABEL.values()))
 PJ = json.load(open(f"Analysis/_power_build/power_tab_{TAG}.json")); PDISP = {"PJM Peak": "PJM_Peak", "PJM OffPeak": "PJM_OffPeak", "ERCOT Peak": "ERCOT_Peak", "ERCOT OffPeak": "ERCOT_OffPeak", "MISO Peak": "MISO_Peak"}
 bad = n = 0
 for p in prods_all:

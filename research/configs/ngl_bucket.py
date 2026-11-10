@@ -11,15 +11,17 @@ product's own list, the mechanism pen.py, Precious and Agriculture use.
 """
 from __future__ import annotations
 
+import mmb as _mmb
 import naphtha as _nap
 import ngl as _ngl
 
 ASSET_CLASS = "NGL"
-PRODUCTS = list(_ngl.PRODUCTS) + ["Naphtha"]
+PRODUCTS = list(_ngl.PRODUCTS) + ["Naphtha", "NatGasoline"]
 _SOURCE = {p: _ngl for p in _ngl.PRODUCTS}
 _SOURCE["Naphtha"] = _nap
-METAL_CODES = {**_ngl.METAL_CODES, **_nap.METAL_CODES}
-SHEET_NAMES = {**_ngl.SHEET_NAMES, **_nap.SHEET_NAMES}
+_SOURCE["NatGasoline"] = _mmb   # CME natural gasoline (MMB), added 2026-11-10
+METAL_CODES = {**_ngl.METAL_CODES, **_nap.METAL_CODES, **_mmb.METAL_CODES}
+SHEET_NAMES = {**_ngl.SHEET_NAMES, **_nap.SHEET_NAMES, **_mmb.SHEET_NAMES}
 
 # parameters shared by every product of the bucket (the checks fail loudly if naphtha.py ever drifts from ngl.py)
 MOMENTUM_PAIRS = _ngl.MOMENTUM_PAIRS
@@ -37,6 +39,7 @@ ROLL_N = _ngl.ROLL_N
 for _name in ("MOMENTUM_PAIRS", "MOMENTUM_SHIFT_N", "CARRY_ZSCORE_WINDOW", "CARRY_SHIFT_N", "CARRY_MOMENTUM_HORIZON", "CARRY_MOMENTUM_SHIFT_N", "VALUE_CONTRACT",
               "VALUE_LOOKBACK_DAYS", "VALUE_THRESHOLD", "VALUE_SHIFT_N", "ROLL_RULE", "ROLL_N"):
     assert getattr(_ngl, _name) == getattr(_nap, _name), f"ngl_bucket.py: {_name} differs between ngl.py and naphtha.py"
+    assert getattr(_ngl, _name) == getattr(_mmb, _name), f"ngl_bucket.py: {_name} differs between ngl.py and mmb.py"
 
 CARRY_TENOR_PAIRS = _ngl.CARRY_TENOR_PAIRS            # the bucket default shown for the Mont Belvieu products; Naphtha has its own via carry_pairs()
 STATARB_ENABLED = _ngl.STATARB_ENABLED

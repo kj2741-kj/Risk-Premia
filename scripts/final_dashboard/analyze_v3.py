@@ -1,8 +1,8 @@
 """Analysis stage of the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_<tag>/final_v3.json (tag from env FD_TAG, default 0930; see fd_config.py)
 Input: products_nets.pkl (compute_products_v3.py). Reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column.
 Data through the tag's cutoff (0930: 2026-09-30, 1029: 2026-10-29). Methods: EW and Inverse Vol (63d trailing vol) only, as before.
-Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Gas and Emissions (NatGas, TTF, UKGas, EUA), NGL, Precious, Agriculture.
-The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all six buckets.
+Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Gas and Emissions (NatGas, TTF, UKGas, EUA), NGL, Precious, Agriculture, Softs.
+The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all seven buckets (Softs split out of Agriculture 2026-11-10).
 Run from the repo root after compute_products_v3.py."""
 import json
 import pickle
@@ -83,7 +83,7 @@ for key, (label, members) in BUCKETS.items():
         res["equity"][f"prod|{a}|{p}"] = equity({**{s: nets[(a, p)][s] for s in STYLES}, "EW PORT": ew_p})
         res["products"][pk(a, p)] = d
 
-# combined book: all six buckets
+# combined book: all seven buckets
 books = {}
 for m1, t1 in (("ew", "EW"), ("iv", "Inverse Vol")):
     al, idx = align_intersection([acs[k][m1] for k in KEYS])
@@ -95,7 +95,7 @@ res["combined"] = dict(windows=win({**books, **ref}), members=KEYS, common_first
 res["equity"]["all6"] = equity({**books, **ref})
 print("combined all6", res["combined"]["common_first"], res["combined"]["common_last"], {r["name"]: r["ir"] for r in res["combined"]["windows"]["full"][:4]}, flush=True)
 
-# by-style book: each style equal-weighted across the six buckets (common dates), then the five style series combined by EW and Inverse Vol
+# by-style book: each style equal-weighted across the seven buckets (common dates), then the five style series combined by EW and Inverse Vol
 srows = {}
 for st in STYLES:
     al, _ = align_intersection([acs[k]["styles"][st] for k in KEYS])
@@ -140,6 +140,6 @@ for nm in ("ew", "iv"):
 assert all(len(v["dates"]) == len(s) for v in rc_series.values() for s in v["series"].values())
 res["corr"]["rolling"] = rc_series
 res["meta"] = dict(data_last={k: res["tabs"][k]["data_last"] for k in KEYS}, labels=LABEL, keys=KEYS, cutoff=CUTOFF,
-                   rolls={pk(*m): meta[m]["rolls"] for m in meta if m[0] != "power"}, pairs={pk(*m): ["-".join(x) for x in meta[m]["pairs"]] for m in meta if m[0] != "power"})      # the five US Power series are in products_nets.pkl only for the rankings page; they are not in the six-bucket book or its metadata
+                   rolls={pk(*m): meta[m]["rolls"] for m in meta if m[0] != "power"}, pairs={pk(*m): ["-".join(x) for x in meta[m]["pairs"]] for m in meta if m[0] != "power"})      # the five US Power series are in products_nets.pkl only for the rankings page; they are not in the seven-bucket book or its metadata
 json.dump(res, open(OUT / "final_v3.json", "w"))
 print("saved final_v3.json", (OUT / "final_v3.json").stat().st_size // 1024, "KB")

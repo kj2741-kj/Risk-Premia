@@ -107,9 +107,9 @@ ASSET_CLASSES = ["metals", "energy", "precious", "ngl"]
 # research/configs/petroleum.py) and Gas and Emissions (Henry Hub, TTF, UK Gas, EUA; research/configs/pen.py; renamed from "Power, Emissions and Nat Gas" and UK Gas added 2026-11-04). "energy" stays a valid key (its
 # config and the validated reference forms above still use it) but is no longer offered: ALL_ASSET_CLASSES is the live set, and the hub builds its
 # pickers from LIVE_ASSET_CLASS_LABELS.
-ALL_ASSET_CLASSES = ["metals", "petroleum", "pen", "ngl", "precious", "agri"]   # same order as the research pages
+ALL_ASSET_CLASSES = ["metals", "petroleum", "pen", "ngl", "precious", "agri", "softs"]   # same order as the research pages; Softs split out of Agriculture 2026-11-10 (seven buckets)
 ASSET_CLASS_LABELS = {"metals": "Metals", "energy": "Energy", "petroleum": "Petroleum", "pen": "Gas and Emissions",
-                      "precious": "Precious", "ngl": "NGL", "agri": "Agriculture"}
+                      "precious": "Precious", "ngl": "NGL", "agri": "Agriculture", "softs": "Softs"}
 LIVE_ASSET_CLASS_LABELS = {k: ASSET_CLASS_LABELS[k] for k in ALL_ASSET_CLASSES}
 ASSET_CLASS_SHORT: dict[str, str] = {}   # no short names: pair labels use the full bucket label, e.g. "Metals-Gas and Emissions" (the research pages write "Metals - Gas and Emissions")
 # Dashboard-visible product lists (CLAUDE.md's documented exclusion: research configs' PRODUCTS
@@ -126,11 +126,13 @@ DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
     "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
     "pen": ["NatGas", "TTF", "UKGas", "EUA"],
-    "ngl": ["Ethane", "Propane", "Butane", "Naphtha"],   # Naphtha added 2026-11-04 (average-price swap, same convention as the Mont Belvieu swaps); Isobutane removed 2026-11-09 (least liquid product: about 10 lots a day on its 12-month strip in 2025), still in research/configs/ngl.py
+    "ngl": ["Ethane", "Propane", "Butane", "Naphtha", "NatGasoline"],   # NatGasoline = CME natural gasoline (MMB) added 2026-11-10; Naphtha added 2026-11-04 (average-price swap, same convention as the Mont Belvieu swaps); Isobutane removed 2026-11-09 (least liquid product: about 10 lots a day on its 12-month strip in 2025), still in research/configs/ngl.py
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],
     # Agriculture: six products only (2026-10-11), matching research/configs/agri.py's PRODUCTS and the
     # Agriculture dashboard. The other nine of the original 14-product build never enter a portfolio.
-    "agri": ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"],
+    # 2026-11-10: Agriculture is Corn, Wheat, Soybean, Live Cattle; the new Softs bucket is Sugar, Cocoa, Coffee, Cotton (Soybean Oil dropped).
+    "agri": ["Corn", "Wheat", "Soybean", "LiveCattle"],
+    "softs": ["Sugar", "Cocoa", "Coffee", "Cotton"],
 }
 # All 6 possible pairs across the 4 asset classes. Metals-Precious and Energy-NGL are the two
 # most correlated pairs (Correlations tab) -- included here too (2026-08-05) so that's visible

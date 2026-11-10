@@ -1,7 +1,7 @@
 """Second audit of the Gas and Emissions bucket (2026-11-04): independent math + the cross-asset layer.
   A. UK Gas (and TTF) continuous return series rebuilt from the raw curve and the calendar with plain pandas, compared with the engine's log_price.
   B. ret / vol / IR / max drawdown recomputed with their definitions from UK Gas sleeves and from the bucket portfolio, compared with the dashboard JSON.
-  C. The Streamlit/hub engine (cross_asset_engine, all six buckets) vs the HTML pipeline (final_v3.json): bucket tabs, by-style book, the four combined books, all 15
+  C. The Streamlit/hub engine (cross_asset_engine, all seven buckets) vs the HTML pipeline (final_v3.json): bucket tabs, by-style book, the four combined books, all 21
      cross-pairs and the cross-bucket correlations, including the Gas and Emissions bucket.
 Run from the repo root:  RP_PRICES_DIR=Prices_1029_merged FD_TAG=1029 python scripts/final_dashboard/check_gas_emissions_math.py   (or Prices_0930 / 0930).
 The engine step takes about ten minutes; its per-product series are cached in outputs/final_dashboard_<tag>/engine_per_product.pkl (delete to refresh)."""
@@ -101,10 +101,10 @@ for w in WIN:
 check("B. Gas and Emissions bucket (5 sleeves + EW PORT) rebuilt by hand from the product series == dashboard tab", bad == 0, f"{bad} differences")
 print("   bucket sleeves are combined on the products' common dates:", str(ew.dropna().index.min().date()), "to", str(ew.dropna().index.max().date()))
 
-# ---------------- C. engine (Streamlit/hub) vs HTML pipeline, all six buckets ---------------------------------------------------------------------------------
-BK = ["metals", "petroleum", "pen", "ngl", "precious", "agri"]
+# ---------------- C. engine (Streamlit/hub) vs HTML pipeline, all seven buckets ---------------------------------------------------------------------------------
+BK = ["metals", "petroleum", "pen", "ngl", "precious", "agri", "softs"]
 def engine_run(cache, value_min):
-    """Per-product engine series for the six buckets; value_min=504 applies the research dashboard's Value warm-up (the engine default is 630 observations)."""
+    """Per-product engine series for the seven buckets; value_min=504 applies the research dashboard's Value warm-up (the engine default is 630 observations)."""
     if cache.exists():
         return pickle.load(open(cache, "rb"))
     orig = cae.value_v1_position
@@ -120,16 +120,16 @@ PP = engine_run(D / "engine_per_product_v504.pkl", 504)       # the same with th
 check("C. engine bucket list and order == HTML", list(cae.ALL_ASSET_CLASSES) == BK == res["meta"]["keys"], str(cae.ALL_ASSET_CLASSES))
 # the only difference between the engine as shipped and the research series (from 2012-01-01) must be the Value warm-up
 M0 = {"Momentum": "Momentum", "Combined Carry": "Carry", "Combined CarryMom": "CarryMom", "Value": "Value", "Skewness": "Skewness"}
-AC = {"metals": "metals", "petroleum": "energy", "ngl": "ngl", "precious": "precious", "agri": "agri"}   # Naphtha: module "naphtha", see the lookup below
+AC = {"metals": "metals", "petroleum": "energy", "ngl": "ngl", "precious": "precious", "agri": "agri", "softs": "softs"}   # Naphtha: module "naphtha", Natural Gasoline: module "mmb", see the lookup below
 diffs = {}
 for ac in BK:
     for sty, lab in M0.items():
         for nm, net in zip(PP[ac][sty]["names"], PP[ac][sty]["net"]):
-            a_ = "naphtha" if nm == "Naphtha" else (AC.get(ac) or ("energy" if nm == "NatGas" else "emissions"))
+            a_ = "naphtha" if nm == "Naphtha" else "mmb" if nm == "NatGasoline" else (AC.get(ac) or ("energy" if nm == "NatGas" else "emissions"))
             r = nets[(a_, nm)][lab]; idx = r.index.union(net.index)
             d = (r.reindex(idx).fillna(0) - net.reindex(idx).fillna(0)).abs().loc["2012-01-01":]
             if d.max() > 1e-9: diffs[(ac, nm, lab)] = d.max()
-check("C. engine with the research Value warm-up (504): all 26 products x 5 sleeves == research series from 2012", not diffs, str(list(diffs)[:5]))
+check("C. engine with the research Value warm-up (504): all 29 products x 5 sleeves == research series from 2012", not diffs, str(list(diffs)[:5]))
 d0 = {}
 for ac in (BK if PP0 else []):
     for sty, lab in M0.items():
@@ -161,16 +161,16 @@ g_by, n_by = cae.cross_commodity_dynamic(5, tuple(BK), cae.ALL_STYLE_NAMES, "equ
 _, n_iv = cae.cross_commodity_dynamic(5, tuple(BK), cae.ALL_STYLE_NAMES, "inverse_vol", per_product_fetcher=fetch)
 series = dict(n_by); series["EW PORT"] = n_by["Portfolio"]; series["Inverse Vol"] = n_iv["Portfolio"]
 bad, n = rows_equal(res["bystyle"]["windows"], series, "bystyle")
-check(f"C. by-style book over six buckets (incl. Gas and Emissions): engine == HTML ({n} rows)", bad == 0, f"{bad} differences")
+check(f"C. by-style book over seven buckets (incl. Gas and Emissions): engine == HTML ({n} rows)", bad == 0, f"{bad} differences")
 # combined books: bucket portfolios EW across (and Inverse Vol across)
 _, n_cn = cae.cross_n_portfolio(5, tuple(BK), fetch, "equal_weight")
 al = align([own[ac] for ac in BK])
 books = {"EW sleeves, EW across": n_cn["Portfolio"], "EW sleeves, Inverse Vol across": combine_returns(al, "inverse_vol", vol_window=63)}
 bad, n = rows_equal(res["combined"]["windows"], books, "combined")
-check(f"C. combined book (EW sleeves; EW and Inverse Vol across the six buckets): engine == HTML ({n} rows)", bad == 0, f"{bad} differences")
+check(f"C. combined book (EW sleeves; EW and Inverse Vol across the seven buckets): engine == HTML ({n} rows)", bad == 0, f"{bad} differences")
 refs = {f"Reference: {res['tabs'][ac]['label']} EW PORT": s_ for ac, s_ in zip(BK, align([own[ac] for ac in BK]))}
 bad, n = rows_equal(res["combined"]["windows"], refs, "refs")
-check(f"C. combined-book reference rows (each bucket on the six-bucket common dates, incl. Gas and Emissions): engine == HTML ({n} rows)", bad == 0, f"{bad} differences")
+check(f"C. combined-book reference rows (each bucket on the seven-bucket common dates, incl. Gas and Emissions): engine == HTML ({n} rows)", bad == 0, f"{bad} differences")
 # cross-pairs
 _, cp = cae.cross_pair_portfolios_dynamic(5, tuple(BK), fetch)
 bad = n = 0; labels = []
@@ -181,7 +181,7 @@ for a, b in combinations(BK, 2):
     for w in WIN:
         r = next(x for x in res["crosspair"]["EW"][w] if x["name"] == lab); m = f3(_metrics(sl(eng, w))); n += 1
         bad += any(abs((m[k] or 0) - (r[k] or 0)) > 0.0011 for k in m)
-check(f"C. all {len(labels)} cross-pairs (EW) engine == HTML, {sum('Gas and Emissions' in l for l in labels)} of them with Gas and Emissions ({n} rows)", bad == 0 and len(labels) == 15, f"{bad} differences")
+check(f"C. all {len(labels)} cross-pairs (EW) engine == HTML, {sum('Gas and Emissions' in l for l in labels)} of them with Gas and Emissions ({n} rows)", bad == 0 and len(labels) == 21, f"{bad} differences")
 # cross-pair Inverse Vol (HTML-only construction): rebuilt from the engine's bucket Inverse Vol portfolios
 iv = {ac: combine_returns(list(sty_nets[ac].values()), "inverse_vol", vol_window=63) for ac in BK}
 bad = n = 0
@@ -190,11 +190,11 @@ for a, b in combinations(BK, 2):
     for w in WIN:
         r = next(x for x in res["crosspair"]["Inverse Vol"][w] if x["name"] == lab); m = f3(_metrics(sl(ser, w))); n += 1
         bad += any(abs((m[k] or 0) - (r[k] or 0)) > 0.0011 for k in m)
-check(f"C. all 15 cross-pairs (Inverse Vol) rebuilt from engine series == HTML ({n} rows)", bad == 0, f"{bad} differences")
+check(f"C. all 21 cross-pairs (Inverse Vol) rebuilt from engine series == HTML ({n} rows)", bad == 0, f"{bad} differences")
 # correlations across buckets (EW PORT), from the REPORT_START
 al = align([own[ac] for ac in BK]); df = pd.concat(al, axis=1, keys=BK).loc["2012-01-01":].dropna()
 mine = np.round(df.corr().values, 3); html = np.array(res["corr"]["cross"]["EW PORT"])
-check("C. cross-bucket correlation matrix (EW PORT, six buckets): engine == HTML", np.abs(mine - html).max() < 0.0011 and len(df) == res["corr"]["cross"]["_n"]["EW PORT"],
+check("C. cross-bucket correlation matrix (EW PORT, seven buckets): engine == HTML", np.abs(mine - html).max() < 0.0011 and len(df) == res["corr"]["cross"]["_n"]["EW PORT"],
       f"max abs diff {np.abs(mine - html).max():.4f}, n {len(df)} vs {res['corr']['cross']['_n']['EW PORT']}; Gas and Emissions row {mine[2].tolist()}")
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

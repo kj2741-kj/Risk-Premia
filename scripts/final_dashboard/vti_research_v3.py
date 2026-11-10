@@ -20,7 +20,6 @@ from run_regime_table import _metrics
 
 sys.path.insert(0, "scripts/final_dashboard")
 from fd_config import TAGS, BUCKETS, PAGE_CSS, current_tag, out_dir, check_run
-BUCKETS = {k: v for k, v in BUCKETS.items() if k != "power"}      # US Power joined the dashboard, rankings, hub and report book on 2026-11-07; this page stays on the six research buckets as published
 TAG = current_tag(); check_run(TAG); CFG = TAGS[TAG]
 
 WINDOW, MIN_M = 60, 36

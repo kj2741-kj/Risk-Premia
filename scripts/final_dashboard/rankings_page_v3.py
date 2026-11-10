@@ -66,7 +66,7 @@ h1{font-size:23px;margin:0 0 4px}h2{font-size:17px;margin:26px 0 6px}.note{color
 .leg span{display:inline-flex;align-items:center;margin-right:14px;font-size:13px}.leg i{width:12px;height:12px;border-radius:3px;margin-right:5px;display:inline-block}
 .ts{overflow-x:auto}table{border-collapse:collapse;font-size:12.5px}th,td{border:1px solid var(--line);padding:3px 7px;text-align:right;white-space:nowrap}
 th{background:var(--card)}th.srt{cursor:pointer;user-select:none}th.srt:hover{text-decoration:underline}td:first-child,th:first-child{text-align:left}td.nm i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
-svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}.axis{stroke:var(--line)}
+svg{width:100%;height:auto;display:block}svg text{fill:var(--fg);font-size:11px}.axis{stroke:var(--line)}.dl{margin:2px 0 6px}.dl button{margin-right:6px;font-size:12px}
 </style></head><body><div class="wrap"><h1>Commodity and asset-class rankings by Sharpe ratio</h1>
 <p class="note">Sharpe ratio here is annualised return divided by annualised volatility (no risk-free rate), net of costs, as in the dashboards. Colour = sector (bucket: Metals, Petroleum, Gas and Emissions, NGL, Precious, Agriculture, US Power). Basis: the 2012-start dashboard (see its Notes tab for the data end date); US Power reports from 2017 (its data start in 2015 and Value needs two years of F3), so its Full column starts in 2017 and its P1 cells are empty. Ranks are 1 = best. Mini-portfolios blend a commodity's five sleeves by Equal Weight (EW-5) or Inverse Vol (IV-5, 63-day, lagged one day).</p>
 <div class="ctl"><label>Period <select id="period"></select></label></div>
@@ -82,7 +82,7 @@ const SECT=["Metals","Petroleum","Gas and Emissions","NGL","Precious","Agricultu
 const PREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Momentum (V3)"],["Value","Value"],["Skewness","Skewness"],["EW-5","Mini-portfolio EW (5 sleeves)"],["IV-5","Mini-portfolio Inverse Vol (5 sleeves)"]];
 const CPREM=[["Momentum","Momentum"],["Carry","Carry (V2)"],["CarryMom","Carry-Momentum (V3)"],["Value","Value"],["Skewness","Skewness"],["EW PORT","EW PORT (5 sleeves)"],["Inverse Vol","Inverse Vol (5 sleeves)"]];
 const $=id=>document.getElementById(id),f2=v=>v==null?"":v.toFixed(2);
-let SORT=null,SORTC=null;
+let SORT=null,SORTC=null;const CH={};
 const fL=v=>v==null?"n/a":String(Number(v.toPrecision(3))),fX=v=>v==null?"n/a":(v>=100?Math.round(v).toLocaleString("en-US"):(v>=10?v.toFixed(1):(v>=1?v.toFixed(2):String(Number(v.toPrecision(2))))));
 const LCOLS=[["__L","Time to trade 1 sigma risk (in Days)",1],["__X","Risk Millions per day",-1]];   // [key, heading, default sort direction]
 $("leg").innerHTML=SECT.map(s=>`<span><i style="background:${COL[s]}"></i>${s}</span>`).join("");
@@ -90,14 +90,14 @@ const BASIS=Object.keys(DATA)[0];
 $("prem").innerHTML=PREM.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join("");
 function setPeriods(){const w=DATA[BASIS].windows;$("period").innerHTML=w.map(x=>`<option value="${x.key}">${x.label}</option>`).join("");}
 function tint(v){if(v==null)return"transparent";const a=Math.min(Math.abs(v)/1.2,1)*0.55;return v>=0?`rgba(63,155,90,${a})`:`rgba(200,60,50,${a})`;}
-function bars(host,rows){ // rows: [{name,sector,v}] already sorted
+function bars(host,rows,title,vname){CH[host.id]={title,vname,rows}; // rows: [{name,sector,v}] already sorted
   const W=900,rh=19,L=150,H=rows.length*rh+30,vals=rows.map(r=>r.v||0),mx=Math.max(0.2,...vals.map(Math.abs)),x0=L+(W-L-60)/2,sc=(W-L-60)/2/mx;
   let s=`<svg viewBox="0 0 ${W} ${H}"><line class="axis" x1="${x0}" y1="8" x2="${x0}" y2="${H-18}"/>`;
   rows.forEach((r,i)=>{const y=12+i*rh,w=(r.v||0)*sc,x=w>=0?x0:x0+w;
     s+=`<text x="${L-8}" y="${y+11}" text-anchor="end">${i+1}. ${r.name}</text><rect x="${x}" y="${y}" width="${Math.abs(w)}" height="${rh-5}" rx="2" fill="${COL[r.sector]||'var(--c0)'}"><title>${r.name}: ${f2(r.v)}</title></rect>
     <text x="${w>=0?x0+w+5:x0+w-5}" y="${y+11}" text-anchor="${w>=0?'start':'end'}">${f2(r.v)}</text>`;});
   host.innerHTML=s+"</svg>";}
-function logbars(host,rows,fmt){ // rows: [{name,sector,v}] already sorted; log10 axis with a gridline at every power of ten
+function logbars(host,rows,fmt,title,vname){CH[host.id]={title,vname,rows}; // rows: [{name,sector,v}] already sorted; log10 axis with a gridline at every power of ten
   const W=900,rh=19,L=150,R=70,H=rows.length*rh+44,pw=W-L-R,lv=rows.map(r=>Math.log10(r.v)),lo=Math.floor(Math.min(...lv)),hi=Math.ceil(Math.max(...lv)),xs=v=>L+(Math.log10(v)-lo)/(hi-lo)*pw;
   let s=`<svg viewBox="0 0 ${W} ${H}">`;
   for(let d=lo;d<=hi;d++){const x=L+(d-lo)/(hi-lo)*pw;s+=`<line class="axis" x1="${x}" y1="8" x2="${x}" y2="${H-26}"/><text x="${x}" y="${H-10}" text-anchor="middle">${String(Number("1e"+d))}</text>`;}
@@ -106,13 +106,13 @@ function logbars(host,rows,fmt){ // rows: [{name,sector,v}] already sorted; log1
   host.innerHTML=s+"</svg>";}
 function liqbars(){
   const P=DATA[BASIS].products.map(x=>({name:x.name,sector:x.asset,L:x.L,X:x.X}));
-  logbars($("lbars"),[...P].sort((a,b)=>a.L-b.L).map(x=>({name:x.name,sector:x.sector,v:x.L})),fL);
-  logbars($("xbars"),[...P].sort((a,b)=>b.X-a.X).map(x=>({name:x.name,sector:x.sector,v:x.X})),fX);}
+  logbars($("lbars"),[...P].sort((a,b)=>a.L-b.L).map(x=>({name:x.name,sector:x.sector,v:x.L})),fL,"Time to trade 1 sigma risk (days), Calendar 2025","Time to trade 1 sigma risk (days)");
+  logbars($("xbars"),[...P].sort((a,b)=>b.X-a.X).map(x=>({name:x.name,sector:x.sector,v:x.X})),fX,"Risk turnover (USD million per day), Calendar 2025","Risk turnover (USD million per day)");}
 function render(){
   const D=DATA[BASIS],w=$("period").value,p=$("prem").value;
   const P=D.products.map(x=>({name:x.name,sector:x.asset,vals:x.vals,L:x.L,X:x.X}));
   const sorted=[...P].sort((a,b)=>(b.vals[p][w][0]??-9)-(a.vals[p][w][0]??-9));
-  bars($("bars"),sorted.map(x=>({name:x.name,sector:x.sector,v:x.vals[p][w][0]})).filter(x=>x.v!=null));
+  bars($("bars"),sorted.map(x=>({name:x.name,sector:x.sector,v:x.vals[p][w][0]})).filter(x=>x.v!=null),"Commodities: "+$("prem").selectedOptions[0].text+", Sharpe ratio, "+$("period").selectedOptions[0].text,"Sharpe ratio");
   // heat table with ranks
   const rank={};PREM.forEach(([k])=>{const o=[...P].sort((a,b)=>(b.vals[k][w][0]??-9)-(a.vals[k][w][0]??-9));rank[k]={};o.forEach((x,i)=>rank[k][x.name]=i+1);});
   const rankL={},rankX={};[...P].sort((a,b)=>a.L-b.L).forEach((x,i)=>rankL[x.name]=i+1);[...P].sort((a,b)=>b.X-a.X).forEach((x,i)=>rankX[x.name]=i+1);
@@ -125,7 +125,7 @@ function render(){
   // asset classes
   const cp=CPREM.map(x=>x[0]).includes(p)?p:(p==="EW-5"?"EW PORT":(p==="IV-5"?"Inverse Vol":"Momentum"));
   const C=D.classes,csorted=[...C].sort((a,b)=>(b.vals[cp][w][0]??-9)-(a.vals[cp][w][0]??-9));
-  bars($("cbars"),csorted.map(c=>({name:c.name,sector:c.name,v:c.vals[cp][w][0]})).filter(x=>x.v!=null));
+  bars($("cbars"),csorted.map(c=>({name:c.name,sector:c.name,v:c.vals[cp][w][0]})).filter(x=>x.v!=null),"Buckets: "+CPREM.find(q=>q[0]===cp)[1]+", Sharpe ratio, "+$("period").selectedOptions[0].text,"Sharpe ratio");
   const crank={};CPREM.forEach(([k])=>{const o=[...C].sort((a,b)=>(b.vals[k][w][0]??-9)-(a.vals[k][w][0]??-9));crank[k]={};o.forEach((x,i)=>crank[k][x.name]=i+1);});
   const ck=SORTC?SORTC.k:"EW PORT",cd=SORTC?SORTC.d:-1,cs_=ck==="__name";
   const cv=c=>cs_?c.name:c.vals[ck][w][0];
@@ -136,7 +136,27 @@ function render(){
 }
 $("period").onchange=render;$("prem").onchange=render;
 setPeriods();render();liqbars();
+// ---- downloads: every bar chart can be saved as a PNG image or as the CSV behind it (rank, name, sector, value, in the order shown)
+function saveBlob(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);}
+function dlName(id,ext){return ("Commodity_Rankings___TAG___"+CH[id].title).replace(/[^A-Za-z0-9]+/g,"_").replace(/^_+|_+$/g,"")+"."+ext;}
+function dlCSV(id){const m=CH[id],q=x=>'"'+String(x).replace(/"/g,'""')+'"';
+  const lines=[["Rank","Name","Sector",m.vname].map(q).join(",")].concat(m.rows.map((x,i)=>[i+1,q(x.name),q(x.sector),x.v==null?"":x.v].join(",")));
+  saveBlob(new Blob(["\ufeff"+lines.join("\r\n")],{type:"text/csv;charset=utf-8"}),dlName(id,"csv"));}
+function dlPNG(id){const m=CH[id],svg=$(id).querySelector("svg"),cs=getComputedStyle(document.documentElement),g=n=>cs.getPropertyValue(n).trim(),NS="http://www.w3.org/2000/svg";
+  const vb=svg.viewBox.baseVal,W=vb.width,H=vb.height,T=32,c=svg.cloneNode(true);
+  c.setAttribute("xmlns",NS);c.setAttribute("viewBox","0 0 "+W+" "+(H+T));c.setAttribute("width",W);c.setAttribute("height",H+T);
+  c.querySelectorAll("[fill]").forEach(e=>{const k=/var\((--[a-z0-9]+)\)/.exec(e.getAttribute("fill"));if(k)e.setAttribute("fill",g(k[1]));});
+  c.querySelectorAll("text").forEach(e=>{e.setAttribute("fill",g("--fg"));e.setAttribute("font-size","11");e.setAttribute("font-family","Calibri,Arial,sans-serif");});
+  c.querySelectorAll(".axis").forEach(e=>e.setAttribute("stroke",g("--line")));
+  const inner=document.createElementNS(NS,"g");inner.setAttribute("transform","translate(0,"+T+")");while(c.firstChild)inner.appendChild(c.firstChild);c.appendChild(inner);
+  const bg=document.createElementNS(NS,"rect");bg.setAttribute("width",W);bg.setAttribute("height",H+T);bg.setAttribute("fill",g("--bg"));c.insertBefore(bg,inner);
+  const t=document.createElementNS(NS,"text");t.setAttribute("x",10);t.setAttribute("y",21);t.setAttribute("fill",g("--fg"));t.setAttribute("font-size","15");t.setAttribute("font-weight","bold");t.setAttribute("font-family","Calibri,Arial,sans-serif");t.textContent=m.title;c.appendChild(t);
+  const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(c)],{type:"image/svg+xml;charset=utf-8"})),img=new Image();
+  img.onload=()=>{const k=2,cv=document.createElement("canvas");cv.width=W*k;cv.height=(H+T)*k;const x=cv.getContext("2d");x.scale(k,k);x.drawImage(img,0,0,W,H+T);URL.revokeObjectURL(url);cv.toBlob(b=>saveBlob(b,dlName(id,"png")),"image/png");};
+  img.src=url;}
+["cbars","bars","lbars","xbars"].forEach(id=>{const h=$(id),d=document.createElement("div");d.className="dl";d.innerHTML="<button onclick=\"dlPNG('"+id+"')\">Download PNG</button><button onclick=\"dlCSV('"+id+"')\">Download CSV</button>";h.parentNode.insertBefore(d,h);});
+
 </script></body></html>"""
 _out = f"Analysis/Commodity_Rankings_{TAG}.html"
-Path(_out).write_text(PAGE.replace("__DATA__", json.dumps(DATA)).replace("__NPROD__", str(len(PRODUCTS))), encoding="utf8")
+Path(_out).write_text(PAGE.replace("__DATA__", json.dumps(DATA)).replace("__NPROD__", str(len(PRODUCTS))).replace("__TAG__", TAG), encoding="utf8")
 print("written", _out)

@@ -10,11 +10,11 @@ from pathlib import Path
 
 TAGS = {
     "0930": dict(prices_dir="Prices_0930", cutoff="2026-09-30", long="30 September 2026", short="30 September",
-                 data_line="Prices run through 2026-09-30 for all seven buckets (the 29-Oct Bloomberg pull extends the 24-Sep file; every sheet is cut at 30 September).",
+                 data_line="Prices run through 2026-09-30 for all six buckets (the 29-Oct Bloomberg pull extends the 24-Sep file; every sheet is cut at 30 September).",
                  change_line="<b>Data:</b> the 29-Oct Bloomberg pull is merged into the 24-Sep history (overlap identical) and cut at 30 September 2026, seven trading days later than the previous version (23 September). P1 and P2 results of the unchanged buckets are identical to the previous version; Full and P3 differ only by those seven days.",
                  last_txt="30 September 2026 (the last price date)"),
     "1029": dict(prices_dir="Prices_1029_merged", cutoff="2026-10-29", long="29 October 2026", short="29 October",
-                 data_line="Prices run through 2026-10-29 for all seven buckets (LME and NGL through 2026-10-28): the 29-Oct Bloomberg pull merged into the 24-Sep history, nothing cut.",
+                 data_line="Prices run through 2026-10-29 for all six buckets (LME and NGL through 2026-10-28): the 29-Oct Bloomberg pull merged into the 24-Sep history, nothing cut.",
                  change_line="<b>Data:</b> the 29-Oct Bloomberg pull is merged into the 24-Sep history (overlap identical) and used in full: prices through 29 October 2026 (LME and NGL through 28 October), about 26 trading days beyond the 23 September data of the previous version. The 30-September cut of the same dashboard is Final_Research_Dashboard_2012_0930.html.",
                  last_txt="29 October 2026 (the last price date; LME and NGL end on 28 October)"),
 }
@@ -27,8 +27,6 @@ BUCKETS = {
     "ngl": ("NGL", [("ngl", p) for p in ["Ethane", "Propane", "Butane"]] + [("naphtha", "Naphtha")]),
     "precious": ("Precious", [("precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]]),
     "agri": ("Agriculture", [("agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]]),
-    # 2026-11-07: US Power joins the book (common dates: the book starts with the Power data, January 2015); its own tab keeps the 2017 start (scripts/final_dashboard/power_tab_v3.py)
-    "power": ("US Power", [("power", p) for p in ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]]),
 }
 PAGE_CSS = """body{font-family:Calibri,Arial,sans-serif;margin:0;background:#fff;color:#1f2d3d}@media(prefers-color-scheme:dark){body{background:#12171d;color:#dfe5ec}th{background:#222b35!important}td,th{border-color:#333d49!important}}
 .wrap{max-width:1100px;margin:0 auto;padding:20px 16px}h1{font-size:24px;margin:0 0 4px}h2{font-size:17px;margin:26px 0 4px}.note{color:#667;font-size:13px;margin:2px 0 8px}

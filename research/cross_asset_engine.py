@@ -127,7 +127,7 @@ DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
     "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
     "pen": ["NatGas", "TTF", "UKGas", "EUA"],
-    "ngl": ["Ethane", "Propane", "Butane", "Isobutane", "Naphtha"],   # Naphtha added 2026-11-04 (average-price swap, same convention as the Mont Belvieu swaps)
+    "ngl": ["Ethane", "Propane", "Butane", "Naphtha"],   # Naphtha added 2026-11-04 (average-price swap, same convention as the Mont Belvieu swaps); Isobutane removed 2026-11-09 (least liquid product: about 10 lots a day on its 12-month strip in 2025), still in research/configs/ngl.py
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],
     # Agriculture: six products only (2026-10-11), matching research/configs/agri.py's PRODUCTS and the
     # Agriculture dashboard. The other nine of the original 14-product build never enter a portfolio.

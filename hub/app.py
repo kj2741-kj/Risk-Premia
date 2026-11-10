@@ -95,7 +95,7 @@ DASHBOARD_LINKS = {
     "Precious Metals": {"url": "https://risk-premia-pm.streamlit.app/", "ready": True,
                         "desc": "Gold, Silver, Platinum, Palladium. Momentum, Carry, Value."},
     "NGL / Refined":  {"url": "https://risk-premia-ngl.streamlit.app/", "ready": True,
-                        "desc": "Ethane, Propane, Butane, Isobutane, Naphtha. Momentum, Carry, Value, Skewness."},
+                        "desc": "Ethane, Propane, Butane, Naphtha. Momentum, Carry, Value, Skewness."},
     "Agriculture":    {"url": "https://risk-premia-agri.streamlit.app/", "ready": True,
                         "desc": "Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar. Momentum, Carry, Value, Portfolio."},
     # Main file power_dashboard/app.py; since 2026-11-07 a seventh bucket of the Cross-Asset Portfolio tab.

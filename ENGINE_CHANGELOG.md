@@ -6,6 +6,17 @@ that led to it.
 
 ---
 
+## 2026-11-10: US Power removed from the cross-commodity book (six buckets, 26 products, reported from 2012); rankings page downloads
+
+- **Decision (user, 2026-11-10).** The seven-bucket book of 2026-11-07 starts on 2015-01-07 (the first common date after the US Power data begin). The user wants the book from 2012, so Power leaves it. The six research buckets, 15 bucket pairs and a 6 x 6 cross-bucket correlation are back; the 2026-11-07 entry below is superseded for the book, kept as history.
+- **Method.** The four 2026-11-07 commits were reverted for the book code (hub and `cross_asset_engine`: six asset classes again; `analyze_v3`, `build_final_dashboard_v3`, `fd_config`, `skewness_research_v3`, `vti_research_v3`, the three checks), then the Isobutane edits of 2026-11-09 were kept on top. The report generator (`Analysis/_v8_build`) was restored to its six-bucket form and the Isobutane edits re-applied.
+- **What stays.** US Power is a standalone bucket: its tab in both research dashboards (`power_tab_v3.py`, reported from 2017, no P1), its section and appendix tables in report v8, its Streamlit app, and a row in the Commodity Rankings page (own windows, Full from 2017; `compute_products_v3.py` still computes the five series for it). `check_rankings_consistency.py` compares the Power rows with the Power tab file.
+- **Numbers (0930).** By-style book Equal Weight Sharpe +1.06, Inverse Vol +1.12 at 5.4% and 5.5% volatility, maximum drawdown -15.9% and -14.4%; the four two-stage combinations +1.06, +0.87, +1.08, +0.86. Best pair Petroleum-NGL (+1.30, +1.36), Gas and Emissions-NGL second (+1.25, +1.35). NGL (Ethane, Propane, Butane, Naphtha) Equal Weight +1.43, Inverse Vol +1.41. In P3 Value (+0.54) and Skewness (+0.53) are the two best book sleeves.
+- **Rankings page (both tags): every bar chart can be downloaded as a PNG image (2x, with title and the page's colours) or as a CSV (rank, name, sector, value, in the order shown).** The CSV follows the selected period and risk premium; the file name carries the tag, chart, premium and period. Tested in Chrome: CSV rows equal the bars drawn (7 buckets, 31 commodities and the two liquidity charts).
+- **Report v8 (`Analysis/Risk Premia Analysis v8_2012.docx`, rebuilt 10 November 2026, 0930 basis).** Correlation Analysis, Cross-Commodity Portfolio, Key Findings, the pair tables and figures are on the six-bucket book from 2012; the Isobutane changes of 2026-11-09 (NGL, Table A13, 33-product liquidity table) are kept. `audit_v8.py` ALL PASS (298 bucket-appendix cells, 168 + 44 recomputed cells, 15 pairs, 33 liquidity rows). The verification log gains a row for the change from the first issue.
+
+---
+
 ## 2026-11-09: Isobutane removed from every output (NGL bucket = Ethane, Propane, Butane, Naphtha; 31 products)
 
 - **Decision (user, 2026-11-09), reason: liquidity.** In the Calendar-2025 snapshot Isobutane is the least liquid of the 36 products measured (12-month strip about 10 lots a day, prints on 13% of days, a USD 1M one-sigma risk budget equals about 156 days of its risk turnover). Hidden, not deleted: it stays in `research/configs/ngl.py` and the price files (like Ethylene and Propylene), so `run_regime_table.py`, the tradebooks and the earlier research still run.

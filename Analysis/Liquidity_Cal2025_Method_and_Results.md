@@ -75,9 +75,11 @@ NGL against the least liquid non-energy product (Lead): Propane 0.25x, Butane 0.
 - ICE half of NGL is not included. Bogorad's Figure 10 implies ICE roughly doubles NGL volume in 2025; even doubled, Propane would be about half of Lead. Per-product ICE volume to be added when available.
 - CME Non-TET Propane (about 1,400 lots a day in late October 2026) is not in our data; it would add roughly 20% to Propane.
 - Ethane volume may be understated (see data check above).
-- Isobutane prints on only 13% of days (Bogorad excludes it); kept in this analysis by decision.
+- Isobutane prints on only 13% of days on CME alone (41% with the ICE contracts added on 2026-11-10; Bogorad excludes it); kept in this analysis by decision.
 - EUA and TTF strips capture 85% and 81% of their all-tenor volume; the rest sits in far tenors.
 - The Gold chain (even months) and the Silver, Platinum and Palladium chains are inferred from curve-shift tests, not documented by Bloomberg.
 - One year only, as requested; no annual or dynamic filter.
+
+**Update 2026-11-10 (NGL, CME plus ICE).** The NGL rows of `Liquidity_Cal2025_results.csv` for Ethane, Propane, Butane, Isobutane and Natural Gasoline add the ICE contracts of the 10 November 2026 download (`scripts/liquidity_ngl_ice_1110.py`; the CME-only file is `Liquidity_Cal2025_results_CME_only.csv`). Same definition; the venues' volumes are added, each at its own price and volatility, on the CME product's calendar. Time to trade USD 1M of one-sigma risk (days), CME only to CME plus ICE: Propane 0.21 to 0.09, Butane 0.55 to 0.28, Ethane 2.86 to 0.77, Natural Gasoline 1.25 to 1.23, Isobutane 156 to 34. Naphtha (one Bloomberg series), Ethylene and Propylene are unchanged. The per-contract and per-product tables are in `NGL_Liquidity_CME_ICE_Cal2025_contracts.csv` and `_products.csv`.
 
 Reproduce: `python scripts/liquidity_cal2025.py` from the repo root (about 3 minutes) writes `Analysis/Liquidity_Cal2025_results.csv`.

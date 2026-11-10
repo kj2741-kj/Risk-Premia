@@ -35,7 +35,7 @@ OUT.mkdir(parents=True, exist_ok=True)
 LONG = {"precious": {"Gold": "F7", "Silver": "F6", "Platinum": "F5", "Palladium": "F5"},
         "agri": {"Corn": "F6", "Wheat": "F6", "Soybean": "F8", "SoybeanOil": "F8", "Coffee": "F6", "Sugar": "F5"}}
 PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "emissions": ["EUA", "TTF", "UKGas"],
-            "ngl": ["Ethane", "Propane", "Butane", "Isobutane"], "naphtha": ["Naphtha"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"]),
+            "ngl": ["Ethane", "Propane", "Butane"], "naphtha": ["Naphtha"], "precious": list(LONG["precious"]), "agri": list(LONG["agri"]),
             "power": ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]}      # US Power: the five series with Calendar-2025 L below 5 days (MISO OffPeak, 9.9 days, is out)
 
 

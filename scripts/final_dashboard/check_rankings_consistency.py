@@ -34,7 +34,7 @@ sl = lambda s, w, bk="x": (s.loc[PW(bk, w)[0]:PW(bk, w)[1]] if PW(bk, w)[1] else
 packw = lambda v, w, bk: [None] * 4 if (bk == "power" and w == "p1") else pack(_metrics(sl(v, w, bk)))
 close = lambda a, b, tol=0.0011: all((x is None and y is None) or (x is not None and y is not None and abs(x - y) <= tol) for x, y in zip(a, b))
 prods = blk["products"]
-check(f"page lists the expected products ({len(prods)})", len(prods) == 32, ", ".join(f"{LABEL_} {sum(p['asset'] == LABEL_ for p in prods)}" for LABEL_ in LABEL.values()))
+check(f"page lists the expected products ({len(prods)})", len(prods) == 31, ", ".join(f"{LABEL_} {sum(p['asset'] == LABEL_ for p in prods)}" for LABEL_ in LABEL.values()))
 key_of = {}
 for bk in BK:
     for a, p in [(k.split("|")[0], k.split("|")[1]) for k in tabof(bk)["pkeys"]]:

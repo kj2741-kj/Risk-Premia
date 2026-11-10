@@ -134,7 +134,7 @@ for ac in BK:
             r = nets[(a_, nm)][lab]; idx = r.index.union(net.index)
             d = (r.reindex(idx).fillna(0) - net.reindex(idx).fillna(0)).abs().loc["2012-01-01":]
             if d.max() > 1e-9: diffs[(ac, nm, lab)] = d.max()
-check("C. engine with the research Value warm-up (504): all 32 products x 5 sleeves == research series from their first day", not diffs, str(list(diffs)[:5]))
+check("C. engine with the research Value warm-up (504): all 31 products x 5 sleeves == research series from their first day", not diffs, str(list(diffs)[:5]))
 d0 = {}
 for ac in (BK if PP0 else []):
     for sty, lab in M0.items():

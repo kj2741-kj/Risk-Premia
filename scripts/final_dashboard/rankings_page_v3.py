@@ -18,7 +18,7 @@ from run_regime_table import _metrics
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
 BUCKETS = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture", "power": "US Power"}
 PRODUCTS = [("metals", "metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]] + [("petroleum", "energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]] \
-    + [("pen", "energy", "NatGas"), ("pen", "emissions", "TTF"), ("pen", "emissions", "UKGas"), ("pen", "emissions", "EUA")] + [("ngl", "ngl", p) for p in ["Ethane", "Propane", "Butane", "Isobutane"]] + [("ngl", "naphtha", "Naphtha")] \
+    + [("pen", "energy", "NatGas"), ("pen", "emissions", "TTF"), ("pen", "emissions", "UKGas"), ("pen", "emissions", "EUA")] + [("ngl", "ngl", p) for p in ["Ethane", "Propane", "Butane"]] + [("ngl", "naphtha", "Naphtha")] \
     + [("precious", "precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]] + [("agri", "agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]] \
     + [("power", "power", p) for p in ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]]
 CLASSES = list(BUCKETS.items())

@@ -24,7 +24,7 @@ BUCKETS = {
     "metals": ("Metals", [("metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]]),
     "petroleum": ("Petroleum", [("energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]]),
     "pen": ("Gas and Emissions", [("energy", "NatGas"), ("emissions", "TTF"), ("emissions", "UKGas"), ("emissions", "EUA")]),
-    "ngl": ("NGL", [("ngl", p) for p in ["Ethane", "Propane", "Butane", "Isobutane"]] + [("naphtha", "Naphtha")]),
+    "ngl": ("NGL", [("ngl", p) for p in ["Ethane", "Propane", "Butane"]] + [("naphtha", "Naphtha")]),
     "precious": ("Precious", [("precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]]),
     "agri": ("Agriculture", [("agri", p) for p in ["Corn", "Wheat", "Soybean", "SoybeanOil", "Coffee", "Sugar"]]),
     # 2026-11-07: US Power joins the book (common dates: the book starts with the Power data, January 2015); its own tab keeps the 2017 start (scripts/final_dashboard/power_tab_v3.py)

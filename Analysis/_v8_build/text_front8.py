@@ -32,31 +32,32 @@ def key_findings(old_kf):
     kf.append(f"Gas and Emissions (Henry Hub, TTF, UK Gas and EUA) earns Equal Weight IR {I(ge['ir'])} and Inverse Vol IR {I(gi['ir'])} at {V(ge['vol'])} volatility, with Carry the strongest sleeve (IR {I(st('pen', 'Carry')['ir'])}) and Value (IR {I(st('pen', 'Value')['ir'])}) the only negative one. The edge sits in European gas, TTF (combined IR {I(gp['TTF'])}) and UK Gas ({I(gp['UKGas'])}), not in Henry Hub ({I(gp['NatGas'])}) or EUA ({I(gp['EUA'])}), "
               f"and in one episode: 2021 alone is {yl[2021] / ewp.sum() * 100:.0f}% of the Equal Weight log return, and excluding July 2021 to June 2023 the IR falls to {I(ir_ex)}.")
     kf.append(old_kf[1]); kf.append(old_kf[2]); kf.append(old_kf[3])
-    # Skewness (six research buckets plus US Power on its own 2017 window)
-    from power_facts import STY_P, stp, EW_P
-    sk_ir = {t: st(t, "Skewness")["ir"] for t in BUCKETS}; sk_ir["power"] = stp(STY_P["Skewness"])["ir"]
-    sk_p = {t: per(t, "Skewness") for t in BUCKETS}; sk_p["power"] = [None, stp(STY_P["Skewness"], "p2")["ir"], stp(STY_P["Skewness"], "p3")["ir"]]
-    neg_full = [t for t in sk_ir if sk_ir[t] < 0]; neg_p1 = [t for t in BUCKETS if sk_p[t][0] < 0]; pos_p3 = [t for t in sk_p if sk_p[t][2] > 0]
-    chk(neg_full == ["metals"] and set(neg_p1) == {"metals", "petroleum", "ngl", "precious"} and len(pos_p3) == 6 and "metals" not in pos_p3, f"Skewness signs {neg_full} {neg_p1} {pos_p3}")
+    # Skewness
+    sk_ir = {t: st(t, "Skewness")["ir"] for t in BUCKETS}
+    sk_p = {t: per(t, "Skewness") for t in BUCKETS}
+    neg_full = [t for t in BUCKETS if sk_ir[t] < 0]; neg_p1 = [t for t in BUCKETS if sk_p[t][0] < 0]; pos_p3 = [t for t in BUCKETS if sk_p[t][2] > 0]
+    chk(neg_full == ["metals"] and set(neg_p1) == {"metals", "petroleum", "ngl", "precious"}, f"Skewness P1 negative buckets {neg_p1}")
+    n_p1, n_p3 = len(neg_p1), len(pos_p3)
     pet_long = [legs("energy", p)["p3"]["long_pct"] for p in PRODUCTS["petroleum"]]
     chk(round(min(pet_long)) == 89 and round(max(pet_long)) == 100, "four oil products long on 89% to 100% of P3 days")
-    bs, bs4 = bystyle(), bystyle4(); bS = bench_corr(bs["Skewness"])
+    bs = bystyle(); bS = bench_corr(bs["Skewness"])
     ttf_long = legs("emissions", "TTF")["full"]["long_pct"]
-    nw = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven"}
-    kf.append(f"Skewness is a different kind of premium from the other four. It is positive in {nw[len(sk_ir) - len(neg_full)]} of the seven buckets (Petroleum, Gas and Emissions, NGL, Precious Metals, Agriculture and, marginally, US Power) and negative in Metals; it is negative in P1 in {nw[len(neg_p1)]} of the six buckets that have a P1 and positive in P3 in {nw[len(pos_p3)]} of the seven. "
-              f"Its gains in Petroleum, NGL and Precious Metals are largely long positions held after crashes (the four oil products were long on {min(pet_long):.0f}% to {max(pet_long):.0f}% of P3 days), consistent with its {N(bS['Commodity Index'])} correlation with a passive commodity index in the seven-bucket book, unlike Momentum, Carry and Carry-Momentum. "
+    nw = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six"}
+    kf.append(f"Skewness is a different kind of premium from the other four. It is positive in {nw[len(BUCKETS) - len(neg_full)]} of the six buckets (Petroleum, Gas and Emissions, NGL, Precious Metals and Agriculture) and negative in Metals, it is negative in P1 in {nw[n_p1]} buckets and positive in P3 in {nw[n_p3]}. "
+              f"Its gains in Petroleum, NGL and Precious Metals are largely long positions held after crashes (the four oil products were long on {min(pet_long):.0f}% to {max(pet_long):.0f}% of P3 days), consistent with its {N(bS['Commodity Index'])} correlation with a passive commodity index in the six-bucket book, unlike Momentum, Carry and Carry-Momentum. "
               f"Gas and Emissions is the exception to the long bias: Skewness is long on only {ttf_long:.0f}% of TTF days and earns its gain on the short side.")
+    # pairs
     c8 = corr8(); B, F = cross8()
-    best, b2 = F["best"], F["b2"]; ew, iv = F["ew"], F["iv"]; e6, i6 = F["e6"], F["i6"]
+    best, b2 = F["best"], F["b2"]; ew, iv = F["ew"], F["iv"]
+    ps_ = c8["pairs"]
     cx = corr_cross("EW PORT")
-    kf.append(f"Petroleum-NGL is the most correlated pair of buckets for all seven series types (EW PORT correlation {U(cx.loc['petroleum', 'ngl'])}); Gas and Emissions-NGL ({U(cx.loc['pen', 'ngl'])}), Petroleum-Gas and Emissions ({U(cx.loc['petroleum', 'pen'])}) and Metals-Precious Metals ({U(cx.loc['metals', 'precious'])}) follow, and no other pair exceeds 0.09; US Power is uncorrelated with every other bucket ({N(min(cx.loc['power', b] for b in BUCKETS))} to {N(max(cx.loc['power', b] for b in BUCKETS))}). "
-              f"Yet standalone Petroleum-NGL is the best-performing of the 21 pairs (Equal Weight IR {I(best['ew']['ir'])}, Inverse Vol IR {I(best['iv']['ir'])}), proving correlation and performance are separate questions.")
-    kf.append(f"The cross-commodity portfolio (each strategy equal-weighted across the seven buckets, then the five strategies combined; common dates from January 2015) delivers Equal Weight IR {I(ew['ir'])} and Inverse Vol IR {I(iv['ir'])} at a volatility of {V(ew['vol'])} and {V(iv['vol'])}, and is positive in every period under both constructions. "
-              f"Adding US Power to the six research buckets lowers the Equal Weight IR on the same window from {I(e6['ir'])} to {I(ew['ir'])} but makes the maximum drawdown shallower ({M(e6['mdd'])} to {M(ew['mdd'])}), because Power, uncorrelated with the rest, carries {F['share_pw']:.0f}% of the book's variance at a weight of one seventh. "
-              f"The book is negatively correlated with equity (Equal Weight {N(F['bE']['Equity'])}, Inverse Vol {N(F['bI']['Equity'])}) and a traditional 60/40 portfolio ({N(F['bE']['60/40 Portfolio'])}, {N(F['bI']['60/40 Portfolio'])}), but with Skewness included it is positively correlated with a passive commodity index ({N(F['bE']['Commodity Index'])}, {N(F['bI']['Commodity Index'])}; {N(F['b4E']['Commodity Index'])} and {N(F['b4I']['Commodity Index'])} without Skewness), so it diversifies equity and bonds but is no longer free of commodity beta.")
-    kf.append(f"Diversifying across all seven buckets lowers volatility but not risk-adjusted return: the Petroleum-NGL and Gas and Emissions-NGL pairs earn more per unit of risk (IR {I(best['ew']['ir'])} and {I(best['iv']['ir'])}; {I(b2['ew']['ir'])} and {I(b2['iv']['ir'])}) than the seven-bucket book (IR {I(ew['ir'])} and {I(iv['ir'])}), at about {V(best['ew']['vol'])} volatility against {V(ew['vol'])}, "
-              f"because the extra diversification comes from Metals, Precious Metals, Agriculture and US Power, where the combined signals earn little (US Power {I(stp(EW_P)['ir'])} from 2017) or nothing.")
-    chk(len(kf) == 9, "nine key findings (the US Power finding is inserted by the build)")
+    kf.append(f"Petroleum-NGL is the most correlated pair of buckets for all seven series types (EW PORT correlation {U(cx.loc['petroleum', 'ngl'])}); Gas and Emissions-NGL ({U(cx.loc['pen', 'ngl'])}), Petroleum-Gas and Emissions ({U(cx.loc['petroleum', 'pen'])}) and Metals-Precious Metals ({U(cx.loc['metals', 'precious'])}) follow, and no other pair exceeds 0.08. "
+              f"Yet standalone Petroleum-NGL is the best-performing of the fifteen pairs (Equal Weight IR {I(best['ew']['ir'])}, Inverse Vol IR {I(best['iv']['ir'])}), proving correlation and performance are separate questions.")
+    kf.append(f"The cross-commodity portfolio (each strategy equal-weighted across the six buckets, then the five strategies combined) delivers Equal Weight IR {I(ew['ir'])} and Inverse Vol IR {I(iv['ir'])} at a volatility of {V(ew['vol'])} and {V(iv['vol'])}, and is positive in every period under both constructions. "
+              f"It is negatively correlated with equity (Equal Weight {N(F['bE']['Equity'])}, Inverse Vol {N(F['bI']['Equity'])}) and a traditional 60/40 portfolio ({N(F['bE']['60/40 Portfolio'])}, {N(F['bI']['60/40 Portfolio'])}), but with Skewness included it is positively correlated with a passive commodity index ({N(F['bE']['Commodity Index'])}, {N(F['bI']['Commodity Index'])}; {N(F['b4E']['Commodity Index'])} and {N(F['b4I']['Commodity Index'])} without Skewness), so it diversifies equity and bonds but is no longer free of commodity beta.")
+    kf.append(f"Diversifying across all six buckets lowers volatility but not risk-adjusted return: the Petroleum-NGL and Gas and Emissions-NGL pairs earn more per unit of risk (IR {I(best['ew']['ir'])} and {I(best['iv']['ir'])}; {I(b2['ew']['ir'])} and {I(b2['iv']['ir'])}) than the six-bucket book (IR {I(ew['ir'])} and {I(iv['ir'])}), at about {V(best['ew']['vol'])} volatility against {V(ew['vol'])}, "
+              f"because the extra diversification comes from Metals, Precious Metals and Agriculture, where the core signals earn little or nothing.")
+    chk(len(kf) == 9, "nine key findings")
     return kf
 
 

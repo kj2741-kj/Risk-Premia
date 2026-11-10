@@ -11,14 +11,12 @@ PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI",
 MEMBERS = {"metals": [("metals", p) for p in PRODUCTS["metals"]], "petroleum": [("energy", p) for p in PRODUCTS["petroleum"]],
            "pen": [("energy", "NatGas"), ("emissions", "TTF"), ("emissions", "UKGas"), ("emissions", "EUA")],
            "ngl": [("ngl", p) for p in PRODUCTS["ngl"]] + [("naphtha", "Naphtha")],
-           "precious": [("precious", p) for p in PRODUCTS["precious"]], "agri": [("agri", p) for p in PRODUCTS["agri"]],
-           "power": [("power", p) for p in ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]]}
-BUCKETS = ["metals", "petroleum", "pen", "ngl", "precious", "agri"]        # the six research buckets (own sections)
-BOOK = BUCKETS + ["power"]                                                      # the cross-commodity book: seven buckets (US Power joined on 2026-11-07, common dates from January 2015)
+           "precious": [("precious", p) for p in PRODUCTS["precious"]], "agri": [("agri", p) for p in PRODUCTS["agri"]]}
+BUCKETS = ["metals", "petroleum", "pen", "ngl", "precious", "agri"]
 VARIANTS = {"metals": ("metals", PRODUCTS["metals"]), "petroleum": ("energy", PRODUCTS["petroleum"]), "energy": ("energy", PRODUCTS["energy"]),
             "energy_exng": ("energy", [p for p in PRODUCTS["energy"] if p != "NatGas"]), "ngl": ("ngl", PRODUCTS["ngl"]),
             "precious": ("precious", PRODUCTS["precious"]), "agri": ("agri", PRODUCTS["agri"])}
-LABEL = {"power": "US Power", "pen": "Gas and Emissions", "petroleum": "Petroleum", "metals": "Metals", "energy": "Energy", "energy_exng": "Energy ex-NatGas", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture"}
+LABEL = {"pen": "Gas and Emissions", "petroleum": "Petroleum", "metals": "Metals", "energy": "Energy", "energy_exng": "Energy ex-NatGas", "ngl": "NGL", "precious": "Precious Metals", "agri": "Agriculture"}
 WINDOWS = {"full": ("2012-01-01", None), "p1": ("2012-01-01", "2016-12-31"), "p2": ("2017-01-01", "2021-12-31"), "p3": ("2022-01-01", None)}
 D = json.load(open(os.path.join(REPO, "outputs", "final_dashboard_0930", "final_v3.json")))
 _nets = None

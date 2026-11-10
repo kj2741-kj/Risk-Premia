@@ -45,7 +45,6 @@ def pair_stats(exng=False):
             b = "energy_exng" if b == "energy" else b
         nm = f"{names[a]}-{names[b]}"
         e = pair_series(a, b, "EW"); i = pair_series(a, b, "IV")
-        ir_ = lambda x, w: (lambda m: None if m is None else m["ir"])(stats(x, w))      # None where a window has no data (the Inverse Vol pairs with US Power start in 2017)
-        out.append(dict(a=a, b=b, name=nm, ew=stats(e), iv=stats(i), ewp=[ir_(e, w) for w in ("p1", "p2", "p3")],
-                        ivp=[ir_(i, w) for w in ("p1", "p2", "p3")], corr=float(ew_cc.loc[a, b])))
+        out.append(dict(a=a, b=b, name=nm, ew=stats(e), iv=stats(i), ewp=[stats(e, w)["ir"] for w in ("p1", "p2", "p3")],
+                        ivp=[stats(i, w)["ir"] for w in ("p1", "p2", "p3")], corr=float(ew_cc.loc[a, b])))
     return out

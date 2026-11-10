@@ -14,8 +14,8 @@ OUT = os.path.join(S, "img8"); os.makedirs(OUT, exist_ok=True)
 COL = {"Momentum": "#C58F56", "Carry": "#D6BC74", "CarryMom": "#5FA3A0", "Value": "#7FBF96", "Skewness": "#B898B0"}
 EWC, IVC = "#111111", "#2B72B8"
 PROD_COL = ["#C58F56", "#D6BC74", "#5FA3A0", "#7FBF96", "#C97B7B", "#B898B0"]
-PAIR_COL = ["#E08A1E", "#E8C547", "#1F9E9A", "#6FBF4A", "#D9534F", "#8E44AD", "#7F7F7F", "#8C6D1F", "#2B72B8", "#5B3A29", "#C2185B", "#00897B", "#3949AB", "#F4511E", "#546E7A", "#A1887F", "#26A69A", "#7E57C2", "#EF9A9A", "#9E9D24", "#37474F"]
-PAIR_LS = ["-"] * 7 + ["--"] * 7 + [":"] * 7
+PAIR_COL = ["#E08A1E", "#E8C547", "#1F9E9A", "#6FBF4A", "#D9534F", "#8E44AD", "#7F7F7F", "#8C6D1F", "#2B72B8", "#5B3A29", "#C2185B", "#00897B", "#3949AB", "#F4511E", "#546E7A"]
+PAIR_LS = ["-"] * 6 + ["--"] * 5 + [":"] * 4
 PNAME = {"HeatingOil": "Heating Oil", "NatGas": "Henry Hub", "SoybeanOil": "Soybean Oil", "UKGas": "UK Gas", "EUA": "EUA"}
 NICE = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value", "Skewness": "Skewness"}
 FINAL = {}
@@ -23,8 +23,7 @@ START = "2012-01-01"
 
 
 def cum(r):
-    r = r.loc[START:]
-    r = r.loc[r.first_valid_index():].fillna(0)        # a series that starts after 2012 (the seven-bucket book and the pairs with US Power start in January 2015) is charted from its own first day
+    r = r.loc[START:].fillna(0)
     return np.exp(r.cumsum()) * 100
 
 
@@ -45,7 +44,7 @@ def plot(ax, ser, color, lw, label, fig_name, ls="-", alpha=0.95):
 
 def finish(fig, ax, name, loc="upper left", ncol=2, fs=8.5):
     ax.legend(loc=loc, ncol=ncol, fontsize=fs, framealpha=0.95)
-    ax.set_xlim(pd.Timestamp("2011-05-01") if name not in ("fig_cross_combined.png",) else pd.Timestamp("2014-07-01"), pd.Timestamp("2026-12-31"))
+    ax.set_xlim(pd.Timestamp("2011-05-01"), pd.Timestamp("2026-12-31"))
     fig.tight_layout(); fig.savefig(os.path.join(OUT, name), dpi=150); plt.close(fig)
 
 
@@ -72,7 +71,7 @@ for v in BUCKETS:
 # cross-commodity book: by style across the six buckets, with the two portfolio constructions
 style = bystyle()
 ewp = style["EW PORT"]; ivp = style["Inverse Vol"]
-fig, ax = setup("Cross-Commodity Portfolio (Seven Buckets): Combined Strategies")
+fig, ax = setup("Cross-Commodity Portfolio: Combined Strategies")
 for k in SLEEVES:
     plot(ax, style[k], COL[k], 1.4, NICE[k], "fig_cross_combined.png")
 plot(ax, ewp, EWC, 3.6, "EW Portfolio", "fig_cross_combined.png")
@@ -84,7 +83,7 @@ for meth, ttl in (("EW", "Equal Weight"), ("IV", "Inverse Vol")):
     fig, ax = setup(f"Cross-Pair Portfolios: {ttl}")
     for i, (a, b) in enumerate(PAIR_ORDER):
         plot(ax, pair_series(a, b, meth), PAIR_COL[i], 1.6, f"{SHORT[a]}-{SHORT[b]}", f"figA_pairs_{meth}.png", ls=PAIR_LS[i])
-    finish(fig, ax, f"figA_pairs_{meth}.png", ncol=2, fs=6.8); made.append(f"figA_pairs_{meth}.png")
+    finish(fig, ax, f"figA_pairs_{meth}.png", ncol=2, fs=7.5); made.append(f"figA_pairs_{meth}.png")
 import json
 json.dump(FINAL, open(os.path.join(S, "final_values8.json"), "w"), indent=1)
 print(len(made), "charts written to", OUT)

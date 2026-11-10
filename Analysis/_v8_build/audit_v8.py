@@ -8,7 +8,7 @@ from docx.text.paragraph import Paragraph
 D = json.load(open(r"C:\Users\Kartavya\Desktop\NYU\Summer\Risk Premia\outputs\final_dashboard_0930\final_v3.json"))
 d = docx.Document(sys.argv[1])
 BK = D["meta"]["keys"]                      # metals, petroleum, pen, ngl, precious, agri
-LAB = {"Metals": "metals", "Petroleum": "petroleum", "Gas and Emissions": "pen", "NGL": "ngl", "Precious Metals": "precious", "Agriculture": "agri", "US Power": "power"}
+LAB = {"Metals": "metals", "Petroleum": "petroleum", "Gas and Emissions": "pen", "NGL": "ngl", "Precious Metals": "precious", "Agriculture": "agri"}
 fails = []
 def check(name, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + name + (f"  [{detail}]" if detail else ""), flush=True)
@@ -24,7 +24,7 @@ for c in d.element.body:
 ROWS = []
 def walk(o):
     if isinstance(o, dict):
-        if {"ret", "vol", "mdd", "ir"} <= set(o) and all(o[k] is not None for k in ("ret", "vol", "mdd", "ir")): ROWS.append((o["ret"], o["vol"], o["mdd"], o["ir"]))
+        if {"ret", "vol", "mdd", "ir"} <= set(o): ROWS.append((o["ret"], o["vol"], o["mdd"], o["ir"]))
         for v in o.values(): walk(v)
     elif isinstance(o, list):
         for v in o: walk(v)
@@ -98,13 +98,13 @@ _nm = lambda n: n.replace(" - ", "-").replace("Precious", "Precious Metals")
 EWd = {_nm(z["name"]): z["ir"] for z in D["crosspair"]["EW"]["full"]}; IVd = {_nm(z["name"]): z["ir"] for z in D["crosspair"]["Inverse Vol"]["full"]}
 for r in rows[1:]:
     mm += abs(float(r[1]) - EWd[r[0]]) > 0.0055 or abs(float(r[2]) - IVd[r[0]]) > 0.0055
-check(f"C. 21-pair table == dataset ({len(rows) - 1} pairs, both constructions)", mm == 0 and len(rows) == 22)
+check(f"C. fifteen-pair table == dataset ({len(rows) - 1} pairs, both constructions)", mm == 0 and len(rows) == 16)
 # correlation section table: pair, EW PORT correlation, IRs
 corr_tab = None
 for i, (k, x, _) in enumerate(body):
     if k == "t" and [c.text for c in x.rows[0].cells][:2] == ["Pair", "EW PORT correlation"]: corr_tab = [[c.text.strip() for c in r.cells] for r in x.rows]
 M = D["corr"]["cross"]["EW PORT"]; idx = {b: i for i, b in enumerate(BK)}
-SHORT = {"Metals": "metals", "Petroleum": "petroleum", "Gas and Emissions": "pen", "NGL": "ngl", "Precious Metals": "precious", "Agriculture": "agri", "US Power": "power"}
+SHORT = {"Metals": "metals", "Petroleum": "petroleum", "Gas and Emissions": "pen", "NGL": "ngl", "Precious Metals": "precious", "Agriculture": "agri"}
 mm = 0
 for r in corr_tab[1:]:
     a, b = None, None
@@ -112,13 +112,13 @@ for r in corr_tab[1:]:
         if r[0].startswith(la + "-") and r[0][len(la) + 1:] in SHORT: a, b = SHORT[la], SHORT[r[0][len(la) + 1:]]
     assert a, r[0]
     mm += abs(float(r[1]) - M[idx[a]][idx[b]]) > 0.0055 or abs(float(r[2]) - EWd[r[0]]) > 0.0055 or abs(float(r[3]) - IVd[r[0]]) > 0.0055
-check(f"C. correlation-section pair table (EW PORT correlation and both IRs) == dataset ({len(corr_tab) - 1} pairs)", mm == 0 and len(corr_tab) == 22)
+check(f"C. correlation-section pair table (EW PORT correlation and both IRs) == dataset ({len(corr_tab) - 1} pairs)", mm == 0 and len(corr_tab) == 16)
 # D. Skewness correlations within bucket (Table A27)
 rows = table_after_kw("Skewness: Correlation with the Other Sleeves")
 order = ["Momentum", "Carry", "CarryMom", "Value", "EW PORT"]; R = D["corr"]["rows"]
 mm = 0
 for r in rows[1:]:
-    b = LAB[r[0].split(" (from")[0]]; mat = D["corr"]["within"][b]
+    b = LAB[r[0]]; mat = D["corr"]["within"][b]
     for nm, cell in zip(order, r[1:]): mm += abs(float(cell) - mat[R.index("Skewness")][R.index(nm)]) > 0.0055
 check(f"D. Skewness correlation table correlations (six buckets) == dataset ({(len(rows) - 1) * 5} cells)", mm == 0)
 # E. no stale wording, no unnumbered captions
@@ -146,18 +146,18 @@ check(f"G. class statistics of all six buckets recomputed from the product retur
 bs = bystyle(); bad_ = 0; n_ = 0
 for row_i, row in enumerate(D["bystyle"]["windows"]["full"]):
     for w in W4k:
-        n_ += 1; h_ = D["bystyle"]["windows"][w][row_i]["ir"]; m_ = stats(bs[row["name"]], w); bad_ += (h_ is None) != (m_ is None) or (h_ is not None and abs(h_ - m_["ir"]) > 0.0011)
+        n_ += 1; bad_ += abs(D["bystyle"]["windows"][w][row_i]["ir"] - stats(bs[row["name"]], w)["ir"]) > 0.0011
 cb = combined_book(); kk = [("EW", "EW"), ("EW", "IV"), ("IV", "EW"), ("IV", "IV")]
 for row_i, key in enumerate(kk):
     for w in W4k:
-        n_ += 1; h_ = D["combined"]["windows"][w][row_i]["ir"]; m_ = stats(cb[key], w); bad_ += (h_ is None) != (m_ is None) or (h_ is not None and abs(h_ - m_["ir"]) > 0.0011)      # a window without data (the Inverse Vol-sleeves rows start in 2016-17) is empty in both
+        n_ += 1; bad_ += abs(D["combined"]["windows"][w][row_i]["ir"] - stats(cb[key], w)["ir"]) > 0.0011
 check(f"G. cross-commodity by-style and two-stage books recomputed equal the dataset ({n_} cells)", bad_ == 0, f"{bad_} differ")
 ps = pair_stats(); bad_ = 0
 for p_ in ps:
     nm = (SHORT[p_["a"]] + " - " + SHORT[p_["b"]]).replace("Precious Metals", "Precious")
     e = next(z for z in D["crosspair"]["EW"]["full"] if z["name"] == nm); i_ = next(z for z in D["crosspair"]["Inverse Vol"]["full"] if z["name"] == nm)
     bad_ += abs(e["ir"] - p_["ew"]["ir"]) > 0.0011 or abs(i_["ir"] - p_["iv"]["ir"]) > 0.0011
-check("G. 21 pair series recomputed equal the dataset (both constructions)", bad_ == 0 and len(ps) == 21, f"{bad_} differ")
+check("G. fifteen pair series recomputed equal the dataset (both constructions)", bad_ == 0 and len(ps) == 15, f"{bad_} differ")
 mat = D["corr"]["cross"]["EW PORT"]; ix = {b: i for i, b in enumerate(BK)}; cc = corr_cross("EW PORT")
 check("G. EW PORT cross-bucket correlation matrix recomputed equals the dataset", max(abs(mat[ix[a]][ix[b]] - cc.loc[a, b]) for a in BK for b in BK) < 0.0011)
 
@@ -165,7 +165,7 @@ check("G. EW PORT cross-bucket correlation matrix recomputed equals the dataset"
 PWK = {"Full": "full", "2017-21": "p2", "2022-26": "p3"}
 cells_p = 0; mm_p = []
 for i, (k, x, _) in enumerate(body):
-    if k == "p" and re.match(r"Table A\d+\. US Power: ", x):
+    if k == "p" and re.match(r"Table A\d+\. US Power \(Standalone\): ", x):
         rows_ = [[c.text.strip() for c in r.cells] for r in body[i + 1][1].rows]
         if "Strategy Information" in x or "Portfolio Construction" in x:
             assert rows_[0][1:] == list(PWK), rows_[0]
@@ -214,7 +214,6 @@ bal = [t[:80] for t in allt if t.count("(") != t.count(")")]
 punc = [t[:80] for t in allt if re.search(r" ,|(?<!\.)\.\.(?!\.)|,,| \.(?![\d.])|\(\s|\s\)", t)]
 check("J. no double spaces, unbalanced brackets or stray punctuation in the document", not (iss or bal or punc), f"spaces {iss[:2]} brackets {bal[:2]} punct {punc[:2]}")
 # F. 26 products named in the buckets (27 before Isobutane was removed); sleeves
-check("F. the dataset has 26 products in the six research bucket tabs", sum(len(D["tabs"][b]["products"]) for b in BK if b != "power") == 26)
-check("F. the book is the seven-bucket book from 2015-01-07 (dataset and text)", BK[-1] == "power" and len(BK) == 7 and D["bystyle"]["common_first"] == "2015-01-07" and "7 January 2015" in text, f"{D['bystyle']['common_first']}")
+check("F. the dataset has 26 products in six buckets", sum(len(D["tabs"][b]["products"]) for b in BK) == 26)
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

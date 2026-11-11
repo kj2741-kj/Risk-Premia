@@ -1,0 +1,15 @@
+agri
+  Carry: short -0.098, long -0.315, two -0.336
+  CarryMom: short -0.322, long -0.652, two -0.709
+   Corn [('F1', 'F6')]: Carry -0.04/-0.20/-0.12; CarryMom +0.09/+0.06/-0.20
+   Wheat [('F1', 'F6')]: Carry +0.16/-0.27/-0.07; CarryMom +0.02/-0.52/-0.52
+   Soybean [('F1', 'F7')]: Carry -0.17/+0.08/-0.13; CarryMom -0.26/-0.12/-0.26
+   LiveCattle [('F1', 'F7')]: Carry -0.33/-0.26/-0.59; CarryMom -0.78/-0.93/-0.63
+softs
+  Carry: short -0.512, long -0.068, two -0.200
+  CarryMom: short -0.080, long -0.163, two -0.197
+   Sugar [('F1', 'F6')]: Carry -0.39/+0.22/-0.06; CarryMom -0.12/+0.03/-0.02
+   Cocoa [('F1', 'F6')]: Carry +0.05/-0.28/-0.16; CarryMom +0.03/-0.01/-0.03
+   Coffee [('F1', 'F6')]: Carry -0.30/+0.33/+0.11; CarryMom +0.18/+0.04/+0.09
+   Cotton [('F1', 'F6')]: Carry -0.49/-0.37/-0.33; CarryMom -0.34/-0.45/-0.52
+FAILED []

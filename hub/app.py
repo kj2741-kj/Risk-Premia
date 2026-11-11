@@ -84,9 +84,9 @@ DASHBOARD_LINKS = {
     "Metals":         {"url": "https://risk-premia-metals.streamlit.app/", "ready": True,
                         "desc": "LME Copper and Aluminium. Momentum, Carry, and Value strategies. A fuller "
                                 "10-tab research build is also available at metals-risk-premia-kj.streamlit.app."},
-    # 2026-10-31: "Energy" became Petroleum (WTI, Brent, RBOB, Heating Oil); same deployment and URL. Henry Hub is in the Gas and Emissions bucket.
+    # 2026-10-31: "Energy" became Petroleum (WTI, Brent, RBOB, Heating Oil; Gas Oil added 2026-11-11); same deployment and URL. Henry Hub is in the Gas and Emissions bucket.
     "Petroleum":      {"url": "https://risk-premia-energykj.streamlit.app/", "ready": True,
-                        "desc": "WTI, Brent, RBOB, Heating Oil. Momentum, Carry, Value, Skewness."},
+                        "desc": "WTI, Brent, RBOB, Heating Oil, Gas Oil. Momentum, Carry, Value, Skewness."},
     # New Streamlit Cloud app, main file pen_dashboard/app.py (URL added 2026-10-31).
     "Gas & Emissions": {"url": "https://penriskpremia.streamlit.app/", "ready": True,
                         "desc": "Henry Hub, TTF, UK Gas, EUA carbon. Momentum, Carry, Value, Skewness."},

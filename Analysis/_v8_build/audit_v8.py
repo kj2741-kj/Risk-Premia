@@ -24,7 +24,7 @@ for c in d.element.body:
 ROWS = []
 def walk(o):
     if isinstance(o, dict):
-        if {"ret", "vol", "mdd", "ir"} <= set(o): ROWS.append((o["ret"], o["vol"], o["mdd"], o["ir"]))
+        if {"ret", "vol", "mdd", "ir"} <= set(o) and None not in (o["ret"], o["vol"], o["mdd"], o["ir"]): ROWS.append((o["ret"], o["vol"], o["mdd"], o["ir"]))      # empty windows (Power P1) have no row to match
         for v in o.values(): walk(v)
     elif isinstance(o, list):
         for v in o: walk(v)
@@ -67,7 +67,7 @@ for k, x, _ in body:
         check(f"B. {cap[:22]} lists the products of the bucket", prods == D["tabs"][b]["products"], f"{prods}")
         for r in rows[1:]:
             for p, cell in zip(prods, r[1:]): cmp(f"{cap[:22]} {r[0]} {p}", cell, D["products"][keymap[p]][NAME[r[0]]]["full"]["ir"])
-check(f"B. {cells} cells of the bucket appendix tables equal the dataset", not mism and cells == 341, f"{len(mism)}: {mism[:4]}")      # 7 buckets x 28 period cells + 29 products x 5 sleeves (298 for six buckets and 26 products)
+check(f"B. {cells} cells of the bucket appendix tables equal the dataset", not mism and cells == 346, f"{len(mism)}: {mism[:4]}")      # 7 buckets x 28 period cells + 30 products x 5 sleeves (298 for six buckets and 26 products)
 
 # C. cross-commodity tables
 def table_after(prefix):
@@ -203,7 +203,7 @@ import pandas as pd
 lq = pd.read_csv("C:/Users/Kartavya/Desktop/NYU/Summer/Risk Premia/Analysis/Liquidity_Cal2025_results.csv").set_index("product")
 pq = pd.read_csv("C:/Users/Kartavya/Desktop/NYU/Summer/Risk Premia/Analysis/Power_Liquidity_Cal2025_results.csv").set_index("product").rename(columns={"price_usd_mwh": "price_usd_unit", "mult_mwh": "mult"})
 LQ = pd.concat([lq, pq[[c for c in lq.columns if c in pq.columns]]])
-NMAP = {"Henry Hub (Nat Gas)": "NatGas", "UK Gas (NBP)": "UKGas", "Singapore Gasoil\u2020": "SingaporeGasoil", "Heating Oil": "HeatingOil", "Soybean Oil": "SoybeanOil", "Live Cattle": "LiveCattle", "Natural Gasoline": "NatGasoline", "MISO OffPeak\u2021": "MISO_OffPeak",
+NMAP = {"Henry Hub (Nat Gas)": "NatGas", "UK Gas (NBP)": "UKGas", "Gas Oil": "SingaporeGasoil", "Heating Oil": "HeatingOil", "Soybean Oil": "SoybeanOil", "Live Cattle": "LiveCattle", "Natural Gasoline": "NatGasoline", "MISO OffPeak\u2021": "MISO_OffPeak",
         "PJM Peak": "PJM_Peak", "PJM OffPeak": "PJM_OffPeak", "ERCOT Peak": "ERCOT_Peak", "ERCOT OffPeak": "ERCOT_OffPeak", "MISO Peak": "MISO_Peak"}
 liq_rows = None
 for i, (k, x, _) in enumerate(body):
@@ -224,7 +224,7 @@ iss = [t[:80] for t in allt if "  " in t.replace("\u00a0", " ").strip() and not 
 bal = [t[:80] for t in allt if t.count("(") != t.count(")")]
 punc = [t[:80] for t in allt if re.search(r" ,|(?<!\.)\.\.(?!\.)|,,| \.(?![\d.])|\(\s|\s\)", t)]
 check("J. no double spaces, unbalanced brackets or stray punctuation in the document", not (iss or bal or punc), f"spaces {iss[:2]} brackets {bal[:2]} punct {punc[:2]}")
-# F. 29 products named in the seven buckets (26 in six buckets before the 10 November 2026 split and Natural Gasoline)
-check("F. the dataset has 29 products in seven buckets", sum(len(D["tabs"][b]["products"]) for b in BK) == 29)
+# F. 30 products named (29 before Gas Oil was added to Petroleum on 11 November 2026) in the seven buckets (26 in six buckets before the 10 November 2026 split and Natural Gasoline)
+check("F. the dataset has 30 products in seven buckets", sum(len(D["tabs"][b]["products"]) for b in BK) == 30)
 print("\nRESULT:", "ALL PASS" if not fails else f"{len(fails)} FAILED: {fails}")
 sys.exit(1 if fails else 0)

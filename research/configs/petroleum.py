@@ -1,8 +1,8 @@
 """
 research/configs/petroleum.py
 ===============================
-Petroleum bucket (2026-10-31): WTI, Brent, RBOB Gasoline, Heating Oil. This is the old Energy asset class without Henry Hub (NatGas moved to the Gas and Emissions
-bucket, research/configs/pen.py) and without Singapore Gasoil / Fuel Oil (dashboard exclusions, as before). A thin wrapper: every parameter, loader, data file and calendar is
+Petroleum bucket (2026-10-31): WTI, Brent, RBOB Gasoline, Heating Oil; Gas Oil (ICE Low Sulphur Gasoil, QS, engine key SingaporeGasoil) added 2026-11-11. This is the old Energy asset class without Henry Hub (NatGas moved to the Gas and Emissions
+bucket, research/configs/pen.py) and without Fuel Oil (dashboard exclusion, as before). A thin wrapper: every parameter, loader, data file and calendar is
 configs/energy.py's, unchanged, so the numbers of these four products are exactly the Energy numbers; only the product list and the asset-class label differ.
 configs/energy.py itself is left as it was (StatArb and the earlier research read it).
 """
@@ -16,4 +16,4 @@ from energy import (  # noqa: F401  (re-exported on purpose)
 )
 
 ASSET_CLASS = "Petroleum"
-PRODUCTS = ["WTI", "Brent", "RBOB", "HeatingOil"]
+PRODUCTS = ["WTI", "Brent", "RBOB", "HeatingOil", "SingaporeGasoil"]     # SingaporeGasoil = ICE Low Sulphur Gasoil (Bloomberg QS), shown as "Gas Oil"; added 2026-11-11 (user decision)

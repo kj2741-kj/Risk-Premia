@@ -46,6 +46,7 @@ from rolling_continuous import (
     ENERGY_CONFIG, ENERGY_FUTURES_FILE, ENERGY_CALENDAR_FILE,
     PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE,
     NGL_CONFIG, NGL_FUTURES_FILE, NGL_CALENDAR_FILE,
+    AGRI_CONFIG, AGRI_FUTURES_FILE, AGRI_CALENDAR_FILE,
 )
 from common_curve_loader import load_curve_simple, load_curve_legacy_multiheader
 
@@ -70,7 +71,7 @@ PRODUCTS = [
          config=ENERGY_CONFIG, futures_file=ENERGY_FUTURES_FILE, calendar_file=ENERGY_CALENDAR_FILE, loader="simple"),
     dict(asset_class="Energy", code="NG", name="Nat Gas Henry Hub (NYMEX)", unit="/MMBtu",
          config=ENERGY_CONFIG, futures_file=ENERGY_FUTURES_FILE, calendar_file=ENERGY_CALENDAR_FILE, loader="simple"),
-    dict(asset_class="Energy", code="QS", name="Singapore Gasoil (ICE)", unit="/mt",
+    dict(asset_class="Energy", code="QS", name="Gas Oil", unit="/mt",
          config=ENERGY_CONFIG, futures_file=ENERGY_FUTURES_FILE, calendar_file=ENERGY_CALENDAR_FILE, loader="simple"),
     dict(asset_class="Energy", code="FO", name="Fuel Oil 3.5pct Barges (ICE)", unit="/mt",
          config=ENERGY_CONFIG, futures_file=ENERGY_FUTURES_FILE, calendar_file=ENERGY_CALENDAR_FILE, loader="simple"),
@@ -105,6 +106,36 @@ PRODUCTS = [
          config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
     dict(asset_class="NGL", code="PGP", name="Propylene (Polymer Grade)", unit="/lb",
          config=NGL_CONFIG, futures_file=NGL_FUTURES_FILE, calendar_file=NGL_CALENDAR_FILE, loader="simple"),
+
+    # Agriculture (data/Prices_0924; real-cycle calendar). Sugar No.11 excluded.
+    dict(asset_class="Agriculture", code="C", name="Corn (CBOT)", unit="¢/bu",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="W", name="Wheat (CBOT)", unit="¢/bu",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="O", name="Oats (CBOT)", unit="¢/bu",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="RR", name="Rough Rice (CBOT)", unit="$/cwt",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="S", name="Soybean (CBOT)", unit="¢/bu",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="BO", name="Soybean Oil (CBOT)", unit="¢/lb",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="SM", name="Soybean Meal (CBOT)", unit="$/ton",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="KC", name="Coffee C (ICE)", unit="¢/lb",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="CC", name="Cocoa (ICE)", unit="$/MT",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="JO", name="Orange Juice (ICE)", unit="¢/lb",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="CT", name="Cotton No.2 (ICE)", unit="¢/lb",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="FC", name="Feeder Cattle (CME)", unit="¢/lb",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="LC", name="Live Cattle (CME)", unit="¢/lb",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
+    dict(asset_class="Agriculture", code="LH", name="Lean Hogs (CME)", unit="¢/lb",
+         config=AGRI_CONFIG, futures_file=AGRI_FUTURES_FILE, calendar_file=AGRI_CALENDAR_FILE, loader="simple"),
 ]
 
 

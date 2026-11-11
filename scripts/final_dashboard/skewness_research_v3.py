@@ -77,7 +77,7 @@ rows = []
 for k, (label, members) in BUCKETS.items():
     for a, p in members:
         m = met(nets[(a, p)]["Skewness"])
-        rows.append([f"{label}: {p}", f(m["Full"]["ret"]), f(m["Full"]["vol"]), f(m["Full"]["mdd"])] + [ir(m[w]["ir"]) for w in W4])
+        rows.append([f"{label}: {'Gas Oil' if p == 'SingaporeGasoil' else p}", f(m["Full"]["ret"]), f(m["Full"]["vol"]), f(m["Full"]["mdd"])] + [ir(m[w]["ir"]) for w in W4])
 sec.append("<h2>Skewness sleeve by product</h2>" + table(["Product", "Return %", "Vol %", "MDD %"] + [f"IR {w}" for w in W4], rows))
 cmp_rows = {}
 for k in KEYS:

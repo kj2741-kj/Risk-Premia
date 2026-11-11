@@ -5,7 +5,7 @@ import numpy as np, pandas as pd
 REPO = r"C:\Users\Kartavya\Desktop\NYU\Summer\Risk Premia"
 S = os.path.dirname(os.path.abspath(__file__))
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
-PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
+PRODUCTS = {"metals": ["Copper", "Aluminium", "Lead", "Zinc"], "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"], "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil", "SingaporeGasoil"],
             "ngl": ["Ethane", "Propane", "Butane"], "precious": ["Gold", "Silver", "Platinum", "Palladium"],
             "agri": ["Corn", "Wheat", "Soybean", "LiveCattle"], "softs": ["Sugar", "Cocoa", "Coffee", "Cotton"]}   # 2026-11-10: Agriculture split into Agriculture and Softs
 MEMBERS = {"metals": [("metals", p) for p in PRODUCTS["metals"]], "petroleum": [("energy", p) for p in PRODUCTS["petroleum"]],

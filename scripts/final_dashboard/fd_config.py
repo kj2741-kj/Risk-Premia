@@ -22,7 +22,7 @@ TAGS = {
 # bucket key -> (label, [(asset-class module, product), ...]); the module is where the product's config and series live
 BUCKETS = {
     "metals": ("Metals", [("metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]]),
-    "petroleum": ("Petroleum", [("energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]]),
+    "petroleum": ("Petroleum", [("energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil", "SingaporeGasoil"]]),
     "pen": ("Gas and Emissions", [("energy", "NatGas"), ("emissions", "TTF"), ("emissions", "UKGas"), ("emissions", "EUA")]),
     "ngl": ("NGL", [("ngl", p) for p in ["Ethane", "Propane", "Butane"]] + [("naphtha", "Naphtha"), ("mmb", "NatGasoline")]),
     "precious": ("Precious", [("precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]]),

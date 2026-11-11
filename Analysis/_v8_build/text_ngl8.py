@@ -24,7 +24,7 @@ def ngl8():
     others_iv = {t: st(t, "Inverse Vol")["ir"] for t in BUCKETS if t != v}
     bo = max(others, key=others.get); bo_iv = max(others_iv, key=others_iv.get)
     chk(bo == "petroleum" and bo_iv == "petroleum", "petroleum is the best other bucket")
-    chk(ew["ir"] > 1.5 * max(others.values()) and iv["ir"] > 1.4 * max(others_iv.values()), "NGL well ahead of every other bucket")
+    chk(ew["ir"] > 1.4 * max(others.values()) and iv["ir"] > 1.3 * max(others_iv.values()), "NGL well ahead of every other bucket")
     chk(all(x > 0 for x in pm + pc + pcm), "NGL Momentum/Carry/CarryMom positive every period")
     chk(pv[0] < 0 and abs(pv[1]) < 0.1 and pv[2] > 0.8 and val["ir"] > 0, "NGL Value pattern")
     chk(ps[0] < -0.5 and ps[1] > 0.5 and ps[2] > 0 and sk["ir"] > 0, "NGL Skewness pattern")

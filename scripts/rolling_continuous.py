@@ -258,7 +258,7 @@ ENERGY_CONFIG: dict[str, dict] = {
         "f1_col": 1, "f2_col": 2, "data_start_row": 2,
     },
     "QS": {
-        "name": "Singapore Gasoil (ICE)", "price_sheet": "Low Sulphur Gasoil (ICE Europe)",   # 2026-10-11: sheet renamed in the 24-Sep file, data identical; QS is ICE Low Sulphur Gasoil (the "Singapore" label was wrong); product is excluded from every dashboard
+        "name": "Gas Oil", "price_sheet": "Low Sulphur Gasoil (ICE Europe)",   # 2026-10-11: sheet renamed in the 24-Sep file, data identical; QS is ICE Low Sulphur Gasoil (the "Singapore" label was wrong); shown as "Gas Oil" and in the Petroleum bucket since 2026-11-11
         "calendar_sheet": "QS - Gasoil (ICE)",
         "f1_col": 1, "f2_col": 2, "data_start_row": 2,
     },
@@ -1039,7 +1039,7 @@ if __name__ == "__main__":
         ("XB", "RBOB_Gasoline",      ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
         ("HO", "Heating_Oil",        ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
         ("NG", "Nat_Gas",            ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
-        ("QS", "Singapore_Gasoil",   ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
+        ("QS", "Gas_Oil",            ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
         ("FO", "Fuel_Oil",           ENERGY_CONFIG,   ENERGY_FUTURES_FILE,   ENERGY_CALENDAR_FILE),
         ("GC", "Gold_COMEX",         PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),
         ("SI", "Silver_COMEX",       PRECIOUS_CONFIG, PRECIOUS_FUTURES_FILE, PRECIOUS_CALENDAR_FILE),

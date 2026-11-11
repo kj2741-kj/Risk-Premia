@@ -124,7 +124,7 @@ ASSET_CLASS_SHORT: dict[str, str] = {}   # no short names: pair labels use the f
 # industrial metal already covered by the Metals asset class (LME), not a precious metal.
 DASHBOARD_PRODUCTS = {
     "energy": ["WTI", "Brent", "RBOB", "HeatingOil", "NatGas"],
-    "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil"],
+    "petroleum": ["WTI", "Brent", "RBOB", "HeatingOil", "SingaporeGasoil"],   # Gas Oil (ICE QS) added 2026-11-11
     "pen": ["NatGas", "TTF", "UKGas", "EUA"],
     "ngl": ["Ethane", "Propane", "Butane", "Naphtha", "NatGasoline"],   # NatGasoline = CME natural gasoline (MMB) added 2026-11-10; Naphtha added 2026-11-04 (average-price swap, same convention as the Mont Belvieu swaps); Isobutane removed 2026-11-09 (least liquid product: about 10 lots a day on its 12-month strip in 2025), still in research/configs/ngl.py
     "precious": ["Gold", "Silver", "Platinum", "Palladium"],

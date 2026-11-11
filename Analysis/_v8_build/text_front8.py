@@ -35,7 +35,12 @@ def key_findings(old_kf):
     chk(round(yl[2021] / ewp.sum() * 100) == 42 and round(ir_ex, 2) == 0.30, "Gas and Emissions crisis concentration")
     kf.append(f"Gas and Emissions (Henry Hub, TTF, UK Gas and EUA) earns Equal Weight IR {I(ge['ir'])} and Inverse Vol IR {I(gi['ir'])} at {V(ge['vol'])} volatility, with Carry the strongest sleeve (IR {I(st('pen', 'Carry')['ir'])}) and Value (IR {I(st('pen', 'Value')['ir'])}) the only negative one. The edge sits in European gas, TTF (combined IR {I(gp['TTF'])}) and UK Gas ({I(gp['UKGas'])}), not in Henry Hub ({I(gp['NatGas'])}) or EUA ({I(gp['EUA'])}), "
               f"and in one episode: 2021 alone is {yl[2021] / ewp.sum() * 100:.0f}% of the Equal Weight log return, and excluding July 2021 to June 2023 the IR falls to {I(ir_ex)}.")
-    kf.append(old_kf[1]); kf.append(old_kf[2])
+    pm_ = {k: st('petroleum', k)['ir'] for k in SLEEVES}; pew, piv = st('petroleum', 'EW PORT'), st('petroleum', 'Inverse Vol')
+    chk(max(pm_, key=pm_.get) == 'CarryMom' and [k for k in SLEEVES if pm_[k] < 0] == ['Value'], 'Petroleum: Carry-Momentum strongest sleeve, Value the only negative')
+    _sk = CS['petroleum']['Skewness'].loc['2012-01-01':].dropna(); _yl = yearly_log(_sk).loc[[2020, 2021, 2022, 2026]].sum(); _tt = _sk.sum()
+    chk(_yl > _tt, 'Petroleum Skewness: four years add more than the full-sample total')
+    kf.append(f"Petroleum's Carry-Momentum is its strongest strategy (IR {I(pm_['CarryMom'])}) and Value (IR {I(pm_['Value'])}) is the only core Petroleum strategy with a negative full-sample IR; the Equal Weight and Inverse Vol portfolios earn IR {I(pew['ir'])} and {I(piv['ir'])}. "
+              f"Skewness is positive in Petroleum (IR {I(pm_['Skewness'])}), but mostly because it stayed long oil after the 2020 collapse: calendar years 2020, 2021, 2022 and 2026 add {_yl:.2f} of log return against a full-sample total of {_tt:.2f}."); kf.append(old_kf[2])
     # Precious Metals, Agriculture and Softs
     pe, pi = st("precious", "EW PORT"), st("precious", "Inverse Vol"); ae, ai = st("agri", "EW PORT"), st("agri", "Inverse Vol"); se, si = st("softs", "EW PORT"), st("softs", "Inverse Vol")
     neg_both = [t for t in BUCKETS if st(t, "EW PORT")["ir"] < 0 and st(t, "Inverse Vol")["ir"] < 0]
@@ -52,20 +57,20 @@ def key_findings(old_kf):
     chk(neg_full == ["metals", "softs"] and set(neg_p1) == {"metals", "petroleum", "ngl", "precious", "softs"} and set(pos_p3) == {"petroleum", "pen", "ngl", "precious", "agri"}, f"Skewness by bucket: negative full {neg_full}, P1 negative {neg_p1}, P3 positive {pos_p3}")
     n_p1, n_p3 = len(neg_p1), len(pos_p3)
     pet_long = [legs("energy", p)["p3"]["long_pct"] for p in PRODUCTS["petroleum"]]
-    chk(round(min(pet_long)) == 89 and round(max(pet_long)) == 100, "four oil products long on 89% to 100% of P3 days")
+    chk(len(pet_long) == 5 and round(min(pet_long)) == 89 and round(max(pet_long)) == 100, "five oil products long on 89% to 100% of P3 days")
     bs = bystyle(); bS = bench_corr(bs["Skewness"])
     ttf_long = legs("emissions", "TTF")["full"]["long_pct"]
     nw = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five", 6: "six", 7: "seven"}
     kf.append(f"Skewness is a different kind of premium from the other four. It is positive in {nw[len(BUCKETS) - len(neg_full)]} of the seven buckets (Petroleum, Gas and Emissions, NGL, Precious Metals and Agriculture) and negative in Metals and Softs, it is negative in P1 in {nw[n_p1]} buckets and positive in P3 in {nw[n_p3]}. "
-              f"Its gains in Petroleum, NGL and Precious Metals are largely long positions held after crashes (the four oil products were long on {min(pet_long):.0f}% to {max(pet_long):.0f}% of P3 days), consistent with its {N(bS['Commodity Index'])} correlation with a passive commodity index in the seven-bucket book, unlike Momentum, Carry and Carry-Momentum. "
+              f"Its gains in Petroleum, NGL and Precious Metals are largely long positions held after crashes (the five oil products were long on {min(pet_long):.0f}% to {max(pet_long):.0f}% of P3 days), consistent with its {N(bS['Commodity Index'])} correlation with a passive commodity index in the seven-bucket book, unlike Momentum, Carry and Carry-Momentum. "
               f"Gas and Emissions is the exception to the long bias: Skewness is long on only {ttf_long:.0f}% of TTF days and earns its gain on the short side.")
     # pairs
     c8 = corr8(); B, F = cross8()
     best, b2 = F["best"], F["b2"]; best_iv = F["best_iv"]; ew, iv = F["ew"], F["iv"]
     cx = corr_cross("EW PORT")
-    chk(best_iv["name"] == b2["name"] == "Gas and Emissions-NGL", "Gas and Emissions-NGL is second under Equal Weight and first under Inverse Vol")
+    chk(best["name"] == best_iv["name"] == "Petroleum-NGL" and b2["name"] == "Gas and Emissions-NGL", "Petroleum-NGL is first and Gas and Emissions-NGL second under Equal Weight; Petroleum-NGL also first under Inverse Vol")
     kf.append(f"Petroleum-NGL is the most correlated pair of buckets for all seven series types (EW PORT correlation {U(cx.loc['petroleum', 'ngl'])}); Gas and Emissions-NGL ({U(cx.loc['pen', 'ngl'])}), Petroleum-Gas and Emissions ({U(cx.loc['petroleum', 'pen'])}) and Metals-Precious Metals ({U(cx.loc['metals', 'precious'])}) follow, and no other pair exceeds 0.08. "
-              f"Yet standalone Petroleum-NGL is the best-performing of the twenty-one pairs under Equal Weight (IR {I(best['ew']['ir'])}, Inverse Vol IR {I(best['iv']['ir'])}) and second under Inverse Vol, behind Gas and Emissions-NGL ({I(best_iv['iv']['ir'])}), proving correlation and performance are separate questions.")
+              f"Yet standalone Petroleum-NGL is the best-performing of the twenty-one pairs under both Equal Weight (IR {I(best['ew']['ir'])}) and Inverse Vol (IR {I(best['iv']['ir'])}), narrowly ahead of Gas and Emissions-NGL ({I(b2['ew']['ir'])} and {I(b2['iv']['ir'])}), proving correlation and performance are separate questions.")
     kf.append(f"The cross-commodity portfolio (each strategy equal-weighted across the seven buckets, then the five strategies combined) delivers Equal Weight IR {I(ew['ir'])} and Inverse Vol IR {I(iv['ir'])} at a volatility of {V(ew['vol'])} and {V(iv['vol'])}, and is positive in every period under both constructions. "
               f"It is negatively correlated with equity (Equal Weight {N(F['bE']['Equity'])}, Inverse Vol {N(F['bI']['Equity'])}) and a traditional 60/40 portfolio ({N(F['bE']['60/40 Portfolio'])}, {N(F['bI']['60/40 Portfolio'])}), but with Skewness included it is positively correlated with a passive commodity index ({N(F['bE']['Commodity Index'])}, {N(F['bI']['Commodity Index'])}; {N(F['b4E']['Commodity Index'])} and {N(F['b4I']['Commodity Index'])} without Skewness), so it diversifies equity and bonds but is no longer free of commodity beta.")
     kf.append(f"Diversifying across all seven buckets lowers volatility but not risk-adjusted return: the Petroleum-NGL and Gas and Emissions-NGL pairs earn more per unit of risk (IR {I(best['ew']['ir'])} and {I(best['iv']['ir'])}; {I(b2['ew']['ir'])} and {I(b2['iv']['ir'])}) than the seven-bucket book (IR {I(ew['ir'])} and {I(iv['ir'])}), at about {V(best['ew']['vol'])} volatility against {V(ew['vol'])}, "
@@ -78,13 +83,13 @@ def liquidity_paragraph():
     liq = pd.read_csv(os.path.join(REPO, "Analysis", "Liquidity_Cal2025_results.csv")).set_index("product")
     pl = pd.read_csv(os.path.join(REPO, "Analysis", "Power_Liquidity_Cal2025_results.csv")).set_index("product")
     ng = pd.read_csv(os.path.join(REPO, "Analysis", "NGL_Liquidity_CME_ICE_Cal2025_products.csv")).set_index("family")
-    grp = {"Metals": ["Copper", "Aluminium", "Zinc", "Lead"], "Petroleum": ["Brent", "WTI", "HeatingOil", "RBOB"], "Gas and Emissions": ["NatGas", "TTF", "UKGas", "EUA"], "Precious Metals": ["Gold", "Silver", "Platinum", "Palladium"],
+    grp = {"Metals": ["Copper", "Aluminium", "Zinc", "Lead"], "Petroleum": ["Brent", "WTI", "SingaporeGasoil", "HeatingOil", "RBOB"], "Gas and Emissions": ["NatGas", "TTF", "UKGas", "EUA"], "Precious Metals": ["Gold", "Silver", "Platinum", "Palladium"],
            "NGL": ["Propane", "Butane", "Ethane", "Naphtha", "NatGasoline"], "Agriculture": ["Soybean", "Corn", "Wheat", "LiveCattle"], "Softs": ["Sugar", "Cocoa", "Coffee", "Cotton"]}
     pw_ = ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak"]
     prod = [p for g in grp.values() for p in g]
-    chk(len(prod) == 29 and len(pw_) == 5, "29 bucket products and 5 Power series")
+    chk(len(prod) == 30 and len(pw_) == 5, "30 bucket products and 5 Power series")
     x = liq["x_strip"]; L = liq["L_strip"]; xp = pl["x_strip"]; Lp = pl["L_strip"]
-    allx = pd.concat([x.loc[prod + ["SingaporeGasoil"]], xp])
+    allx = pd.concat([x.loc[prod], xp])
     chk(allx.idxmax() == "Brent" and allx.idxmin() == "MISO_OffPeak", "Brent most liquid, MISO OffPeak least liquid of the table")
     chk(len(allx) == 36, "36 products in the table")
     chk(x.loc[prod].idxmin() == "Naphtha", "Naphtha is the least liquid product of the seven research buckets")

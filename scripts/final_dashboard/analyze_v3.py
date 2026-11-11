@@ -1,7 +1,7 @@
 """Analysis stage of the 2012 research dashboard with the new buckets (2026-10-31) -> outputs/final_dashboard_<tag>/final_v3.json (tag from env FD_TAG, default 0930; see fd_config.py)
 Input: products_nets.pkl (compute_products_v3.py). Reporting from 2012-01-01 in three periods (P1 2012-2016, P2 2017-2021, P3 2022 onwards) plus a 2026 year-to-date column.
 Data through the tag's cutoff (0930: 2026-09-30, 1029: 2026-10-29). Methods: EW and Inverse Vol (63d trailing vol) only, as before.
-Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil), Gas and Emissions (NatGas, TTF, UKGas, EUA), NGL, Precious, Agriculture, Softs.
+Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil, Gas Oil = SingaporeGasoil key, ICE QS), Gas and Emissions (NatGas, TTF, UKGas, EUA), NGL, Precious, Agriculture, Softs.
 The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all seven buckets (Softs split out of Agriculture 2026-11-10).
 Run from the repo root after compute_products_v3.py."""
 import json
@@ -65,7 +65,7 @@ for key, (label, members) in BUCKETS.items():
     styles, ew, iv = ac_series(members)
     acs[key] = dict(styles=styles, ew=ew, iv=iv)
     rows = dict(styles); rows["EW PORT"] = ew; rows["Inverse Vol"] = iv
-    res["tabs"][key] = dict(label=label, products=[p for _, p in members], pkeys=[pk(a, p) for a, p in members], windows=win(rows),
+    res["tabs"][key] = dict(label=label, products=[{"SingaporeGasoil": "Gas Oil"}.get(p, p) for _, p in members], pkeys=[pk(a, p) for a, p in members], windows=win(rows),
                             data_first=max(meta[m]["first"] for m in members), data_last=min(meta[m]["last"] for m in members),
                             pairs={pk(*m): ["-".join(x) for x in meta[m]["pairs"]] for m in members},
                             rolls={pk(*m): meta[m]["rolls"] for m in members})

@@ -15,6 +15,7 @@ from text_cross8 import corr8, cross8, _c
 from text_front8 import key_findings, liquidity_paragraph
 from text_power import power
 from text_agri import agri, agri_narr
+from text_petroleum import petroleum
 from text_softs import softs, softs_narr
 from facts_tenor import bucket_tenor_table
 from power_facts import *
@@ -144,7 +145,7 @@ K = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
 KN = {"Momentum": "Momentum", "Carry": "Carry", "CarryMom": "Carry-Momentum", "Value": "Value", "Skewness": "Skewness"}
 W4 = [("Full", "full"), ("2012-16", "p1"), ("2017-21", "p2"), ("2022-26", "p3")]
 SLN = ["Momentum", "Carry", "Carry-Momentum", "Value", "Skewness"]
-PNM = {"HeatingOil": "Heating Oil", "NatGas": "Henry Hub", "SoybeanOil": "Soybean Oil", "UKGas": "UK Gas", "EUA": "EUA", "LiveCattle": "Live Cattle", "NatGasoline": "Natural Gasoline"}
+PNM = {"SingaporeGasoil": "Gas Oil", "HeatingOil": "Heating Oil", "NatGas": "Henry Hub", "SoybeanOil": "Soybean Oil", "UKGas": "UK Gas", "EUA": "EUA", "LiveCattle": "Live Cattle", "NatGasoline": "Natural Gasoline"}
 BS, BS4 = bystyle(), bystyle4()
 CB = combined_book()
 
@@ -276,7 +277,7 @@ _pl = pd.read_csv(os.path.join(REPO, "Analysis", "Power_Liquidity_Cal2025_result
 liq = pd.concat([liq, _pl[[c for c in liq.columns if c in _pl.columns]]])
 GRP = [("Metals", ["Copper", "Aluminium", "Zinc", "Lead"]), ("Petroleum", ["Brent", "WTI", "SingaporeGasoil", "HeatingOil", "RBOB"]), ("Gas and Emissions", ["NatGas", "TTF", "UKGas", "EUA"]),
        ("Precious Metals", ["Gold", "Silver", "Platinum", "Palladium"]), ("NGL", ["Propane", "Butane", "Ethane", "Naphtha", "NatGasoline"]), ("Agriculture", ["Soybean", "Corn", "Wheat", "LiveCattle"]), ("Softs", ["Sugar", "Cocoa", "Coffee", "Cotton"]), ("US Power (Standalone)", ["PJM_Peak", "ERCOT_Peak", "PJM_OffPeak", "ERCOT_OffPeak", "MISO_Peak", "MISO_OffPeak"])]
-LN = {"SingaporeGasoil": "Singapore Gasoil†", "HeatingOil": "Heating Oil", "NatGas": "Henry Hub (Nat Gas)", "UKGas": "UK Gas (NBP)", "SoybeanOil": "Soybean Oil", "Propane": "Propane", "Butane": "Butane", "Ethane": "Ethane", "Naphtha": "Naphtha*", "NatGasoline": "Natural Gasoline", "LiveCattle": "Live Cattle", "Isobutane": "Isobutane*", "PJM_Peak": "PJM Peak", "ERCOT_Peak": "ERCOT Peak", "PJM_OffPeak": "PJM OffPeak", "ERCOT_OffPeak": "ERCOT OffPeak", "MISO_Peak": "MISO Peak", "MISO_OffPeak": "MISO OffPeak‡"}
+LN = {"SingaporeGasoil": "Gas Oil", "HeatingOil": "Heating Oil", "NatGas": "Henry Hub (Nat Gas)", "UKGas": "UK Gas (NBP)", "SoybeanOil": "Soybean Oil", "Propane": "Propane", "Butane": "Butane", "Ethane": "Ethane", "Naphtha": "Naphtha*", "NatGasoline": "Natural Gasoline", "LiveCattle": "Live Cattle", "Isobutane": "Isobutane*", "PJM_Peak": "PJM Peak", "ERCOT_Peak": "ERCOT Peak", "PJM_OffPeak": "PJM OffPeak", "ERCOT_OffPeak": "ERCOT OffPeak", "MISO_Peak": "MISO Peak", "MISO_OffPeak": "MISO OffPeak‡"}
 allp = [p for _, ps in GRP for p in ps]
 rank = {p: i + 1 for i, p in enumerate(sorted(allp, key=lambda q: -liq.loc[q, "x_strip"]))}
 chk(len(allp) == 36, "36 liquidity products")
@@ -305,11 +306,11 @@ _rs = _p.runs; _rs[0].text = _lab + " "; _rs[1].text = _full[len(_lab) + 1:]
 for _r in _rs[2:]: _r._r.getparent().remove(_r._r)
 inote = find_p("Note: Calendar 2025 only")
 nt = ptext(E()[inote])
-nt = nt.replace("The table covers 26 products: the 25 of the research universe plus Singapore Gasoil†", "The table covers 36 products: the 29 of the seven buckets, the five US Power series of the standalone Power section, Singapore Gasoil† and MISO OffPeak‡")
+nt = nt.replace("The table covers 26 products: the 25 of the research universe plus Singapore Gasoil†", "The table covers 36 products: the 30 of the seven buckets, the five US Power series of the standalone Power section and MISO OffPeak‡")
 nt = nt.replace("* NGL volumes are the CME contracts only (ICE is not included), so NGL figures are lower bounds.", "* Naphtha volume is the Bloomberg series, a partial view of the swap market, so its figure is a lower bound. NGL volumes of Ethane, Propane, Butane and Natural Gasoline are CME plus ICE (the ICE contracts of the 10 November 2026 download; Natural Gasoline also includes the CME and ICE Conway contracts), each venue valued at its own price and volatility, and the P\u0304 and \u03c3 shown are strip-volume-weighted averages; ICE lots are 1,000 barrels, the 42,000 gallons of the CME swaps.")
 nt = nt.replace("Isobutane printed on only 13% of days with a median daily volume of zero, which is what its very low x reflects. ", "")
 nt = nt.replace("EUA and TTF are converted from EUR at 1.1300", "EUA and TTF are converted from EUR at 1.1300 and UK Gas from pence per therm at 1.3184 USD/GBP (the 2025 mean of the ECB crosses; its lot is 1,000 therms a day over an average month, 30,417 therms)")
-nt = nt.replace("† The series is ICE Low Sulphur Gasoil", "‡ MISO OffPeak (time to trade one sigma of risk 9.9 days) is not in the Power results. US Power lots are 1 MW for every hour of the delivery month (ICE), taken as 340 MWh for peak and 390 MWh for off-peak contracts (304 to 368 and 352 to 417 MWh across the 2025 months). † The series is ICE Low Sulphur Gasoil")
+nt = nt.replace("† The series is ICE Low Sulphur Gasoil (Bloomberg root QS), carried under the name Singapore Gasoil in the research files; it is not one of the four Petroleum products in the strategy results. ", "‡ MISO OffPeak (time to trade one sigma of risk 9.9 days) is not in the Power results. US Power lots are 1 MW for every hour of the delivery month (ICE), taken as 340 MWh for peak and 390 MWh for off-peak contracts (304 to 368 and 352 to 417 MWh across the 2025 months). Gas Oil is the ICE Low Sulphur Gasoil future (Bloomberg root QS, 100 tonnes, USD per tonne) and has been a Petroleum product since 11 November 2026. ")
 assert "36 products" in nt and "Bloomberg series" in nt and "MISO OffPeak (time" in nt
 set_text(P(E()[inote]), nt)
 
@@ -331,9 +332,11 @@ set_text(P(E()[iv_]), "Version note (v8, 10 November 2026). All seven buckets ar
          "Agriculture is split in two on 10 November 2026: Agriculture (Corn, Wheat, Soybean and Live Cattle) and Softs (Sugar, Cocoa, Coffee and Cotton), a new section with its own appendix tables and figures; Soybean Oil is dropped, Live Cattle, Cocoa and Cotton are new, and the Carry tenor pairs are F1-F2 plus F1-F6 (F1-F7 for Soybean and Live Cattle). The single-pair, long-pair and two-pair Carry comparison of the Agriculture section is recomputed for the new pairs, in Agriculture and in Softs. "
          "The Correlation Analysis and the Cross-Commodity Portfolio cover the seven buckets and all twenty-one bucket pairs, so the Energy-ex-NatGas comparison no longer applies. "
          "US Power (PJM, ERCOT and MISO real-time monthly futures) is added as a standalone bucket with its own section, appendix tables and figures; it is not part of the cross-commodity book. The Key Findings, the liquidity section and table (36 products, with UK Gas, Naphtha, Natural Gasoline, Live Cattle, Cocoa, Cotton and the US Power series) and every appendix table and figure are redrawn on this basis, all figures as a cumulative return index starting at 100%, and tables and figures are renumbered.")
-ipet = find_p("Petroleum is the four oil products")
-tp = ptext(E()[ipet]); assert "Power, Emissions and Nat Gas" in tp
-set_text(P(E()[ipet]), tp.replace("Natural Gas has moved to the Power, Emissions and Nat Gas bucket and is not covered here", "Natural Gas has moved to the Gas and Emissions bucket, which has its own section").replace(" (five further trading days, 24 to 30 September, than the previous version)", ""))
+ipet = find_p("Petroleum is the four oil products")      # v7 text; replaced below by the five-product text (Gas Oil added 11 November 2026), generated and asserted in text_petroleum.py
+_pet = [b_[1] for b_ in petroleum() if b_[0] == "b"]
+assert len(_pet) == 9 and "Power, Emissions and Nat Gas" in _pet[0]
+_pet[0] = _pet[0].replace("Natural Gas has moved to the Power, Emissions and Nat Gas bucket and is not covered here", "Natural Gas has moved to the Gas and Emissions bucket, which has its own section").replace(" (five further trading days, 24 to 30 September, than the previous version)", "")
+set_bullets_run(E()[ipet - 1], _pet)
 
 ipm_ = find_p("Portfolio construction: Equal Weight (Return -1.8%, Vol 7.8%"); tpm_ = ptext(E()[ipm_])
 a_pm = "Precious Metals is, with Agriculture, one of the two asset classes where no core strategy earns a worthwhile IR (here every core strategy is net negative full-sample) and neither construction earns a positive IR."
@@ -421,6 +424,18 @@ for c, (a, p) in zip(tc_.rows[0].cells[1:], MEMBERS["pen"]): cell_set(c, PNM.get
 for r, k in zip(tc_.rows[1:], K):
     for c, (a, p) in zip(r.cells[1:], MEMBERS["pen"]): cell_set(c, I(pst(a, p, k)["ir"]))
 
+# ----------------------------------------------------------------------------------------------------------------------------- Petroleum appendix tables (A4 to A6, old numbering; done after the Gas and Emissions tables are cloned from them, which keep four columns): five products since 11 November 2026 (Gas Oil added)
+_, t4p = tbl_after("Table A4. Petroleum: Strategy"); assert labels(t4p) == SLN
+for r, vals in zip(t4p.rows[1:], st_cells("petroleum", SLEEVES)):
+    for c, x in zip(r.cells[1:], vals): cell_set(c, x)
+_, t5p = tbl_after("Table A5. Petroleum: Portfolio"); assert labels(t5p) == ["Equal Weight", "Inverse Vol"]
+for r, vals in zip(t5p.rows[1:], st_cells("petroleum", ["EW PORT", "Inverse Vol"])):
+    for c, x in zip(r.cells[1:], vals): cell_set(c, x)
+_, t6p = tbl_after("Table A6. Petroleum: Individual-Product"); assert [c.text for c in t6p.rows[0].cells[1:]] == ["WTI", "Brent", "RBOB", "Heating Oil"], [c.text for c in t6p.rows[0].cells[1:]]
+add_column(t6p, "Gas Oil", [""] * 5)
+for r, k in zip(t6p.rows[1:], K):
+    for c, (a, p) in zip(r.cells[1:], MEMBERS["petroleum"]): cell_set(c, I(pst(a, p, k)["ir"]))
+
 # appendix charts of Gas and Emissions (cloned from the Petroleum group)
 els = E(); ih = find_p("Petroleum", find_p("Appendix: Equity-Curve Charts", style="Heading 2"), "Heading 3")
 grp = els[ih:ih + 11]; assert is_p(grp[0]) and all(is_p(e) for e in grp)
@@ -504,17 +519,21 @@ _o2 = lambda tab, name: next(z for z in tab["windows"]["full"] if z["name"] == n
 _o2_book = {n: _o2(_old2["bystyle"], n)["ir"] for n in ("EW PORT", "Inverse Vol")}
 _o2_agri = {n: _o2(_old2["tabs"]["agri"], n)["ir"] for n in ("EW PORT", "Inverse Vol")}
 _o2_ngl = {n: _o2(_old2["tabs"]["ngl"], n)["ir"] for n in ("EW PORT", "Inverse Vol")}
+_old3 = _json.load(open(os.path.join(REPO, "outputs", "final_dashboard_0930_pre_gasoil", "final_v3.json"), encoding="utf8"))      # the 10 November 2026 build, before Gas Oil joined Petroleum
+_o3_pet = {n: _o2(_old3["tabs"]["petroleum"], n)["ir"] for n in ("EW PORT", "Inverse Vol")}; _o3_book = {n: _o2(_old3["bystyle"], n)["ir"] for n in ("EW PORT", "Inverse Vol")}
+assert len(_old3["tabs"]["petroleum"]["products"]) == 4 and abs(_o3_book["EW PORT"] - 0.841) < 0.0005
 _four = MEMBERS["ngl"][:4]
 _cs4 = pd.DataFrame({k: ew_intersection([nets()[m][k] for m in _four]) for k in SLEEVES}); _e4, _i4 = stats(_cs4.mean(axis=1, skipna=False)), stats(inverse_vol(_cs4))
 _aE, _aI, _sE, _sI = st("agri", "EW PORT"), st("agri", "Inverse Vol"), st("softs", "EW PORT"), st("softs", "Inverse Vol")
 _bi = _Fc["best_iv"]
 _tenA = bucket_tenor_table("agri")[0]; _tenS = bucket_tenor_table("softs")[0]
 vrows = [
+    [f"v8 as issued on 10 November 2026: Petroleum of four products (WTI, Brent, RBOB, Heating Oil), Equal Weight IR {I(_o3_pet['EW PORT'])}, Inverse Vol {I(_o3_pet['Inverse Vol'])}; seven-bucket book {I(_o3_book['EW PORT'])} and {I(_o3_book['Inverse Vol'])}", f"Gas Oil (ICE Low Sulphur Gasoil, Bloomberg QS) added to Petroleum on 11 November 2026: five products, Equal Weight IR {I(st('petroleum', 'EW PORT')['ir'])}, Inverse Vol {I(st('petroleum', 'Inverse Vol')['ir'])}; seven-bucket book {I(_Fe['ir'])} and {I(_Fi['ir'])}, 30 products (each bucket equally weighted, so a Petroleum product carries 1/35 of the book against 1/28 before)", "Recomputed; 0930 dashboard dataset"],
     ["v7 NGL figures on the v5 basis (to 23 September 2026): Equal Weight IR +1.25, Inverse Vol +1.16", f"Now {I(_nE['ir'])} and {I(_nI['ir'])} on the 30 September data with five products (the three Mont Belvieu products on the same data: {I(_e3['ir'])} and {I(_i3['ir'])}; with Naphtha as the fourth product: {I(_e4['ir'])} and {I(_i4['ir'])}; Natural Gasoline, the CME MMB swap, is the fifth and lowers the bucket IR); Naphtha series from the Bloomberg KI swap sheet with the Bloomberg expiry calendar, Carry on F2-F4 only; Natural Gasoline from the Bloomberg MMB sheet with the Bloomberg expiry history, Carry on F2-F4 and F2-F14", "Recomputed; 0930 dashboard dataset"],
     [f"v8 as first issued (6 November 2026): NGL of five products including Isobutane, Equal Weight IR {I(_oN['EW PORT'])}, Inverse Vol {I(_oN['Inverse Vol'])}", f"Isobutane removed from every bucket, portfolio, pair, correlation and table on 9 November 2026 because it is the least liquid of the 36 products then measured (about 10 lots a day on its 12-month strip, a USD 1 million one-sigma position equals 156 days of its risk turnover): NGL {I(_e4['ir'])} and {I(_i4['ir'])} with four products; six-bucket book {I(_o2_book['EW PORT'])} and {I(_o2_book['Inverse Vol'])} (26 products in the buckets)", "Recomputed; 0930 dashboard dataset; Liquidity_Cal2025_results.csv"],
     [f"v8 before 10 November 2026: Agriculture of six products (Corn, Wheat, Soybean, Soybean Oil, Coffee, Sugar), Equal Weight IR {I(_o2_agri['EW PORT'])}, Inverse Vol {I(_o2_agri['Inverse Vol'])}; NGL of four products, {I(_o2_ngl['EW PORT'])} and {I(_o2_ngl['Inverse Vol'])}", f"Agriculture split in two on 10 November 2026: Agriculture (Corn, Wheat, Soybean, Live Cattle) {I(_aE['ir'])} and {I(_aI['ir'])}; Softs (Sugar, Cocoa, Coffee, Cotton) {I(_sE['ir'])} and {I(_sI['ir'])}; NGL with Natural Gasoline {I(_nE['ir'])} and {I(_nI['ir'])}. Soybean Oil is dropped. Corn, Wheat and Coffee sleeves are equal to the previous ones to 1e-15 on the new data, Soybean and Sugar differ only in Carry and Carry-Momentum (new long legs F1-F7 and F1-F6)", "Recomputed; 0930 dashboard dataset; ENGINE_CHANGELOG 2026-11-10"],
     ["v7: Energy-NGL the best of ten pairs (Equal Weight +1.23, Inverse Vol +1.21; +1.28 and +1.30 without Natural Gas)", f"Petroleum-NGL is the best of twenty-one pairs under Equal Weight ({I(_best['ew']['ir'])}, {I(_best['iv']['ir'])}); Gas and Emissions-NGL is the best under Inverse Vol ({I(_bi['iv']['ir'])}, {I(_bi['ew']['ir'])}); the Energy-ex-NatGas comparison no longer applies because Natural Gas is in Gas and Emissions; the only negative pairs are the six built from Metals, Precious Metals, Agriculture and Softs", "Recomputed; 0930 dashboard dataset"],
-    ["v7: cross-commodity book Equal Weight IR +0.87, Inverse Vol +0.91 at 4.9% and 5.0% volatility (five asset classes, Energy including Natural Gas)", f"Seven buckets, 29 products, 2012 to 30 September 2026 (US Power is not in the book): {I(_Fe['ir'])} and {I(_Fi['ir'])} at {V(_Fe['vol'])} and {V(_Fi['vol'])} volatility, positive in every period; commodity-index correlation {N(_Fc['bE']['Commodity Index'])} and {N(_Fc['bI']['Commodity Index'])}; the six-bucket book before the split was {I(_o2_book['EW PORT'])} and {I(_o2_book['Inverse Vol'])}", "Recomputed; 0930 dashboard dataset"],
+    ["v7: cross-commodity book Equal Weight IR +0.87, Inverse Vol +0.91 at 4.9% and 5.0% volatility (five asset classes, Energy including Natural Gas)", f"Seven buckets, 30 products, 2012 to 30 September 2026 (US Power is not in the book): {I(_Fe['ir'])} and {I(_Fi['ir'])} at {V(_Fe['vol'])} and {V(_Fi['vol'])} volatility, positive in every period; commodity-index correlation {N(_Fc['bE']['Commodity Index'])} and {N(_Fc['bI']['Commodity Index'])}; the six-bucket book before the split was {I(_o2_book['EW PORT'])} and {I(_o2_book['Inverse Vol'])}", "Recomputed; 0930 dashboard dataset"],
     ["v7: Skewness correlation with the commodity index +0.46 in the five-class book", f"{N(_Fc['bS']['Commodity Index'])} in the seven-bucket book (equity {N(_Fc['bS']['Equity'])}, gold {N(_Fc['bS']['Gold'])})", "Recomputed; ETF file cut at 30 September 2026"],
     ["v7: bucket 'Power, Emissions and Nat Gas' (Henry Hub, TTF, EUA)", "Gas and Emissions with UK Gas added (Henry Hub, TTF, UK Gas, EUA); UK Gas from the Bloomberg NBP sheet, Bloomberg expiry history", "Recomputed; 0930 dashboard dataset"],
     ["v7 liquidity section: 26 products, Power, Emissions and Natural Gas 17.1-fold spread", f"36 products with UK Gas, Naphtha, Natural Gasoline, Live Cattle, Cocoa, Cotton and the six US Power series (five in the Power results, MISO OffPeak flagged); Isobutane, the least liquid product measured (of 40), is outside the table; Cotton ({fx2(liq.loc['Cotton', 'x_strip'])}) is now the least liquid product outside NGL and US Power, ahead of Lead ({fx2(liq.loc['Lead', 'x_strip'])}); Natural Gasoline {liq.loc['NatGasoline', 'L_strip']:.2f} days to trade one sigma of risk; Gas and Emissions spread 21.3-fold (Henry Hub to UK Gas); Naphtha 9.4 days (Bloomberg volume, lower bound); US Power 0.10 to 4.7 days", "Liquidity_Cal2025_results.csv; Power_Liquidity_Cal2025_results.csv; scripts/liquidity_cal2025_1110.py"],
@@ -524,6 +543,10 @@ vrows = [
     ["v8 Agriculture section: table of single-pair, long-pair and two-pair Carry and Carry-Momentum IRs (six products)", f"Recomputed for the pairs fixed on 10 November 2026 (F1-F2 plus F1-F6; F1-F7 for Soybean and Live Cattle), in Agriculture and in the new Softs bucket; the two-pair series are equal to the reported bucket sleeves (difference below 1e-9). Agriculture Carry {I(_tenA['Carry']['short']['ir'])} / {I(_tenA['Carry']['long']['ir'])} / {I(_tenA['Carry']['two']['ir'])} (short / long / sum); Softs {I(_tenS['Carry']['short']['ir'])} / {I(_tenS['Carry']['long']['ir'])} / {I(_tenS['Carry']['two']['ir'])}", "Recomputed; facts_tenor.py"],
     ["v8 data: Agriculture prices from the 24 September and 29 October pulls (six products)", "Agriculture, Softs and Natural Gasoline from the Bloomberg pull of 10 November 2026, cut at 30 September. Prices of Corn, Wheat, Soybean, Coffee and Sugar equal the earlier files on every overlapping cell (except the 29 October row, an intraday print in the old file, and Soybean F18); calendar last trade dates equal the validated calendars on every overlapping contract; exchange-holiday rows with a blank front month are removed (Wheat 25 May 2009, Soybean 26 November 2009, Cocoa 4 September 2017, Cotton 2007); Cotton rolls about one day before expiry because its last trade date falls on the 6th to 9th of the month", "data/Prices_1110; ENGINE_CHANGELOG 2026-11-10"],
 ]
+for _r in tver.rows:
+    for _c in _r.cells:
+        for _p in _c.paragraphs:
+            if "(the four oil products)" in _p.text: set_text(_p, _p.text.replace("(the four oil products)", "(WTI, Brent, RBOB, Heating Oil and, since 11 November 2026, Gas Oil)"))
 tmpl = copy.deepcopy(tver._tbl.findall(qn("w:tr"))[-1])
 for vr in vrows:
     r = copy.deepcopy(tmpl); tver._tbl.append(r)

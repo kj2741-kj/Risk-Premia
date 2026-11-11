@@ -44,48 +44,53 @@
   "EW (All Products)": 85.72174985468422
  },
  "fig_petroleum_combined.png": {
-  "Momentum": 1080.9732932285474,
-  "Carry": 545.1285280611386,
-  "Carry-Momentum": 1403.5914551541289,
-  "Value": 60.79721267873598,
-  "Skewness": 529.737496269023,
-  "EW Portfolio": 484.2836363927705,
-  "Inverse Vol": 505.77448639708314
+  "Momentum": 1262.71339536487,
+  "Carry": 708.5805827466287,
+  "Carry-Momentum": 1608.1282257331466,
+  "Value": 57.059900150898876,
+  "Skewness": 585.9946608662866,
+  "EW Portfolio": 545.0644721427007,
+  "Inverse Vol": 576.6313079185993
  },
  "figA_petroleum_Momentum.png": {
   "WTI": 1973.0071724456416,
   "Brent": 829.8374551791223,
   "RBOB": 427.0821471868391,
   "Heating Oil": 1952.66050691227,
-  "EW (All Products)": 1080.9732932285474
+  "Gas Oil": 2351.061994521891,
+  "EW (All Products)": 1262.71339536487
  },
  "figA_petroleum_Carry.png": {
   "WTI": 278.879863327714,
   "Brent": 411.6328196449953,
   "RBOB": 529.706753395518,
   "Heating Oil": 1452.2218972286805,
-  "EW (All Products)": 545.1285280611386
+  "Gas Oil": 2022.7890506791439,
+  "EW (All Products)": 708.5805827466287
  },
  "figA_petroleum_CarryMom.png": {
   "WTI": 13122.434889748596,
   "Brent": 1081.832206143386,
   "RBOB": 592.8752463706259,
   "Heating Oil": 461.13194763836367,
-  "EW (All Products)": 1403.5914551541289
+  "Gas Oil": 2771.025427527313,
+  "EW (All Products)": 1608.1282257331466
  },
  "figA_petroleum_Value.png": {
   "WTI": 67.04913170058303,
   "Brent": 112.31496252776326,
   "RBOB": 54.59212009292727,
   "Heating Oil": 33.233336181295385,
-  "EW (All Products)": 60.79721267873598
+  "Gas Oil": 44.27110487814823,
+  "EW (All Products)": 57.059900150898876
  },
  "figA_petroleum_Skewness.png": {
   "WTI": 661.9363443834155,
   "Brent": 710.5446577796861,
   "RBOB": 513.7304646478568,
   "Heating Oil": 325.9116853138189,
-  "EW (All Products)": 529.737496269023
+  "Gas Oil": 877.4561799943795,
+  "EW (All Products)": 585.9946608662866
  },
  "fig_pen_combined.png": {
   "Momentum": 374.70695430477554,
@@ -313,26 +318,26 @@
   "EW (All Products)": 45.1226099732814
  },
  "fig_cross_combined.png": {
-  "Momentum": 188.33806592753038,
-  "Carry": 260.56011541001044,
-  "Carry-Momentum": 217.67841603948338,
-  "Value": 92.32069057879293,
-  "Skewness": 175.6826843872248,
-  "EW Portfolio": 176.9040938012078,
-  "Inverse Vol": 185.05421315037947
+  "Momentum": 192.56595580031527,
+  "Carry": 270.5066748978003,
+  "Carry-Momentum": 221.95010905170292,
+  "Value": 91.48775063175022,
+  "Skewness": 178.23410429329525,
+  "EW Portfolio": 179.9174649577374,
+  "Inverse Vol": 187.50032504688681
  },
  "figA_pairs_EW.png": {
-  "Metals-Petroleum": 215.21425498963166,
+  "Metals-Petroleum": 228.32058798725598,
   "Metals-Gas and Emissions": 197.9380512535638,
   "Metals-NGL": 283.3282073452134,
   "Metals-Precious Metals": 85.86152421004233,
   "Metals-Agriculture": 78.21821651612495,
   "Metals-Softs": 81.2627720868372,
-  "Petroleum-Gas and Emissions": 445.4080388224873,
-  "Petroleum-NGL": 637.5563484509631,
-  "Petroleum-Precious Metals": 193.209000828817,
-  "Petroleum-Agriculture": 176.0097272757829,
-  "Petroleum-Softs": 182.86070674763747,
+  "Petroleum-Gas and Emissions": 472.53294315053506,
+  "Petroleum-NGL": 676.3828927611934,
+  "Petroleum-Precious Metals": 204.97523584481425,
+  "Petroleum-Agriculture": 186.72854372503983,
+  "Petroleum-Softs": 193.99674099839336,
   "Gas and Emissions-NGL": 586.3768697979677,
   "Gas and Emissions-Precious Metals": 177.69925654110008,
   "Gas and Emissions-Agriculture": 161.8806450358877,
@@ -345,17 +350,17 @@
   "Agriculture-Softs": 66.45953054256285
  },
  "figA_pairs_IV.png": {
-  "Metals-Petroleum": 154.11734951674822,
+  "Metals-Petroleum": 159.58678105541924,
   "Metals-Gas and Emissions": 146.77792645209558,
   "Metals-NGL": 194.59806414075646,
   "Metals-Precious Metals": 91.93638857510817,
   "Metals-Agriculture": 84.3338210031549,
   "Metals-Softs": 85.37011323242348,
-  "Petroleum-Gas and Emissions": 386.1789324779412,
-  "Petroleum-NGL": 659.2049748551344,
-  "Petroleum-Precious Metals": 162.78143145187875,
-  "Petroleum-Agriculture": 114.99366040186989,
-  "Petroleum-Softs": 128.17592240664837,
+  "Petroleum-Gas and Emissions": 413.3951011313272,
+  "Petroleum-NGL": 670.11933010642,
+  "Petroleum-Precious Metals": 171.50597651340092,
+  "Petroleum-Agriculture": 120.77912588562592,
+  "Petroleum-Softs": 133.9926411009784,
   "Gas and Emissions-NGL": 571.6220108659508,
   "Gas and Emissions-Precious Metals": 118.15595607333674,
   "Gas and Emissions-Agriculture": 110.33094229882985,

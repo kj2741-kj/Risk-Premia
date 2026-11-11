@@ -29,7 +29,7 @@ close = lambda a, b, tol=0.0011: all((x is None and y is None) or (x is not None
 prods = blk["products"]
 prods_all = prods
 prods = [p for p in prods_all if p["asset"] != "US Power"]          # the seven research buckets; US Power is a standalone bucket on the page (own windows, from 2017) and is checked against its own tab below
-check(f"page lists the expected products ({len(prods)} of the seven research buckets and {len(prods_all) - len(prods)} US Power series)", len(prods) == 29 and len(prods_all) == 34, ", ".join(f"{LABEL_} {sum(p['asset'] == LABEL_ for p in prods)}" for LABEL_ in LABEL.values()))
+check(f"page lists the expected products ({len(prods)} of the seven research buckets and {len(prods_all) - len(prods)} US Power series)", len(prods) == 30 and len(prods_all) == 35, ", ".join(f"{LABEL_} {sum(p['asset'] == LABEL_ for p in prods)}" for LABEL_ in LABEL.values()))
 PJ = json.load(open(f"Analysis/_power_build/power_tab_{TAG}.json")); PDISP = {"PJM Peak": "PJM_Peak", "PJM OffPeak": "PJM_OffPeak", "ERCOT Peak": "ERCOT_Peak", "ERCOT OffPeak": "ERCOT_OffPeak", "MISO Peak": "MISO_Peak"}
 bad = n = 0
 for p in prods_all:
@@ -45,7 +45,7 @@ check(f"US Power rows on the page == the Power tab ({n} cells)", bad == 0, f"{ba
 key_of = {}
 for bk in BK:
     for a, p in res["tabs"][bk]["pkeys"] and [(k.split("|")[0], k.split("|")[1]) for k in res["tabs"][bk]["pkeys"]]:
-        key_of[(LABEL[bk], p)] = (a, p)
+        key_of[(LABEL[bk], {"SingaporeGasoil": "Gas Oil"}.get(p, p))] = (a, p)      # Gas Oil = the SingaporeGasoil key (ICE QS), shown as Gas Oil since 2026-11-11
 check("every page product maps to a dashboard product", all((p["asset"], p["name"]) in key_of for p in prods))
 
 # 1 page vs the research dashboard data (the HTML dashboard's own numbers)
@@ -89,7 +89,7 @@ eng = {}
 for ac in BK:
     for st, lab in STY.items():
         for nm, net in zip(PP[ac][st]["names"], PP[ac][st]["net"]):
-            eng.setdefault((LABEL[ac], nm), {})[lab] = net
+            eng.setdefault((LABEL[ac], {"SingaporeGasoil": "Gas Oil"}.get(nm, nm)), {})[lab] = net
 check("3. engine covers every page product with five sleeves", all(len(eng.get((p["asset"], p["name"]), {})) == 5 for p in prods))
 bad = n = 0
 for p in prods:
@@ -123,7 +123,7 @@ check("4. every cell: IR == return / vol (rounding) and drawdown <= 0", bad == 0
 # 5 the two liquidity columns (Calendar-2025 snapshot): L = K / x in days and x in USD millions per day, from Analysis/Liquidity_Cal2025_results.csv
 import csv
 liq = {r["product"]: r for r in csv.DictReader(open("Analysis/Liquidity_Cal2025_results.csv", encoding="utf8"))}
-bad = sum(abs(p["L"] - float(liq[p["name"]]["L_strip"])) > 1e-5 * max(1, abs(p["L"])) or abs(p["X"] - float(liq[p["name"]]["x_strip"])) > 1e-4 for p in prods)
+bad = sum(abs(p["L"] - float(liq[{"Gas Oil": "SingaporeGasoil"}.get(p["name"], p["name"])]["L_strip"])) > 1e-5 * max(1, abs(p["L"])) or abs(p["X"] - float(liq[{"Gas Oil": "SingaporeGasoil"}.get(p["name"], p["name"])]["x_strip"])) > 1e-4 for p in prods)
 check("5. page liquidity columns (Time to trade 1 sigma risk in Days, Risk Millions per day) == liquidity CSV for all products", bad == 0, f"{bad} differences")
 bad = sum(abs(p["L"] * p["X"] - 1.0) > 2e-3 for p in prods)       # K = USD 1M: L x x = 1
 check("5. L x (Risk Millions per day) == K = USD 1M for every product", bad == 0, f"{bad} differences")

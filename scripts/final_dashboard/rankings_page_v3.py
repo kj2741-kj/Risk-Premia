@@ -17,7 +17,7 @@ from run_regime_table import _metrics
 
 SLEEVES = ["Momentum", "Carry", "CarryMom", "Value", "Skewness"]
 BUCKETS = {"metals": "Metals", "petroleum": "Petroleum", "pen": "Gas and Emissions", "ngl": "NGL", "precious": "Precious", "agri": "Agriculture", "softs": "Softs", "power": "US Power"}
-PRODUCTS = [("metals", "metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]] + [("petroleum", "energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil"]] \
+PRODUCTS = [("metals", "metals", p) for p in ["Copper", "Aluminium", "Lead", "Zinc"]] + [("petroleum", "energy", p) for p in ["WTI", "Brent", "RBOB", "HeatingOil", "SingaporeGasoil"]] \
     + [("pen", "energy", "NatGas"), ("pen", "emissions", "TTF"), ("pen", "emissions", "UKGas"), ("pen", "emissions", "EUA")] + [("ngl", "ngl", p) for p in ["Ethane", "Propane", "Butane"]] + [("ngl", "naphtha", "Naphtha"), ("ngl", "mmb", "NatGasoline")] \
     + [("precious", "precious", p) for p in ["Gold", "Silver", "Platinum", "Palladium"]] + [("agri", "agri", p) for p in ["Corn", "Wheat", "Soybean", "LiveCattle"]] + [("softs", "softs", p) for p in ["Sugar", "Cocoa", "Coffee", "Cotton"]] \
     + [("power", "power", p) for p in ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MISO_Peak"]]
@@ -31,7 +31,7 @@ LIQ = {r["product"]: r for r in csv.DictReader(open("Analysis/Liquidity_Cal2025_
 LIQ.update({r["product"]: r for r in csv.DictReader(open("Analysis/Power_Liquidity_Cal2025_results.csv", encoding="utf8"))})     # the five US Power series   # Calendar-2025 snapshot, K = USD 1M: L_strip = K / x (days), x_strip = x (USD m of one-sigma risk traded per day)
 pack = lambda m: [None if pd.isna(m[k]) else round(float(m[k]), 3) for k in ("ir", "ret", "vol", "mdd")]
 PJ = json.load(open(f"Analysis/_power_build/power_tab_{TAG}.json"))      # US Power: its own tab, products and windows (Full from 2017, no P1)
-PDISP = {"PJM_Peak": "PJM Peak", "PJM_OffPeak": "PJM OffPeak", "ERCOT_Peak": "ERCOT Peak", "ERCOT_OffPeak": "ERCOT OffPeak", "MISO_Peak": "MISO Peak"}
+PDISP = {"SingaporeGasoil": "Gas Oil", "PJM_Peak": "PJM Peak", "PJM_OffPeak": "PJM OffPeak", "ERCOT_Peak": "ERCOT Peak", "ERCOT_OffPeak": "ERCOT OffPeak", "MISO_Peak": "MISO Peak"}
 DATA = {}
 for name, d, pkl, wins in BASES:
     res = json.load(open(f"{d}/final_v3.json"))

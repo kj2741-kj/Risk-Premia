@@ -23,7 +23,7 @@ CME: WTI 1,000 bbl; RBOB and NY Harbor ULSD 42,000 gal; Henry Hub 10,000 MMBtu; 
 
 Data check: our all-tenor volume equals CME's published final volume for 26 to 28 Oct 2026 within about 1% for RBOB, ULSD, Butane, Isobutane, Henry Hub, WTI and TET Propane. Ethane is the exception (60 to 65% of CME on two days). The Gasoil series (Bloomberg root QS) is ICE Low Sulphur Gasoil, not Singapore Gasoil as the engine config name suggests.
 
-## Result (K = $1M), 2026-11-04 update: all six NGL, UK Gas and Naphtha added
+## Result (K = $1M), 2026-11-04 update: all six NGL, UK Gas and Naphtha added (NGL rows below are CME only; the CME plus ICE rows are in the 2026-11-10 update at the end)
 
 The 26 products of the 2026-10-31 run are reproduced exactly (maximum absolute difference 0.0 on every column); four rows are new: Ethylene and Propylene (so all six Mont Belvieu NGL are in), UK Gas and Naphtha (now part of the NGL bucket). Naphtha uses the NGL swap convention: the held contract is the sheet's F2 before the roll and F3 after it.
 
@@ -72,7 +72,7 @@ NGL against the least liquid non-energy product (Lead): Propane 0.25x, Butane 0.
 - Naphtha is a monthly average-price swap: F1 is the month being priced and expires on the last business day of that month (Bloomberg expiry history). It follows the Mont Belvieu swap convention, the engine's front contract is the sheet's F2 (F3 after the roll on the 5th trading day of the month).
 - UK Gas: the volume unit is lots of 1,000 therms a day (Bloomberg contract size 28,000 to 31,000 therms by month); 30,417 therms per lot is the average month. The calendar is Bloomberg's expiry history. Held-contract x (9.0) is 29% of strip x (31.4): the contract we hold trades 9,179 lots a day against 31,979 for the 12-month strip.
 
-- ICE half of NGL is not included. Bogorad's Figure 10 implies ICE roughly doubles NGL volume in 2025; even doubled, Propane would be about half of Lead. Per-product ICE volume to be added when available.
+- ICE half of NGL: not included in the table above (CME only). Added on 2026-11-10 for Ethane, Propane, Butane, Isobutane and Natural Gasoline, see the update at the end; ICE is 48% to 73% of their measured turnover, in line with Bogorad's Figure 10 reading that ICE is a large part of NGL volume. With ICE, Propane is about 72% of Cotton, the least liquid product outside NGL and US Power.
 - CME Non-TET Propane (about 1,400 lots a day in late October 2026) is not in our data; it would add roughly 20% to Propane.
 - Ethane volume may be understated (see data check above).
 - Isobutane prints on only 13% of days on CME alone (41% with the ICE contracts added on 2026-11-10; Bogorad excludes it); kept in this analysis by decision.
@@ -81,5 +81,15 @@ NGL against the least liquid non-energy product (Lead): Propane 0.25x, Butane 0.
 - One year only, as requested; no annual or dynamic filter.
 
 **Update 2026-11-10 (NGL, CME plus ICE).** The NGL rows of `Liquidity_Cal2025_results.csv` for Ethane, Propane, Butane, Isobutane and Natural Gasoline add the ICE contracts of the 10 November 2026 download (`scripts/liquidity_ngl_ice_1110.py`; the CME-only file is `Liquidity_Cal2025_results_CME_only.csv`). Same definition; the venues' volumes are added, each at its own price and volatility, on the CME product's calendar. Time to trade USD 1M of one-sigma risk (days), CME only to CME plus ICE: Propane 0.21 to 0.09, Butane 0.55 to 0.28, Ethane 2.86 to 0.77, Natural Gasoline 1.25 to 1.23, Isobutane 156 to 34. Naphtha (one Bloomberg series), Ethylene and Propylene are unchanged. The per-contract and per-product tables are in `NGL_Liquidity_CME_ICE_Cal2025_contracts.csv` and `_products.csv`.
+
+| Product | CME lots/day | ICE lots/day | x CME (USD m/day) | x ICE | x total | ICE share | L CME only (days) | L CME plus ICE (days) |
+|---|---|---|---|---|---|---|---|---|
+| Propane | 8,273 | 10,908 | 4.85 | 6.40 | 11.25 | 57% | 0.21 | 0.09 |
+| Butane | 2,907 | 2,741 | 1.81 | 1.71 | 3.52 | 48% | 0.55 | 0.28 |
+| Ethane | 1,203 | 3,281 | 0.35 | 0.95 | 1.29 | 73% | 2.86 | 0.77 |
+| Natural Gasoline | 832 | 3 | 0.81 | 0.003 | 0.81 | 0.3% | 1.25 | 1.23 |
+| Isobutane | 10 | 36 | 0.006 | 0.023 | 0.030 | 78% | 156 | 34 |
+
+Natural Gasoline = CME MMB + CME Conway + ICE KLI, DRS, DHW (the ICE Mt Belvieu contracts printed no volume in 2025). Naphtha (0.107, 9.4 days), Propylene and Ethylene have no ICE contract in the download and are unchanged. ICE lots are 1,000 barrels, the 42,000 gallons of the CME swaps. Before ICE is added the code reproduces every column of the CME-only rows exactly.
 
 Reproduce: `python scripts/liquidity_cal2025.py` from the repo root (about 3 minutes) writes `Analysis/Liquidity_Cal2025_results.csv`.

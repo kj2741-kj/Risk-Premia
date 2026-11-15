@@ -56,6 +56,20 @@ if TAG in ("0930", "1029"):
     data["meta"] = dict(data["meta"], liq=dict(data["meta"]["liq"], **POWER["meta"]["liq"]),
                         pairs=dict(res["meta"]["pairs"], **POWER["meta"]["pairs"]), rolls=dict(res["meta"]["rolls"], **POWER["meta"]["rolls"]))
 
+# Classical portfolios (2026-11-15, 0930 only): scripts/final_dashboard/classical_portfolio.py (no flag, and --newgen) -> Analysis/_classical_build/<key>_0930.json (TRACKED). Each is its own tab
+# after By Style; neither is in meta.keys, so the seven-bucket book, By Style, Cross-Pair and Correlations are unchanged. If a file is missing the 0930 build STOPS (same rule as the Power tab).
+CLASSICAL = []
+if TAG == "0930":
+    for _k in ("classical", "classical_ng"):
+        _cp = R / f"Analysis/_classical_build/{_k}_0930.json"
+        if not _cp.exists():
+            sys.exit(f"{_cp} is missing: regenerate it with  FD_TAG=0930 python scripts/final_dashboard/classical_portfolio.py" + (" --newgen" if _k == "classical_ng" else ""))
+        _c = json.load(open(_cp))
+        assert _c["key"] == _k and _k not in res["meta"]["keys"] and _k not in data["equity"]
+        CLASSICAL.append(_c)
+    data["classical"] = {_c["key"]: {k: v for k, v in _c.items() if k != "equity"} for _c in CLASSICAL}
+    data["equity"] = dict(data["equity"], **{_c["key"]: _c["equity"] for _c in CLASSICAL})
+
 h = TEMPLATE.read_text(encoding="utf8")
 m = re.search(r"<script>\nconst D=(.*?);\n", h, re.S)
 assert m, "template layout changed: const D= not found"
@@ -129,7 +143,7 @@ t = tail
 i0 = t.index('const LABEL={metals:"Metals"')
 i1 = t.index('const bar=document.getElementById("tabbar")')
 t = t[:i0] + ('const LABEL=D.meta.labels;\n'
-              'const ORDER=D.meta.keys.map(k=>[k,LABEL[k]]).concat(' + ('[["power",D.tabs.power.label]]' if POWER else '[]') + ').concat([["all6","All 6 buckets"],["bystyle","By Style"],["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]]);\n') + t[i1:]
+              'const ORDER=D.meta.keys.map(k=>[k,LABEL[k]]).concat(' + ('[["power",D.tabs.power.label]]' if POWER else '[]') + ').concat([["all6","All 6 buckets"],["bystyle","By Style"]' + (']).concat(' + json.dumps([[c["key"], c["label"]] for c in CLASSICAL]) + ').concat([' if CLASSICAL else ',') + '["crosspair","Cross-Pair"],["corr","Correlations"],["notes","Notes"]]);\n') + t[i1:]
 t = rep(t, 'const HIDDEN_TABS=["all5","all5_exng"];', 'const HIDDEN_TABS=["all6"];')
 t = rep(t, 'const asset=ASSET[key],t=D.tabs[key];\n  const sleeves', 'const t=D.tabs[key];\n  const sleeves')
 t = rep(t, 't.products.map(pr=>{const d=D.products[asset+"|"+pr];return `<tr><td>${pr}</td>`', 't.pkeys.map((pk,ix)=>{const pr=t.products[ix];const d=D.products[pk];return `<tr><td>${pr}</td>`')
@@ -160,6 +174,19 @@ t = rep(t, '[["all5","All 5 asset classes (Energy with NatGas)"],["all5_exng","A
 t = rep(t, "Two-stage book: five sleeves into an asset-class portfolio, then the five asset-class portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across asset classes).",
         "Two-stage book: five sleeves into a bucket portfolio, then the seven bucket portfolios into one book, by Equal Weight or Inverse Vol at each stage (first word = sleeves, second = across buckets).")
 t = rep(t, '"Reference" rows are each asset class\'s own EW PORT on that window.', '"Reference" rows are each bucket\'s own EW PORT on that window.')
+# Classical tabs (0930 only): same table and chart helpers as By Style
+CLASSICAL_JS = "" if not CLASSICAL else '''/* ---------- classical portfolios ---------- */
+Object.keys(D.classical||{}).forEach(key=>{const c=D.classical[key];
+  const mem=c.members.map(m=>`${m.bucket} (${m.products.join(", ")})`).join("; ");
+  const p=addPanel(key,`<div class="card"><h2>${c.label} Portfolio</h2><p class="note"><b>Products (${c.n_products}):</b> the two most liquid products of each bucket by the Calendar-2025 liquidity metric (USD of one-sigma daily risk traded on the 12-month strip; the held contract alone gives the same two): ${mem}.</p>
+  <p class="note"><b>Construction:</b> the same as the seven-bucket book. Within each bucket every style is equal-weighted across its two products on their common dates; the five sleeves are combined into the bucket portfolio by Equal Weight or Inverse Vol (trailing 63-day volatility, lagged one day); the bucket portfolios are then combined on their common dates by Equal Weight or Inverse Vol (first word = sleeves, second = across buckets). "By Style" rows: each style equal-weighted across the buckets, then the five style series combined. "Reference" rows: each bucket's own Equal Weight portfolio on the book's common dates, and the other books for comparison (each on its own dates). The products are chosen with 2025 liquidity and applied to the whole sample, so the selection uses information from after the start of the backtest.</p>
+  <div class="window-row"><span class="note" style="margin:0" data-bn></span></div>
+  <div class="window-row"><h3>Performance by period</h3><label>Show details for period: <select class="window-select" data-hs>${horizonOpts}</select></label></div><div class="table-scroll"><table data-full></table></div><h3>Cumulative return</h3><div data-eq></div></div>`,false);
+  const hs=p.querySelector("[data-hs]"),tb=p.querySelector("[data-full]");
+  const draw=()=>{p.querySelector("[data-bn]").textContent="Common window of the buckets: "+c.common_first+" to "+c.common_last+"; reported from 2012-01-01.";tb.innerHTML=mergedTable(c.windows,hs.value);wireHeads(tb,hs);renderEquity(p.querySelector("[data-eq]"),key);};
+  hs.addEventListener("change",draw);draw();});
+
+'''
 # by style
 j0 = t.index('/* ---------- by style ---------- */')
 j1 = t.index('/* ---------- cross-pair ---------- */')
@@ -171,7 +198,7 @@ t = t[:j0] + '''/* ---------- by style ---------- */
   const draw=()=>{const c=D.bystyle;p.querySelector("[data-bn]").textContent="Common window: "+c.common_first+" to "+c.common_last+".";tb.innerHTML=mergedTable(c.windows,hs.value);wireHeads(tb,hs);renderEquity(p.querySelector("[data-eq]"),"bystyle");};
   hs.addEventListener("change",draw);draw();})();
 
-''' + t[j1:]
+''' + CLASSICAL_JS + t[j1:]
 # cross pair
 t = rep(t, "Each row blends two asset classes' own portfolios, 50/50 (Equal Weight) or by trailing 63-day inverse volatility (Inverse Vol); each asset-class portfolio is built with the same method. Series are aligned on the pair's common dates. Pairs involving Energy are shown with NatGas and ex-NatGas.",
         "Each row blends two buckets' own portfolios, 50/50 (Equal Weight) or by trailing 63-day inverse volatility (Inverse Vol); each bucket portfolio is built with the same method. Series are aligned on the pair's common dates (21 pairs).")

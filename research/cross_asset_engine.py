@@ -94,6 +94,8 @@ from engine import (raw_signal_carry_v1, raw_signal_carry_v2, raw_signal_carrymo
 from carry_zsum import combined_carry_signal, combined_carrymom_signal
 from risk_parity import rolling_erc_combine
 from drp import rolling_drp_combine
+from netting import netted, inverse_vol_weights, combine_with_weights
+from netting import netted, inverse_vol_weights, combine_with_weights
 from run_regime_table import _metrics
 from regimes import REGIMES, REPORT_START
 
@@ -280,13 +282,14 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
     else:
         pairs_by_product = {p: list(spec.pairs) for p in products}
     tenor_pairs = list(dict.fromkeys(pr for v in pairs_by_product.values() for pr in v))   # union, for the data checks below
-    out = {style: {"gross": [], "net": [], "names": []}
+    # "pos" and "phase" (2026-11-15): each product's sleeve position and roll-phase series, index-aligned with "names", for product-level netting of the cost
+    out = {style: {"gross": [], "net": [], "names": [], "pos": [], "phase": []}
            for style in ("Momentum", "Combined Carry", "Combined CarryMom", "Value")}
     if include_skewness:
         # include_skewness (2026-10-12, default False): also return a "Skewness" entry with the same
         # gross/net/names layout. Callers that pass styles=None to asset_class_four_row() will then see
         # five styles, so pass `styles` explicitly when only the original four are wanted.
-        out[SKEWNESS_STYLE] = {"gross": [], "net": [], "names": []}
+        out[SKEWNESS_STYLE] = {"gross": [], "net": [], "names": [], "pos": [], "phase": []}
     # n_pairs (added 2026-10-11): how many of the chosen tenor pairs actually had data for each product, index-aligned
     # with names, so a caller can flag a product that was blended on fewer pairs than the user chose.
     out["Combined Carry"]["n_pairs"], out["Combined CarryMom"]["n_pairs"] = [], []
@@ -303,6 +306,8 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
             out["Momentum"]["gross"].append(g)
             out["Momentum"]["net"].append(n)
             out["Momentum"]["names"].append(p)
+            out["Momentum"]["pos"].append(mom_pos)
+            out["Momentum"]["phase"].append(phase)
 
         # 2026-10-13: the pairs' z-scores are SUMMED before the sign (research/carry_zsum.py); last signal kept if a value is missing
         carry_combo, carry_n_pairs, carry_has = combined_carry_signal(curve, pairs_by_product[p], spec.zwindow, spec.variants, log_price.index)
@@ -316,6 +321,8 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
                 out["Combined Carry"]["gross"].append(g)
                 out["Combined Carry"]["net"].append(n)
                 out["Combined Carry"]["names"].append(p)
+                out["Combined Carry"]["pos"].append(pos)
+                out["Combined Carry"]["phase"].append(phase)
                 out["Combined Carry"]["n_pairs"].append(carry_n_pairs)
 
         cm_combo, cm_n_pairs = combined_carrymom_signal(curve, pairs_by_product[p], spec.horizon, log_price.index)   # raw slope changes summed, then the sign
@@ -327,6 +334,8 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
                 out["Combined CarryMom"]["gross"].append(g)
                 out["Combined CarryMom"]["net"].append(n)
                 out["Combined CarryMom"]["names"].append(p)
+                out["Combined CarryMom"]["pos"].append(pos)
+                out["Combined CarryMom"]["phase"].append(phase)
                 out["Combined CarryMom"]["n_pairs"].append(cm_n_pairs)
 
         val_pos = value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS,
@@ -336,6 +345,8 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
             out["Value"]["gross"].append(g)
             out["Value"]["net"].append(n)
             out["Value"]["names"].append(p)
+            out["Value"]["pos"].append(val_pos)
+            out["Value"]["phase"].append(phase)
 
         if include_skewness:
             sk_raw = raw_signal_skewness(log_price, getattr(cfg, "SKEWNESS_WINDOW", SKEWNESS_WINDOW_DEFAULT))
@@ -345,6 +356,8 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
                 out[SKEWNESS_STYLE]["gross"].append(g)
                 out[SKEWNESS_STYLE]["net"].append(n)
                 out[SKEWNESS_STYLE]["names"].append(p)
+                out[SKEWNESS_STYLE]["pos"].append(sk_pos)
+                out[SKEWNESS_STYLE]["phase"].append(phase)
 
     dead = [f"{n}-{f}" for (n, f), ok in pair_has_data.items() if not ok]
     if dead:
@@ -355,6 +368,64 @@ def per_product_four_row(asset_class: str, tc_bps: int = TC_BPS,
             raise ValueError(f"{asset_class}: no product has data for {style} with tenor pairs "
                              f"{[f'{n}-{f}' for n, f in tenor_pairs]}; pick pairs that exist in the curve")
     return out
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------
+# Product-level netting of the cost (user decision 2026-11-15; rule in research/netting.py)
+# asset_class_four_row() returns its net style rows as a StyleRows dict: the standalone style series (each strategy on its own cost, as shown in the
+# strategy rows) plus the per-product data needed to rebuild them netted for any weighting of the styles. Every function that COMBINES styles
+# (asset_class_ew_portfolio, cross_commodity_dynamic, and through them cross_n / cross-pairs) rebuilds the style series with each product's sleeves
+# netted for the weights of that construction: EW = equal; Inverse Vol / ERC / DRP = the schedule solved on the standalone style rows.
+# ---------------------------------------------------------------------------------------------------------------------------------------
+class StyleRows(dict):
+    """{style: standalone net series} plus .pp (per-product data), .tc_bps and .product_method / .q (product weights inside a style, DRP only)."""
+    pp = None
+    tc_bps = TC_BPS
+    product_method = "equal_weight"
+    q = None
+
+
+def _apply_schedule(series_by_name: dict, W: pd.DataFrame) -> pd.Series:
+    """The combine step of rolling_erc_combine / rolling_drp_combine with a given weight schedule (same dropna(how="any") dates)."""
+    names = list(W.columns)
+    df = pd.concat([series_by_name[k] for k in names], axis=1, keys=names).dropna(how="any")
+    assert df.index.equals(W.index), "weight schedule and series dates differ"
+    return pd.Series((df.values * W.values.astype(float)).sum(axis=1), index=df.index)
+
+
+def netted_style_rows(rows: StyleRows, a: pd.DataFrame | None = None) -> dict:
+    """Style series rebuilt from netted sleeves. `a`: style weights over time (columns = the style keys of `rows`), None = equal weights.
+    A sleeve's weight in the portfolio is a_style(t) x (its product's weight inside the style: 1/n EW, or the DRP schedule)."""
+    pp, styles = rows.pp, list(rows.keys())
+    if pp is None or len(styles) < 2:
+        return dict(rows)
+    for st in styles:
+        if "pos" not in pp[st]:
+            raise ValueError("per-product data without positions (an old cache?): rerun per_product_four_row")
+    prod = {}
+    for st in styles:
+        for i, nm in enumerate(pp[st]["names"]):
+            prod.setdefault(nm, {})[st] = i
+    adj = {st: [None] * len(pp[st]["names"]) for st in styles}
+    for nm, where in prod.items():
+        sts = list(where)
+        nets_p = {st: pp[st]["net"][where[st]] for st in sts}
+        idx = nets_p[sts[0]].index
+        W = {}
+        for st in sts:
+            aw = pd.Series(1.0 / len(styles), index=idx) if a is None else a[st].astype(float).reindex(idx, method="bfill")
+            qw = 1.0 / len(pp[st]["names"]) if rows.product_method == "equal_weight" else rows.q[st][nm].astype(float).reindex(idx, method="bfill")
+            W[st] = aw * qw
+        out = netted(nets_p, {st: pp[st]["pos"][where[st]] for st in sts}, pp[sts[0]]["phase"][where[sts[0]]], rows.tc_bps, pd.DataFrame(W, index=idx))
+        for st in sts:
+            adj[st][where[st]] = out[st]
+    res = {}
+    for st in styles:
+        if rows.product_method == "equal_weight":
+            res[st] = combine_cross_asset(adj[st])
+        else:
+            res[st] = _apply_schedule(dict(zip(pp[st]["names"], adj[st])), rows.q[st])
+    return res
 
 
 PRODUCT_COMBINE_METHODS = ("equal_weight", "dynamic_risk_parity")
@@ -405,20 +476,23 @@ def asset_class_four_row(asset_class: str, tc_bps: int = TC_BPS, styles: tuple[s
     per_product = per_product_fetcher(asset_class, tc_bps)
     wanted = styles if styles is not None else tuple(per_product.keys())
 
+    net = StyleRows()
+    net.pp, net.tc_bps, net.product_method = {style: per_product[style] for style in wanted}, tc_bps, combine_method
     if combine_method == "equal_weight":
         gross = {style: combine_cross_asset(per_product[style]["gross"]) for style in wanted}
-        net = {style: combine_cross_asset(per_product[style]["net"]) for style in wanted}
+        for style in wanted:
+            net[style] = combine_cross_asset(per_product[style]["net"])
     else:  # "dynamic_risk_parity"
         gross = {style: rolling_drp_combine(dict(zip(per_product[style]["names"],
                                                        per_product[style]["gross"])))[0]
                   for style in wanted}
-        net = {style: rolling_drp_combine(dict(zip(per_product[style]["names"],
-                                                     per_product[style]["net"])))[0]
-                for style in wanted}
+        net.q = {}
+        for style in wanted:
+            net[style], net.q[style] = rolling_drp_combine(dict(zip(per_product[style]["names"], per_product[style]["net"])))
     return gross, net
 
 
-STYLE_COMBINE_METHODS = ("equal_weight", "risk_parity", "dynamic_risk_parity")
+STYLE_COMBINE_METHODS = ("equal_weight", "risk_parity", "dynamic_risk_parity", "inverse_vol")
 
 
 def asset_class_ew_portfolio(gross_four_row: dict[str, pd.Series], net_four_row: dict[str, pd.Series],
@@ -449,16 +523,28 @@ def asset_class_ew_portfolio(gross_four_row: dict[str, pd.Series], net_four_row:
     versa)."""
     if combine_method not in STYLE_COMBINE_METHODS:
         raise ValueError(f"combine_method must be one of {STYLE_COMBINE_METHODS}, got {combine_method!r}")
+    # 2026-11-15: the NET portfolio is netted at product level (StyleRows from asset_class_four_row; a plain dict is combined as before)
+    rows = net_four_row if isinstance(net_four_row, StyleRows) else None
     if combine_method == "equal_weight":
+        n_in = netted_style_rows(rows) if rows is not None else net_four_row
         return (combine_returns(list(gross_four_row.values()), "equal_weight"),
-                combine_returns(list(net_four_row.values()), "equal_weight"))
+                combine_returns(list(n_in.values()), "equal_weight"))
+    elif combine_method == "inverse_vol":
+        w = inverse_vol_weights(list(net_four_row.values()), 63)
+        n_in = netted_style_rows(rows, w.set_axis(list(net_four_row.keys()), axis=1)) if rows is not None else net_four_row
+        return (combine_returns(list(gross_four_row.values()), "inverse_vol", vol_window=63),
+                combine_with_weights(list(n_in.values()), w))
     elif combine_method == "risk_parity":
         g_port, _ = rolling_erc_combine(gross_four_row, tilt=0.0)
-        n_port, _ = rolling_erc_combine(net_four_row, tilt=0.0)
+        n_port, W = rolling_erc_combine(dict(net_four_row), tilt=0.0)
+        if rows is not None and not W.empty:
+            n_port = _apply_schedule(netted_style_rows(rows, W), W)
         return g_port, n_port
     else:  # "dynamic_risk_parity"
         g_port, _ = rolling_drp_combine(gross_four_row)
-        n_port, _ = rolling_drp_combine(net_four_row)
+        n_port, W = rolling_drp_combine(dict(net_four_row))
+        if rows is not None and not W.empty:
+            n_port = _apply_schedule(netted_style_rows(rows, W), W)
         return g_port, n_port
 
 
@@ -568,19 +654,28 @@ def cross_commodity_dynamic(tc_bps: int = TC_BPS,
         only = next(iter(gross_styles))
         return {**gross_styles, "Portfolio": gross_styles[only]}, {**net_styles, "Portfolio": net_styles[only]}
 
+    # 2026-11-15: style rows stay standalone; the Portfolio is netted at product level with the style weights of this construction
+    def _netted_styles(W):
+        a = None if W is None else W.rename(columns={STYLE_DISPLAY[st]: st for st in styles})
+        per_ac = {ac: netted_style_rows(per_asset[ac][1], a) if isinstance(per_asset[ac][1], StyleRows) else per_asset[ac][1] for ac in asset_classes}
+        return {STYLE_DISPLAY[st]: combine_cross_asset([per_ac[ac][st] for ac in asset_classes]) for st in styles}
     if combine_method == "equal_weight":
         g_port = combine_cross_asset(list(gross_styles.values()))
-        n_port = combine_cross_asset(list(net_styles.values()))
+        n_port = combine_cross_asset(list(_netted_styles(None).values()))
     elif combine_method == "risk_parity":
         g_port, _ = rolling_erc_combine(gross_styles, tilt=0.0)
-        n_port, _ = rolling_erc_combine(net_styles, tilt=0.0)
+        n_port, W = rolling_erc_combine(net_styles, tilt=0.0)
+        if not W.empty:
+            n_port = _apply_schedule(_netted_styles(W), W)
     elif combine_method == "inverse_vol":
         g_port = combine_returns(list(gross_styles.values()), "inverse_vol", vol_window=63)
-        n_port = combine_returns(list(net_styles.values()), "inverse_vol", vol_window=63)
+        w = inverse_vol_weights(list(net_styles.values()), 63)
+        n_port = combine_with_weights(list(_netted_styles(w.set_axis(list(net_styles.keys()), axis=1)).values()), w)
     else:  # "dynamic_risk_parity"
         g_port, _ = rolling_drp_combine(gross_styles)
-        n_port, _ = rolling_drp_combine(net_styles)
-
+        n_port, W = rolling_drp_combine(net_styles)
+        if not W.empty:
+            n_port = _apply_schedule(_netted_styles(W), W)
     return {**gross_styles, "Portfolio": g_port}, {**net_styles, "Portfolio": n_port}
 
 

@@ -65,11 +65,21 @@ for bk in BK:
             n += 1; bad += not close(cl["vals"][row["name"]][w], pack(res["tabs"][bk]["windows"][w][r_i]), 0.0)
 check(f"1. page bucket rows == dashboard bucket tabs ({n} cells)", bad == 0, f"{bad} differing cells")
 
+# product-level netting of the cost (2026-11-15): EW-5 and IV-5 are netted over the product's five sleeves with the weights of each construction
+import netting as _nt
+def _net5(nd, pos, ph):
+    lst = [nd[s] for s in SLEEVES]
+    ew = combine_returns(list(_nt.netted({s: nd[s] for s in SLEEVES}, {s: pos[s] for s in SLEEVES}, ph, 5).values()), "equal_weight")
+    w = _nt.inverse_vol_weights(lst, 63)
+    adj = _nt.netted({s: nd[s] for s in SLEEVES}, {s: pos[s] for s in SLEEVES}, ph, 5, w.set_axis(list(SLEEVES), axis=1))
+    return ew, _nt.combine_with_weights([adj[s] for s in SLEEVES], w)
+_POS, _PH = pickle.load(open(D / "products_pos.pkl", "rb"))
 # 2 recomputed from the product return series (EW-5 and IV-5 are only on the rankings page, so they are rebuilt here)
 bad = n = 0
 for p in prods:
     a, nm = key_of[(p["asset"], p["name"])]; lst = [nets[(a, nm)][s] for s in SLEEVES]
-    ser = {"EW-5": combine_returns(lst, "equal_weight"), "IV-5": combine_returns(lst, "inverse_vol", vol_window=63), **{s: nets[(a, nm)][s] for s in SLEEVES}}
+    _e, _i = _net5(nets[(a, nm)], _POS[(a, nm)], _PH[(a, nm)])
+    ser = {"EW-5": _e, "IV-5": _i, **{s: nets[(a, nm)][s] for s in SLEEVES}}
     for k, v in ser.items():
         for w in WIN:
             n += 1; bad += not close(p["vals"][k][w], pack(_metrics(sl(v, w))), 0.0011)
@@ -85,16 +95,19 @@ else:
     PP = {ac: cae.per_product_four_row(ac, 5, per_product_pairs=True, include_skewness=True) for ac in BK}
     cae.value_v1_position = orig; pickle.dump(PP, open(CACHE, "wb"))
 STY = {"Momentum": "Momentum", "Combined Carry": "Carry", "Combined CarryMom": "CarryMom", "Value": "Value", "Skewness": "Skewness"}
-eng = {}
+eng, epos, eph = {}, {}, {}
 for ac in BK:
     for st, lab in STY.items():
         for nm, net in zip(PP[ac][st]["names"], PP[ac][st]["net"]):
             eng.setdefault((LABEL[ac], {"SingaporeGasoil": "Gas Oil"}.get(nm, nm)), {})[lab] = net
+        for nm, pos, ph in zip(PP[ac][st]["names"], PP[ac][st]["pos"], PP[ac][st]["phase"]):
+            epos.setdefault((LABEL[ac], {"SingaporeGasoil": "Gas Oil"}.get(nm, nm)), {})[lab] = pos; eph[(LABEL[ac], {"SingaporeGasoil": "Gas Oil"}.get(nm, nm))] = ph
 check("3. engine covers every page product with five sleeves", all(len(eng.get((p["asset"], p["name"]), {})) == 5 for p in prods))
 bad = n = 0
 for p in prods:
     e = eng[(p["asset"], p["name"])]; lst = [e[s] for s in SLEEVES]
-    ser = {"EW-5": combine_returns(lst, "equal_weight"), "IV-5": combine_returns(lst, "inverse_vol", vol_window=63), **e}
+    _e, _i = _net5(e, epos[(p["asset"], p["name"])], eph[(p["asset"], p["name"])])
+    ser = {"EW-5": _e, "IV-5": _i, **e}
     for k, v in ser.items():
         for w in WIN:
             n += 1; bad += not close(p["vals"][k][w], pack(_metrics(sl(v, w))), 0.0011)
@@ -103,7 +116,7 @@ bad = n = 0
 for ac in BK:
     g4, n4 = cae.asset_class_four_row(ac, 5, None, lambda a, t: PP[a])
     rows = {STY[k]: v for k, v in n4.items()}; rows["EW PORT"] = cae.asset_class_ew_portfolio(g4, n4)[1]
-    rows["Inverse Vol"] = combine_returns(list(n4.values()), "inverse_vol", vol_window=63)
+    rows["Inverse Vol"] = cae.asset_class_ew_portfolio(g4, n4, "inverse_vol")[1]
     cl = next(c for c in blk["classes"] if c["name"] == LABEL[ac])
     for nm, v in rows.items():
         for w in WIN:

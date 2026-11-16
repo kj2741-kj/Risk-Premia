@@ -70,6 +70,8 @@ from engine import (combine_positions, combine_returns, exec_shift,  # noqa: E40
 from carry_zsum import carry_slope_change, carry_z, combined_carry_signal, combined_carrymom_signal, summed_signal  # noqa: E402  (2026-10-13: V2 legs are combined by summing z-scores, see research/carry_zsum.py)
 from risk_parity import rolling_erc_combine  # noqa: E402
 from drp import rolling_drp_combine  # noqa: E402
+from netting import (inverse_vol_weights, combine_with_weights, apply_schedule,  # noqa: E402
+                     netted_strategy_portfolio)
 
 COMBINE_METHODS = ["Equal Weight", "Inverse Vol", "Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"]
 
@@ -336,26 +338,35 @@ def _instance_product_raw_signal(instance: dict, product_data: dict) -> pd.Serie
     return raws[0] if len(raws) == 1 else combine_positions(raws, instance.get("combine_method", "equal_weight"))
 
 
-def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+def _instance_product_returns(instance: dict, product_data: dict, tc_bps: int, _pos_out: list | None = None) -> tuple[pd.Series, pd.Series]:
     """Gross and net daily log-return contribution of one strategy family
-    (a reference strategy or a draft sleeve) on one product."""
+    (a reference strategy or a draft sleeve) on one product. `_pos_out` (2026-11-15): if a list is given, the position series is appended to it
+    (product-level netting of the cost needs the positions)."""
     empty = pd.Series(dtype=float)
     combo = _instance_product_raw_signal(instance, product_data)
     if combo.empty:
         return empty, empty
     pos = exec_shift(combo, int(instance["shift_n"])).fillna(0)
+    if _pos_out is not None:
+        _pos_out.append(pos)
     return log_return_daily(pos, product_data["log_price"], tc_bps, product_data["phase"])
 
 
-def _instance_asset_returns(instance: dict, data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+def _instance_asset_returns(instance: dict, data: dict, tc_bps: int, detail: dict | None = None) -> tuple[pd.Series, pd.Series]:
     """Gross and net asset-class-level return for one strategy family,
-    equal-weighted across every product in `data`."""
+    equal-weighted across every product in `data`. `detail` (2026-11-15): if a dict is given it is filled with the per-product
+    nets, positions and phases, for product-level netting (research/netting.py)."""
     grosses, nets = [], []
-    for product_data in data.values():
-        g, n = _instance_product_returns(instance, product_data, tc_bps)
+    for product, product_data in data.items():
+        po = []
+        g, n = _instance_product_returns(instance, product_data, tc_bps, po)
         if not n.empty:
             grosses.append(g)
             nets.append(n)
+            if detail is not None:
+                detail.setdefault("nets", {})[product] = n
+                detail.setdefault("pos", {})[product] = po[0]
+                detail.setdefault("phase", {})[product] = product_data["phase"]
     empty = pd.Series(dtype=float)
     gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
     net_agg = combine_returns(nets, "equal_weight") if nets else empty
@@ -369,7 +380,7 @@ def _per_product_pairs(cfg) -> bool:
 
 
 def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict],
-                                    data: dict, tc_bps: int) -> tuple[pd.Series, pd.Series]:
+                                    data: dict, tc_bps: int, detail: dict | None = None) -> tuple[pd.Series, pd.Series]:
     """Signal-level Combined Carry / Combined CarryMom (Dimil's construction,
     Methodology doc Section 7): for each product, equal-weight this asset
     class's Carry tenor pairs' raw (pre-shift) composite signals into ONE
@@ -434,6 +445,10 @@ def _combined_tenor_family_returns(family: str, cfg, tenor_instances: list[dict]
         if not n.empty:
             grosses.append(g)
             nets.append(n)
+            if detail is not None:
+                detail.setdefault("nets", {})[product] = n
+                detail.setdefault("pos", {})[product] = pos
+                detail.setdefault("phase", {})[product] = product_data["phase"]
     empty = pd.Series(dtype=float)
     gross_agg = combine_returns(grosses, "equal_weight") if grosses else empty
     net_agg = combine_returns(nets, "equal_weight") if nets else empty
@@ -458,12 +473,15 @@ def _compute_reference_returns(_cfg, cfg_name: str, tc_bps: int,
     data, _, _ = _load_products(_cfg, cfg_name, excluded_products)
     gross: dict[str, pd.Series] = {}
     net: dict[str, pd.Series] = {}
+    detail: dict[str, dict] = {}       # 2026-11-15: per-product nets / positions / phases for product-level netting
     for instance in reference_strategies:
-        g, n = _instance_asset_returns(instance, data, tc_bps)
+        d = {}
+        g, n = _instance_asset_returns(instance, data, tc_bps, d)
         if not n.empty:
             gross[instance["label"]] = g
             net[instance["label"]] = n
-    return gross, net
+            detail[instance["label"]] = d
+    return gross, net, detail
 
 
 def _window_metrics(gross: pd.Series, net: pd.Series, yr_start: int, yr_end: int, geometric: bool = True) -> dict:
@@ -755,7 +773,7 @@ def _apply_weight_schedule(returns_by_name: dict[str, pd.Series], weights_over_t
 
 def _combine_sleeves(gross_by_name: dict[str, pd.Series], net_by_name: dict[str, pd.Series],
                       combine_method: str, vol_window: int = 63,
-                      tilt: float = 0.0) -> tuple[pd.Series, pd.Series]:
+                      tilt: float = 0.0, detail: dict | None = None, tc_bps: int = 5) -> tuple[pd.Series, pd.Series]:
     """Combine several strategies' gross/net return series under the selected UI method.
 
     Risk Parity and Dynamic Risk Parity both solve weights on the tradeable NET series only,
@@ -772,6 +790,25 @@ def _combine_sleeves(gross_by_name: dict[str, pd.Series], net_by_name: dict[str,
     if len(net_by_name) < 2:
         return (combine_returns(list(gross_by_name.values()), "equal_weight"),
                 combine_returns(list(net_by_name.values()), "equal_weight"))
+    if detail is not None and all(k in detail and detail[k] for k in net_by_name):
+        # 2026-11-15: product-level netting of the cost (research/netting.py). Weights are solved on the standalone strategy series exactly as below;
+        # each product then trades only the change in its net position across the strategies, with those weights. Gross is unchanged.
+        det = {k: detail[k] for k in net_by_name}
+        if combine_method == "Inverse Vol":
+            w = inverse_vol_weights(list(net_by_name.values()), vol_window)
+            adj = netted_strategy_portfolio(det, w.set_axis(list(net_by_name), axis=1), tc_bps)
+            return (combine_returns(list(gross_by_name.values()), "inverse_vol", vol_window=vol_window),
+                    combine_with_weights([adj[k] for k in net_by_name], w))
+        if combine_method in ("Risk Parity (ERC, rolling)", "Dynamic Risk Parity (DRP, rolling)"):
+            if combine_method == "Risk Parity (ERC, rolling)":
+                _, W = rolling_erc_combine(net_by_name, tilt=tilt)
+            else:
+                _, W = rolling_drp_combine(net_by_name)
+            adj = netted_strategy_portfolio(det, W, tc_bps)
+            return _apply_weight_schedule(gross_by_name, W), apply_schedule(adj, W)
+        adj = netted_strategy_portfolio(det, None, tc_bps)
+        return (combine_returns(list(gross_by_name.values()), "equal_weight"),
+                combine_returns([adj[k] for k in net_by_name], "equal_weight"))
     if combine_method == "Inverse Vol":
         return (combine_returns(list(gross_by_name.values()), "inverse_vol", vol_window=vol_window),
                 combine_returns(list(net_by_name.values()), "inverse_vol", vol_window=vol_window))
@@ -951,13 +988,15 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         if not enabled_sleeves:
             st.warning("Switch on at least one strategy family with at least one leg before adding a portfolio.")
         else:
-            gross_by_name, net_by_name, sleeve_names = {}, {}, []
+            gross_by_name, net_by_name, sleeve_names, detail_by_name = {}, {}, [], {}
             for sleeve in enabled_sleeves:
-                g, n = _instance_asset_returns(sleeve, data, tc_bps)
+                d = {}
+                g, n = _instance_asset_returns(sleeve, data, tc_bps, d)
                 if not n.empty:
                     label = FAMILY_TITLE[sleeve["family"]]
                     gross_by_name[label] = g
                     net_by_name[label] = n
+                    detail_by_name[label] = d
                     sleeve_names.append(label)
             if not net_by_name:
                 st.warning("No valid output from the selected families; check leg parameters "
@@ -965,7 +1004,8 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                            "returns an empty series).")
             else:
                 gross_combined, net_combined = _combine_sleeves(
-                    gross_by_name, net_by_name, combine_method, vol_window, tilt=return_tilt)
+                    gross_by_name, net_by_name, combine_method, vol_window, tilt=return_tilt,
+                    detail=detail_by_name, tc_bps=tc_bps)
                 method_note = (f"{combine_method}, tilt={return_tilt:.2f}"
                                if combine_method == "Risk Parity (ERC, rolling)" and return_tilt > 0
                                else combine_method)
@@ -995,7 +1035,7 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
             portfolios.pop(to_remove)
             st.rerun()
 
-    raw_gross, raw_net = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded_products)
+    raw_gross, raw_net, raw_detail = _compute_reference_returns(cfg, cfg.ASSET_CLASS, tc_bps, excluded_products)
 
     # "Combined Carry" alternative construction (added 2026-08-04, corrected to signal-level
     # 2026-08-04): equal-weight this asset class's two Carry tenor pairs' raw signals into one
@@ -1015,8 +1055,11 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                                      if f"carrymom_{near}{far}" in by_id]
         if len(carry_tenor_instances) == len(cfg.CARRY_TENOR_PAIRS) and \
            len(carrymom_tenor_instances) == len(cfg.CARRY_TENOR_PAIRS):
-            cc_gross, cc_net = _combined_tenor_family_returns("Carry", cfg, carry_tenor_instances, data, tc_bps)
-            ccm_gross, ccm_net = _combined_tenor_family_returns("CarryMom", cfg, carrymom_tenor_instances, data, tc_bps)
+            cc_det, ccm_det = {}, {}
+            cc_gross, cc_net = _combined_tenor_family_returns("Carry", cfg, carry_tenor_instances, data, tc_bps, cc_det)
+            ccm_gross, ccm_net = _combined_tenor_family_returns("CarryMom", cfg, carrymom_tenor_instances, data, tc_bps, ccm_det)
+            instance_detail = {"Momentum": raw_detail.get("Momentum"), "Combined Carry": cc_det, "Combined CarryMom": ccm_det,
+                               "Value": raw_detail.get("Value"), "Skewness": raw_detail.get("Skewness")}
             instance_gross = {"Momentum": raw_gross["Momentum"], "Combined Carry": cc_gross,
                                "Combined CarryMom": ccm_gross, "Value": raw_gross["Value"]}
             instance_net = {"Momentum": raw_net["Momentum"], "Combined Carry": cc_net,
@@ -1026,8 +1069,10 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
                 instance_net["Skewness"] = raw_net["Skewness"]
         else:
             instance_gross, instance_net = dict(raw_gross), dict(raw_net)
+            instance_detail = dict(raw_detail)
     else:
         instance_gross, instance_net = dict(raw_gross), dict(raw_net)
+        instance_detail = dict(raw_detail)
 
     if instance_net:
         # Stable key, deliberately NOT combine_method-dependent (was
@@ -1050,11 +1095,11 @@ def render_portfolio_tab(cfg, key_prefix: str, excluded_products: tuple[str, ...
         core_gross = {k: v for k, v in instance_gross.items() if k != "Skewness"}
         core_net = {k: v for k, v in instance_net.items() if k != "Skewness"}
         agg_gross, agg_net = _combine_sleeves(core_gross, core_net, combine_method, vol_window,
-                                               tilt=return_tilt)
+                                               tilt=return_tilt, detail=instance_detail, tc_bps=tc_bps)
         skew_agg = None
         if "Skewness" in instance_net:
             skew_agg = _combine_sleeves(instance_gross, instance_net, combine_method, vol_window,
-                                         tilt=return_tilt)
+                                         tilt=return_tilt, detail=instance_detail, tc_bps=tc_bps)
         instance_gross[agg_label] = agg_gross
         instance_net[agg_label] = agg_net
         agg5_label = "Portfolio (all reference strategies + Skewness)"

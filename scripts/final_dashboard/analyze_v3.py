@@ -42,6 +42,12 @@ if PEN:                                 # variant s (default) = per sleeve, a = 
         nets = lp_mod.netted_nets(nets, _trades, _sigs, _pos, _ph, _w, _vol, _model, float(_cap), _var)
     JSON_NAME = f"final_v3_pen_{_model}_{int(float(_cap))}" + ("" if _var == "s" else f"_{_var}") + ".json"
 
+# Product-level netting of the 5 bps cost (2026-11-15, research/netting.py, netted_build.py): every row that combines strategies is netted; strategy rows keep their
+# own cost. Dimil's penalty scenarios (FD_PENALTY) keep the earlier per-sleeve construction until they are re-based on the netted one.
+NETTING = not PEN
+if NETTING:
+    from netted_build import Netted
+    NB = Netted(OUT, STYLES)
 KEYS = list(BUCKETS)
 WINDOWS = [("full", REPORT_START, None)] + [(n.split("_")[0].lower(), s, e) for n, s, e in REGIMES] + [("y26", "2026-01-01", None)]
 f3 = lambda d: {k: (None if pd.isna(v) else round(float(v), 3)) for k, v in d.items()}
@@ -59,12 +65,15 @@ def align_intersection(lst):
 
 
 def ac_series(members):
+    if NETTING:
+        b = NB.bucket(members)
+        return b["styles"], b["ew"], b["iv"], b["ew_lines"]
     styles = {}
     for st in STYLES:
         ser = [nets[m][st] for m in members if not nets[m][st].empty]
         styles[st] = combine_cross_asset(ser) if len(ser) > 1 else ser[0]
     lst = list(styles.values())
-    return styles, combine_returns(lst, "equal_weight"), combine_returns(lst, "inverse_vol", vol_window=63)
+    return styles, combine_returns(lst, "equal_weight"), combine_returns(lst, "inverse_vol", vol_window=63), None
 
 
 def equity(rows, step=5):
@@ -77,8 +86,8 @@ def equity(rows, step=5):
 res = {"tabs": {}, "products": {}, "combined": {}, "crosspair": {}, "corr": {}, "equity": {}, "meta": {}}
 acs = {}
 for key, (label, members) in BUCKETS.items():
-    styles, ew, iv = ac_series(members)
-    acs[key] = dict(styles=styles, ew=ew, iv=iv)
+    styles, ew, iv, ew_lines = ac_series(members)
+    acs[key] = dict(styles=styles, ew=ew, iv=iv, ew_lines=ew_lines)
     rows = dict(styles); rows["EW PORT"] = ew; rows["Inverse Vol"] = iv
     res["tabs"][key] = dict(label=label, products=[{"SingaporeGasoil": "Gas Oil"}.get(p, p) for _, p in members], pkeys=[pk(a, p) for a, p in members], windows=win(rows),
                             data_first=max(meta[m]["first"] for m in members), data_last=min(meta[m]["last"] for m in members),
@@ -93,7 +102,7 @@ for key, (label, members) in BUCKETS.items():
         d = {}
         for k, s in nets[(a, p)].items():
             d[k] = {w: f3(_metrics(s.loc[st:e] if e else s.loc[st:])) for w, st, e in WINDOWS}
-        ew_p = combine_returns([nets[(a, p)][s] for s in STYLES], "equal_weight")
+        ew_p = combine_returns(list(NB.adj((a, p)).values()) if NETTING else [nets[(a, p)][s] for s in STYLES], "equal_weight")
         d["EW PORT"] = {w: f3(_metrics(ew_p.loc[st:e] if e else ew_p.loc[st:])) for w, st, e in WINDOWS}
         res["equity"][f"prod|{a}|{p}"] = equity({**{s: nets[(a, p)][s] for s in STYLES}, "EW PORT": ew_p})
         res["products"][pk(a, p)] = d
@@ -116,7 +125,12 @@ for st in STYLES:
     al, _ = align_intersection([acs[k]["styles"][st] for k in KEYS])
     srows[st] = combine_returns(al, "equal_weight")
 lst = list(srows.values())
-rows = {**srows, "EW PORT": combine_returns(lst, "equal_weight"), "Inverse Vol": combine_returns(lst, "inverse_vol", vol_window=63)}
+if NETTING:
+    _sr, _ew, _iv = NB.bystyle(BUCKETS, acs, align_intersection)
+    assert all(_sr[k].equals(srows[k]) for k in srows)
+    rows = {**srows, "EW PORT": _ew, "Inverse Vol": _iv}
+else:
+    rows = {**srows, "EW PORT": combine_returns(lst, "equal_weight"), "Inverse Vol": combine_returns(lst, "inverse_vol", vol_window=63)}
 first = max(r.first_valid_index() for r in srows.values())
 res["bystyle"] = dict(windows=win(rows), members=KEYS, common_first=str(first.date()), common_last=str(min(r.index.max() for r in srows.values()).date()))
 res["equity"]["bystyle"] = equity(rows)
@@ -154,7 +168,7 @@ for nm in ("ew", "iv"):
     rc_series[nm] = dict(dates=[d.strftime("%Y-%m-%d") for d in df.index], series={k: [round(float(x), 6) for x in df[k]] for k in KEYS})
 assert all(len(v["dates"]) == len(s) for v in rc_series.values() for s in v["series"].values())
 res["corr"]["rolling"] = rc_series
-res["meta"] = dict(data_last={k: res["tabs"][k]["data_last"] for k in KEYS}, labels=LABEL, keys=KEYS, cutoff=CUTOFF,
+res["meta"] = dict(netting=bool(NETTING), data_last={k: res["tabs"][k]["data_last"] for k in KEYS}, labels=LABEL, keys=KEYS, cutoff=CUTOFF,
                    rolls={pk(*m): meta[m]["rolls"] for m in meta if m[0] != "power"}, pairs={pk(*m): ["-".join(x) for x in meta[m]["pairs"]] for m in meta if m[0] != "power"})      # the five US Power series are in products_nets.pkl only for the rankings page; they are not in the seven-bucket book or its metadata
 json.dump(res, open(OUT / JSON_NAME, "w"))
 print("saved", JSON_NAME, (OUT / JSON_NAME).stat().st_size // 1024, "KB")

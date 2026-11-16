@@ -71,7 +71,16 @@ def align_intersection(lst):
     return [c.reindex(idx).diff() for c in cum], idx
 
 
+from netted_build import Netted        # product-level netting of the 5 bps cost (2026-11-15), the same construction as analyze_v3.py
+NB = Netted(OUT, STYLES)
+
+
 def ac_series(members):
+    b = NB.bucket(members)
+    return b["styles"], b["ew"], b["iv"], b["ew_lines"]
+
+
+def ac_series_per_sleeve(members):     # the earlier per-sleeve construction (reference only)
     styles = {}
     for st in STYLES:
         ser = [nets[m][st] for m in members if not nets[m][st].empty]
@@ -84,8 +93,8 @@ def build(buckets):
     keys = list(buckets)
     acs = {}
     for k, (_, members) in buckets.items():
-        styles, ew, iv = ac_series(members)
-        acs[k] = dict(styles=styles, ew=ew, iv=iv)
+        styles, ew, iv, ew_lines = ac_series(members)
+        acs[k] = dict(styles=styles, ew=ew, iv=iv, ew_lines=ew_lines)
     books = {}
     for m1, t1 in (("ew", "EW"), ("iv", "Inverse Vol")):
         al, idx = align_intersection([acs[k][m1] for k in keys])
@@ -95,8 +104,9 @@ def build(buckets):
     for st in STYLES:
         al, _ = align_intersection([acs[k]["styles"][st] for k in keys])
         srows[st] = combine_returns(al, "equal_weight")
-    lst = list(srows.values())
-    bystyle = {**srows, "EW PORT": combine_returns(lst, "equal_weight"), "Inverse Vol": combine_returns(lst, "inverse_vol", vol_window=63)}
+    _sr, _ew, _iv = NB.bystyle(buckets, acs, align_intersection)
+    assert all(_sr[k].equals(srows[k]) for k in srows)
+    bystyle = {**srows, "EW PORT": _ew, "Inverse Vol": _iv}
     return acs, books, bystyle
 
 
@@ -158,7 +168,7 @@ bucket_ew = []
 for k, (_, members) in CLASSICAL.items():
     style_lines = []
     for st in STYLES:
-        d = inter_diff([nets[m][st] for m in members])
+        d = inter_diff([NB.adj(m)[st] for m in members])         # netted sleeves (EW weights), then plain pandas
         style_lines.append(d.mean(axis=1, skipna=False))
     d = inter_diff([s.dropna() for s in style_lines]) if len({tuple(s.dropna().index) for s in style_lines}) > 1 else pd.concat(style_lines, axis=1)
     bucket_ew.append(d.mean(axis=1, skipna=False))

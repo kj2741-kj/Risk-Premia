@@ -5,6 +5,7 @@ Buckets (asset-class tabs): Metals, Petroleum (WTI, Brent, RBOB, HeatingOil, Gas
 The earlier "Energy" and "Energy ex-NatGas" tabs and every with/without-NatGas variant are gone. Combined book = all seven buckets (Softs split out of Agriculture 2026-11-10).
 Run from the repo root after compute_products_v3.py."""
 import json
+import os
 import pickle
 from itertools import combinations
 from pathlib import Path
@@ -26,6 +27,20 @@ REPORT_START = "2012-01-01"
 REGIMES = [("P1_2012_2016", "2012-01-01", "2016-12-31"), ("P2_2017_2021", "2017-01-01", "2021-12-31"), ("P3_2022_onwards", "2022-01-01", "2026-12-31")]
 CUTOFF = TAGS[TAG]["cutoff"]
 nets, meta = pickle.load(open(OUT / "products_nets.pkl", "rb"))
+JSON_NAME = "final_v3.json"
+PEN = os.environ.get("FD_PENALTY")      # liquidity penalty scenario "<sqrt|linear>:<capital in USD millions>[:<s|a|b>]" (2026-11-15, scripts/final_dashboard/liquidity_penalty.py); unset = the committed numbers
+if PEN:                                 # variant s (default) = per sleeve, a = penalty netted over the product's sleeves, b = penalty and flat 5 bps netted; model none:0:b = flat cost netted only
+    import liquidity_penalty as lp_mod
+    _model, _cap, *_v = PEN.split(":")
+    _var = _v[0] if _v else "s"
+    _trades, _sigs = pickle.load(open(OUT / "products_trades.pkl", "rb"))
+    _w, _vol = lp_mod.book_weights(BUCKETS), lp_mod.daily_notional_volume()
+    if _var == "s":
+        nets = lp_mod.penalised_nets(nets, _trades, _sigs, _w, _vol, _model, float(_cap))
+    else:
+        _pos, _ph = pickle.load(open(OUT / "products_pos.pkl", "rb"))
+        nets = lp_mod.netted_nets(nets, _trades, _sigs, _pos, _ph, _w, _vol, _model, float(_cap), _var)
+    JSON_NAME = f"final_v3_pen_{_model}_{int(float(_cap))}" + ("" if _var == "s" else f"_{_var}") + ".json"
 
 KEYS = list(BUCKETS)
 WINDOWS = [("full", REPORT_START, None)] + [(n.split("_")[0].lower(), s, e) for n, s, e in REGIMES] + [("y26", "2026-01-01", None)]
@@ -141,5 +156,5 @@ assert all(len(v["dates"]) == len(s) for v in rc_series.values() for s in v["ser
 res["corr"]["rolling"] = rc_series
 res["meta"] = dict(data_last={k: res["tabs"][k]["data_last"] for k in KEYS}, labels=LABEL, keys=KEYS, cutoff=CUTOFF,
                    rolls={pk(*m): meta[m]["rolls"] for m in meta if m[0] != "power"}, pairs={pk(*m): ["-".join(x) for x in meta[m]["pairs"]] for m in meta if m[0] != "power"})      # the five US Power series are in products_nets.pkl only for the rankings page; they are not in the seven-bucket book or its metadata
-json.dump(res, open(OUT / "final_v3.json", "w"))
-print("saved final_v3.json", (OUT / "final_v3.json").stat().st_size // 1024, "KB")
+json.dump(res, open(OUT / JSON_NAME, "w"))
+print("saved", JSON_NAME, (OUT / JSON_NAME).stat().st_size // 1024, "KB")

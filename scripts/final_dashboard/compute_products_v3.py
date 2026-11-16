@@ -20,7 +20,7 @@ import importlib
 import numpy as np
 import pandas as pd
 from engine import (raw_signal_carry_v2, raw_signal_carrymom, combine_positions, exec_shift, log_return_daily,
-                    momentum_composite_position, value_v1_position)
+                    log_return_transaction_cost, momentum_composite_position, value_v1_position)
 
 OUT = out_dir(TAG)
 CUTOFF = pd.Timestamp(TAGS[TAG]["cutoff"])
@@ -51,6 +51,7 @@ def pairs_for(a, p):
 
 
 nets, meta = {}, {}
+trades, sigs, positions, phases = {}, {}, {}, {}      # liquidity penalty (2026-11-15): trade units per day (|change in position| plus held-through-roll, i.e. the TC rule at 20000 bps = 1 per unit) and lagged 63-day vol of the product's daily log return
 for a, prods in PRODUCTS.items():
     cfg = cfgs[a]
     for p in prods:
@@ -60,18 +61,28 @@ for a, prods in PRODUCTS.items():
         assert f1r.index.max() <= CUTOFF, (a, p, f1r.index.max())
         W, H = cfg.CARRY_ZSCORE_WINDOW, cfg.CARRY_MOMENTUM_HORIZON
         pr = pairs_for(a, p)
-        run = lambda pos: log_return_daily(pos, lp, TC, ph)[1]
+        cur, curpos = {}, {}
+        def run(pos, st):
+            curpos[st] = pos.reindex(lp.index).fillna(0.0)
+            cur[st] = log_return_transaction_cost(pos.reindex(lp.index).fillna(0.0), 20000, ph)
+            return log_return_daily(pos, lp, TC, ph)[1]
         v = {}
-        v["Momentum"] = run(momentum_composite_position(f1r, cfg.MOMENTUM_PAIRS, shift_n=cfg.MOMENTUM_SHIFT_N))
-        v["Carry"] = run(exec_shift(summed_signal([carry_z(curve, n, f, W) for n, f in pr], lp.index), cfg.CARRY_SHIFT_N).fillna(0))
-        v["CarryMom"] = run(exec_shift(summed_signal([carry_slope_change(curve, n, f, H) for n, f in pr], lp.index), cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0))
-        v["Value"] = run(value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS, cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N, min_periods=VALUE_MIN))
-        v["Skewness"] = run(exec_shift(np.sign(-lp.diff().rolling(SKEW_WINDOW).skew()), SKEW_SHIFT_N).fillna(0))
+        v["Momentum"] = run(momentum_composite_position(f1r, cfg.MOMENTUM_PAIRS, shift_n=cfg.MOMENTUM_SHIFT_N), "Momentum")
+        v["Carry"] = run(exec_shift(summed_signal([carry_z(curve, n, f, W) for n, f in pr], lp.index), cfg.CARRY_SHIFT_N).fillna(0), "Carry")
+        v["CarryMom"] = run(exec_shift(summed_signal([carry_slope_change(curve, n, f, H) for n, f in pr], lp.index), cfg.CARRY_MOMENTUM_SHIFT_N).fillna(0), "CarryMom")
+        v["Value"] = run(value_v1_position(curve, cfg.VALUE_CONTRACT, cfg.VALUE_LOOKBACK_DAYS, cfg.VALUE_THRESHOLD, shift_n=cfg.VALUE_SHIFT_N, min_periods=VALUE_MIN), "Value")
+        v["Skewness"] = run(exec_shift(np.sign(-lp.diff().rolling(SKEW_WINDOW).skew()), SKEW_SHIFT_N).fillna(0), "Skewness")
         nets[(a, p)] = v
+        trades[(a, p)] = cur
+        positions[(a, p)] = curpos      # signed positions and the phase series: the liquidity penalty with netting across a product's sleeves (liquidity_penalty.py)
+        phases[(a, p)] = ph
+        sigs[(a, p)] = lp.diff().rolling(63, min_periods=20).std().shift(1)
         meta[(a, p)] = dict(first=str(f1r.index.min().date()), last=str(f1r.index.max().date()), rolls=int(raw["is_roll_date"].sum()),
                             pairs=pr, f2_track_share=round(float((ph == "F2_Tracking").mean()), 3))
         print("done", a, p, meta[(a, p)], flush=True)
 print("roll fallbacks (roll day not before last trade date):", rc.ROLL_FALLBACK_COUNT["n"])
 pickle.dump((nets, meta), open(OUT / "products_nets.pkl", "wb"))
+pickle.dump((trades, sigs), open(OUT / "products_trades.pkl", "wb"))
+pickle.dump((positions, phases), open(OUT / "products_pos.pkl", "wb"))
 json.dump(dict(tag=TAG, cutoff=TAGS[TAG]["cutoff"], prices_dir=TAGS[TAG]["prices_dir"], products=len(nets)), open(OUT / "run_info.json", "w"))
 print("saved", OUT / "products_nets.pkl")

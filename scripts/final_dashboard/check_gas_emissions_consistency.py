@@ -100,7 +100,7 @@ check("pre-2012 differences are only the Value warm-up (research needs 504 obser
 check("engine product list", cae.DASHBOARD_PRODUCTS["pen"] == ["NatGas", "TTF", "UKGas", "EUA"] and pp["Momentum"]["names"] == ["NatGas", "TTF", "UKGas", "EUA"], str(pp["Momentum"]["names"]))
 gross, net = cae.asset_class_four_row("pen", per_product_fetcher=fetch)
 bucket = {STY[k]: v for k, v in net.items()}
-_, ew = cae.asset_class_ew_portfolio({k: v for k, v in gross.items()}, {k: v for k, v in net.items()})
+_, ew = cae.asset_class_ew_portfolio(gross, net)      # net is the engine's StyleRows: EW PORT netted at product level (2026-11-15)
 rows = dict(bucket); rows["EW PORT"] = ew
 bad = 0; worst_ir = 0.0
 for w, (st, e) in WIN.items():

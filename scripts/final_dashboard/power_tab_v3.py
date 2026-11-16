@@ -56,12 +56,16 @@ assert members == ["PJM_Peak", "PJM_OffPeak", "ERCOT_Peak", "ERCOT_OffPeak", "MI
 nets = pickle.load(open(f"outputs/power_{TAG}/power_nets.pkl", "rb"))["nets"]
 CUT = pd.Timestamp({"0930": "2026-09-30", "1029": "2026-10-29"}[TAG])
 
-styles = {}
-for st in STYLES:
-    ser = [nets[p][st] for p in members]
-    styles[st] = combine_cross_asset(ser)
-lst = list(styles.values())
-ew, iv = combine_returns(lst, "equal_weight"), combine_returns(lst, "inverse_vol", vol_window=63)
+# product-level netting of the 5 bps cost (2026-11-15, research/netting.py): positions from compute_products_v3.py's products_pos.pkl, whose Power sleeves equal power_nets.pkl
+sys.path.insert(0, "scripts/final_dashboard")
+from netted_build import Netted
+from fd_config import out_dir
+NB = Netted(out_dir(TAG), STYLES)
+for p in members:
+    for st in STYLES:
+        assert NB.nets[("power", p)][st].equals(nets[p][st]), ("power sleeves differ from compute_products_v3", p, st)
+_b = NB.bucket([("power", p) for p in members])
+styles, ew, iv = _b["styles"], _b["ew"], _b["iv"]
 rows = dict(styles)
 rows["EW PORT"], rows["Inverse Vol"] = ew, iv
 
@@ -78,7 +82,7 @@ tab = dict(label="Power", products=[LAB[p] for p in members], pkeys=[pk(p) for p
 products, eq = {}, {"power": equity(rows)}
 for p in members:
     d = {st: {w: metrics(nets[p][st], a, b) for w, a, b in WINDOWS} for st in STYLES}
-    ew_p = combine_returns([nets[p][st] for st in STYLES], "equal_weight")
+    ew_p = combine_returns(list(NB.adj(("power", p)).values()), "equal_weight")
     d["EW PORT"] = {w: metrics(ew_p, a, b) for w, a, b in WINDOWS}
     products[pk(p)] = d
     eq[f"prod|power|{p}"] = equity({**{st: nets[p][st] for st in STYLES}, "EW PORT": ew_p})

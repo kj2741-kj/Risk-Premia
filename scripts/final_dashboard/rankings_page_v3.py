@@ -6,7 +6,7 @@ import sys, json, pickle
 from pathlib import Path
 
 sys.path.insert(0, "scripts/final_dashboard")
-from fd_config import TAGS, current_tag, out_dir, check_run
+from fd_config import TAGS, STYLES, current_tag, out_dir, check_run
 TAG = current_tag()
 check_run(TAG)
 
@@ -32,6 +32,9 @@ LIQ.update({r["product"]: r for r in csv.DictReader(open("Analysis/Power_Liquidi
 pack = lambda m: [None if pd.isna(m[k]) else round(float(m[k]), 3) for k in ("ir", "ret", "vol", "mdd")]
 PJ = json.load(open(f"Analysis/_power_build/power_tab_{TAG}.json"))      # US Power: its own tab, products and windows (Full from 2017, no P1)
 PDISP = {"SingaporeGasoil": "Gas Oil", "PJM_Peak": "PJM Peak", "PJM_OffPeak": "PJM OffPeak", "ERCOT_Peak": "ERCOT Peak", "ERCOT_OffPeak": "ERCOT OffPeak", "MISO_Peak": "MISO Peak"}
+from netted_build import Netted
+assert tuple(SLEEVES) == tuple(STYLES)
+NB = Netted(out_dir(TAG), SLEEVES)
 DATA = {}
 for name, d, pkl, wins in BASES:
     res = json.load(open(f"{d}/final_v3.json"))
@@ -40,8 +43,8 @@ for name, d, pkl, wins in BASES:
     for bk, a, p in PRODUCTS:
         src = PJ["products"] if bk == "power" else res["products"]
         vals = {s: {w: pack(src[f"{a}|{p}"][s][w]) for w, *_ in wins} for s in SLEEVES}
-        lst = [nets[(a, p)][s] for s in SLEEVES]
-        for col, ser in (("EW-5", combine_returns(lst, "equal_weight")), ("IV-5", combine_returns(lst, "inverse_vol", vol_window=63))):
+        _ew5, _iv5 = NB.product_ports((a, p))          # product-level netting of the 5 bps cost (2026-11-15, netted_build.py)
+        for col, ser in (("EW-5", _ew5), ("IV-5", _iv5)):
             if bk == "power":      # Full from 2017-01-01 (every sleeve live), P1 not available
                 vals[col] = {w: ([None] * 4 if w == "p1" else pack(_metrics(ser.loc["2017-01-01" if w == "full" else st:e] if e else ser.loc["2017-01-01" if w == "full" else st:]))) for w, _, st, e in wins}
             else:

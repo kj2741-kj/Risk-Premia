@@ -134,7 +134,10 @@ if POWER:
             "<li><b>Windows:</b> the data start on 2015-01-02 and Value needs two years of F3, so Full is 2017-2026 and P1 (2012-2016) is not available; P2, P3 and 2026 are as elsewhere. "
             "Power prices are far more volatile than the other buckets (about 60% to 125% a year per sleeve), so read the IRs together with the drawdowns.</li></ul>"
             "<h3>Data and calendars</h3>")
-b = rep(b, "Transaction costs are charged when the position changes.</li></ul>", "Transaction costs of 5 bps per unit of turnover are charged when the position changes, and on every roll day.</li></ul>")
+b = rep(b, "Transaction costs are charged when the position changes.</li></ul>", "Transaction costs of 5 bps per unit of turnover are charged when the position changes, and on every roll day."
+        + (" <b>Product-level netting (from 15 November 2026):</b> a row that shows one strategy pays its own cost; every row that combines strategies (EW PORT, Inverse Vol, the books, By Style, Cross-Pair, the Classical tabs and the rankings' EW-5 / IV-5) "
+           "is charged only on each product's net trade: the product's position is the weighted sum of its strategies' positions (weights of that construction), and the cost is charged on the change in that sum and on rolling it. "
+           "Strategies that trade in opposite directions on the same day therefore offset instead of each paying the cost." if res["meta"].get("netting") else "") + "</li></ul>")
 b = rep(b, "The two z-scores are summed and the sign of the sum is the signal.", "The z-scores of a product's tenor pairs are summed (two pairs for every product) and the sign of the sum is the signal.")
 b = rep(b, "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.", "summed across the tenor pairs (raw changes, not standardised) and signed; if a pair is missing the last signal is kept.")
 

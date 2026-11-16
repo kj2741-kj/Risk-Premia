@@ -90,7 +90,11 @@ def align(lst):
     idx = idx.sort_values(); return [c.reindex(idx).diff() for c in cum]
 STY = ("Momentum", "Carry", "CarryMom", "Value", "Skewness")
 styles = {s_: sum(align([nets[m][s_] for m in members])) / len(members) for s_ in STY}
-ew = sum(styles.values()) / len(STY)
+# EW PORT with product-level netting of the cost (2026-11-15): each product's five sleeves netted at equal weights (research/netting.py), then the same hand rebuild
+import netting as _nt
+_POS, _PH = pickle.load(open(D / "products_pos.pkl", "rb"))
+_adj = {m: _nt.netted(nets[m], _POS[m], _PH[m], 5) for m in members}
+ew = sum(sum(align([_adj[m][s_] for m in members])) / len(members) for s_ in STY) / len(STY)
 bad = 0
 for w in WIN:
     for r_i, row in enumerate(res["tabs"]["pen"]["windows"][w]):
@@ -183,7 +187,7 @@ for a, b in combinations(BK, 2):
         bad += any(abs((m[k] or 0) - (r[k] or 0)) > 0.0011 for k in m)
 check(f"C. all {len(labels)} cross-pairs (EW) engine == HTML, {sum('Gas and Emissions' in l for l in labels)} of them with Gas and Emissions ({n} rows)", bad == 0 and len(labels) == 21, f"{bad} differences")
 # cross-pair Inverse Vol (HTML-only construction): rebuilt from the engine's bucket Inverse Vol portfolios
-iv = {ac: combine_returns(list(sty_nets[ac].values()), "inverse_vol", vol_window=63) for ac in BK}
+iv = {ac: cae.asset_class_ew_portfolio({}, sty_nets[ac], "inverse_vol")[1] for ac in BK}      # 2026-11-15: the engine's netted bucket Inverse Vol
 bad = n = 0
 for a, b in combinations(BK, 2):
     lab = f"{res['tabs'][a]['label']} - {res['tabs'][b]['label']}"; ser = combine_returns(align([iv[a], iv[b]]), "inverse_vol", vol_window=63)

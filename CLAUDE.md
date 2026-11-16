@@ -29,6 +29,8 @@ If you're asked to add a product, remove one, or change a product list, check al
 
 **Equity charts (2026-11-06).** The research dashboards and, on the geometric basis, the Streamlit apps and the hub show the cumulative return as the value of $100 invested, with PNG and CSV download (`common_shared.py::show_dollar_chart`; the dashboards' own JavaScript).
 
+**Product-level netting of the cost (2026-11-15).** Every row that combines strategies is charged only on each product's net trade across its strategies, with the weights of that construction; single-strategy rows keep their own cost. Rule and code: `research/netting.py`; dashboard pipeline `scripts/final_dashboard/netted_build.py`; Streamlit engine `cross_asset_engine.StyleRows` / `netted_style_rows`; Portfolio tab `_combine_sleeves(detail=...)`. Any new portfolio code must go through these (never `combine_returns` directly on strategy net series for a portfolio row). Checks: `scripts/final_dashboard/check_netting.py`, `research/_verify_portfolio_tab_netting.py`. Details in `ENGINE_CHANGELOG.md`.
+
 ## Branches
 
 - `main` — Streamlit dashboards (Streamlit Cloud deploys from here).
